@@ -21,7 +21,7 @@ def usage():
 	print ("--remove 1 | 2 | 3 default:2 1:only keep final result; 2: keep every round basic result ; 3 : keep all files")
 	print ("--edge Edge Controller set max Edge length(missequening)")
 	print ("--filterDepth num default:None. You can filtered HiFi reads by mapped depth on contig set. if num==0.3 means: mapped Hifi reads on depth>=0.3*avgdepth and depth<=(2-0.2)*avgdepth will be filtered and will not be used in whole project")
-	print ("--MaximunExtensionLength num default:None. Stop Extension when reach the num")
+	print ("--MaximumExtensionLength num default:None. Stop Extension when reach the num")
 	print ("--mode gapfiller | ctglinker")
 	print ("\n\ngapfiller\n")
 	print ("\t--seqleft sequence before GAP")
@@ -33,7 +33,7 @@ def usage():
 
 def getoptions():
 	try:
-		opts,args= getopt.getopt(sys.argv[1:], "o:t:h",["reads=","seqleft=","seqright=","flag=","out=","ctgseq=","mode=","edge=","thread=","help=","remove=","filterDepth=","MaximunExtensionLength="])
+		opts,args= getopt.getopt(sys.argv[1:], "o:t:h",["reads=","seqleft=","seqright=","flag=","out=","ctgseq=","mode=","edge=","thread=","help=","remove=","filterDepth=","MaximumExtensionLength="])
 	except getopt.GetoptError:
 		print ("Apeared Error Parameter!!")
 		usage()
@@ -51,13 +51,13 @@ def getoptions():
 	filterDepth=None
 	thread='20'
 	remove=2
-	MaximunExtensionLength=None
+	MaximumExtensionLength=None
 	
 	for opt,value in opts:
 		if opt in ("--mode"):
 			mode=value
-		if opt in ("--MaximunExtensionLength"):
-			MaximunExtensionLength=int(value)
+		if opt in ("--MaximumExtensionLength"):
+			MaximumExtensionLength=int(value)
 		elif opt in ("-t","--thread"):
 			thread=str(int(value))
 		elif opt in ("--reads"):
@@ -92,7 +92,7 @@ def getoptions():
 					sys.exit()
 			elif opt in ("--flag"):
 				flag=value
-		return [mode,remove,thread,reads,out,seqleft,seqright,flag,edge,filterDepth,MaximunExtensionLength]
+		return [mode,remove,thread,reads,out,seqleft,seqright,flag,edge,filterDepth,MaximumExtensionLength]
 	elif mode=="ctglinker":
 		seqfile=""
 		for opt,value in opts:
@@ -102,7 +102,7 @@ def getoptions():
 				else:
 					print ("contigs file don't exist or empty")
 					sys.exit()
-		return [mode,remove,thread,reads,out,seqfile,edge,filterDepth,MaximunExtensionLength]
+		return [mode,remove,thread,reads,out,seqfile,edge,filterDepth,MaximumExtensionLength]
 	else:				
 		print ("You should use gapfiller or ctglinker!")
 		sys.exit()
