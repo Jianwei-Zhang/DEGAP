@@ -53,7 +53,7 @@ class OutputSequence(object):
                         self.readlog()
 		else:
 			logfile=open(self.outputLog,'w')
-			self.totalOutputSequenceLength=self.extensionedSequence()
+			self.totalOutputSequenceLength=self.extensionSequence()
 			logLine="outputSequence\t"+self.outputSequence+"\n"
 			logLine+="totalOutputSequenceLength\t"+str(self.totalOutputSequenceLength)+"\n"
 			self.ExtensionUsedReads=self.checkExtensionReads()
@@ -85,7 +85,7 @@ class OutputSequence(object):
 		logfile.close()
 	
 	def linkgap(self):
-		mummern=self.Elongation.roundDir+"/extensionedSequence.linkgap.aln."+self.Elongation.base.tag+".mummer"
+		mummern=self.Elongation.roundDir+"/extensionSequence.linkgap.aln."+self.Elongation.base.tag+".mummer"
 		mummerout=mummern+".delta.filter.coords"
 		if os.path.exists(mummerout)!=True:
 			mummerout=mummer(self.Elongation.base.terminalSeq,self.outputSequence,mummern)
@@ -163,7 +163,7 @@ class OutputSequence(object):
 				readslist.append(i)
 		return readslist
 
-	def extensionedSequence(self):
+	def extensionSequence(self):
 		ft=open(self.outputSequence,'w')
 		seedlen=int(self.Elongation.base.seedLen)
 		i=0
@@ -216,5 +216,5 @@ class GapFillerClass(object):
 		self.ExtensionReads=FindExtensionReads(self.roundInput,self.lastRoundUsedReads,self.usedReads)
 		if self.ExtensionReads.note=='':
 			self.ExtensionContigs=FindExtensionContigs(self.ExtensionReads)
-			if 'No extension contigs or reads found' not in self.ExtensionContigs.selectContigNote:
+			if 'No extension contigs or reads found' not in self.ExtensionContigs.selectContigNote and "Reach the maximum Length" not in self.ExtensionContigs.selectContigNote:
 				self.roundOutput=OutputSequence(self.ExtensionContigs,self.Elongation)

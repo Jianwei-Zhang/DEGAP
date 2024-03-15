@@ -11,7 +11,7 @@ from GapFillerClass import GapFillerClass,mummer
 
 class GapFiller(object):
 	def __init__(self,parameterlist):
-		self.mode,self.remove,self.thread,self.reads,self.out,self.seqLeft,self.seqRight,self.flag,self.edge,self.filterDepth,self.readsDict,self.maxReadsLen,self.seedLen=parameterlist
+		self.mode,self.remove,self.thread,self.reads,self.out,self.seqLeft,self.seqRight,self.flag,self.edge,self.filterDepth,self.MaximunExtensionLength,self.readsDict,self.maxReadsLen,self.seedLen=parameterlist
 		out=self.out
 		self.log=out+"/process.log"
 		if not os.path.exists(self.log):
@@ -51,7 +51,7 @@ class Elongation(object):
 		summaryfile=open(self.base.summary,'w')
 		while self.endSignal==False:
 			self.ElongationInit(logfile)
-			self.lastRoundUsedReads=self.ElongateSeq(logfile,summaryfile,self.lastRoundUsedReads)
+			self.lastRoundUsedReads=self.ElongateSeq(logfile,summaryfile,self.lastRoundUsedReads,self.extensionLen)
 			if self.roundResult.ExtensionReads.note=='' and 'No extension contigs or reads found' not in self.roundResult.ExtensionContigs.selectContigNote:
 				self.extensionLen=self.extensionLen+self.roundResult.ExtensionContigs.extensionLength
 			if self.roundNum==1:
@@ -59,8 +59,12 @@ class Elongation(object):
 					atgInitial=self.roundResult.ExtensionContigs.selectExtensionContigsAln[0][0]
 				else:
 					atgInitial=''
-			self.removeFile()
+			#if self.extensionLen>self.base.MaximunExtensionLength: #Max
+			#	self.roundResult.ExtensionContigs.selectContigNote=self.roundResult.ExtensionContigs.selectContigNote+"Reach the maximum Length\n"	#max
+			#	self.endSignal=True  #max
+			
 			self.roundNum+=1
+			self.removeFile()
 		summaryfile.close()
 
 		self.roundNum=self.roundNum-1
@@ -79,9 +83,12 @@ class Elongation(object):
 					if l2[0]=="Aln":
 						atgTerminal=l2[1]
 			fileofs.close()
-		elif self.roundResult.ExtensionReads.note!='' or 'No extension contigs or reads found' in self.roundResult.ExtensionContigs.selectContigNote:
+		elif self.roundResult.ExtensionReads.note!='' or 'No extension contigs or reads found' in self.roundResult.ExtensionContigs.selectContigNote or "Reach the maximum Length" in self.roundResult.ExtensionContigs.selectContigNote:
 			fileofs=open(self.finalSeq,'w')
-			l='>'+self.base.name+"_noExtensionContigsorReads\n"
+			if 'Reach the maximum Length' in self.roundResult.ExtensionContigs.selectContigNote:
+				l='>'+self.base.name+"_reachMaximumLength\n"
+			else:
+				l='>'+self.base.name+"_noExtensionContigsorReads\n"
 			fileofs.writelines(l)
 			atgTerminal=''
 			for gseq in SeqIO.parse(self.roundInputSeq,'fasta'):
@@ -172,12 +179,20 @@ class Elongation(object):
 		
 	
 
-	def ElongateSeq(self,logfile,summaryfile,lastRoundUsedReads):
+	def ElongateSeq(self,logfile,summaryfile,lastRoundUsedReads,extensionLen):
 		self.lastRoundUsedReads=lastRoundUsedReads
 		roundLog=open(self.roundLog,'w')
 		roundSummary=open(self.roundSummary,'w')
 		self.roundResult=GapFillerClass(self)
-		logLine,summeryLine=self.writelog()
+		print ("MaximunExtensionLength",self.base.MaximunExtensionLength,"TotalExtensionLength",extensionLen)
+		#sys.exit()
+		if self.base.MaximunExtensionLength!=None:
+			if extensionLen>self.base.MaximunExtensionLength: #Max
+				#print (self.roundResult.ExtensionContigs.extensionLength,self.base.MaximunExtensionLength,"MaximunExtensionLength")
+				self.roundResult.ExtensionContigs.selectContigNote=self.roundResult.ExtensionContigs.selectContigNote+"Reach the maximum Length\n"
+				print (self.roundResult.ExtensionContigs.selectContigNote)
+				#sys.exit()
+		logLine,summeryLine=self.writelog(extensionLen)
 		print (logLine)
 		roundLog.writelines(logLine)
 		roundSummary.writelines(summeryLine)
@@ -185,12 +200,12 @@ class Elongation(object):
 		summaryfile.writelines(summeryLine)
 		roundLog.close()
 		roundSummary.close()
-		if self.roundResult.ExtensionReads.note=='' and 'No extension contigs or reads found' not in self.roundResult.ExtensionContigs.selectContigNote:
+		if self.roundResult.ExtensionReads.note=='' and 'No extension contigs or reads found' not in self.roundResult.ExtensionContigs.selectContigNote and "Reach the maximum Length" not in self.roundResult.ExtensionContigs.selectContigNote:
 			return self.roundResult.roundOutput.ExtensionUsedReads
 		else:
 			return []
 	
-	def writelog(self):
+	def writelog(self,extensionLen):
 		logLine='\n\n*****************\n\n'
 		logLine+='\toutputPath: '+str(self.roundDir)+"\n"
 		logLine+="\tseedSequenceLength: "+str(self.base.seedLen)+"\n"
@@ -201,7 +216,7 @@ class Elongation(object):
 		logLine+="\tterminalSequenceFile: "+str(self.base.terminalSeq)+"\n"
 		logLine+="\tseedSequenceFile: "+str(self.roundResult.roundInput.inputSeq)+"\n"
 		logLine+="\t\tseedSeqnenceID: "+str(self.roundResult.roundInput.inputSeedSequence.id)+"\n\t\tseedSeqnenceLength: "+str(len(self.roundResult.roundInput.inputSeedSequence.seq))+"\n\n"
-		if self.roundResult.ExtensionReads.note=='' and 'No extension contigs or reads found' not in self.roundResult.ExtensionContigs.selectContigNote:
+		if self.roundResult.ExtensionReads.note=='' and 'No extension contigs or reads found' not in self.roundResult.ExtensionContigs.selectContigNote and "Reach the maximum Length" not in self.roundResult.ExtensionContigs.selectContigNote:
 			logLine+='minimap2Commond: '+str(self.roundResult.ExtensionReads.minimap2Command)+"\n"
 			logLine+='\textensionReads: \n\tselectReadsNum: '+str(self.roundResult.ExtensionReads.selectReadsNum)+"\n"
 			logLine+="\t\tselectReadsAln: "+str(self.roundResult.ExtensionReads.selectPotentialExtensionReadsAln)+"\n"
@@ -221,8 +236,8 @@ class Elongation(object):
 			logLine+="\t\textensionSequneceMaximumEdge: "+str(self.roundResult.ExtensionContigs.selectContigDistance)+"\n"
 			logLine+="\t\textensionSequneceAlnMerge: "+str(self.roundResult.ExtensionContigs.contigAlnMerge)+"\n"
 			logLine+="\t\textensionSequneceAlnMergeIdentity: "+str(self.roundResult.ExtensionContigs.contigAlnMergeIdentity)+"\n"
-			logLine+="\textensionedSeedSequenceFile: "+str(self.roundResult.ExtensionContigs.extensionSequence)+"\n"
-			logLine+="\textensionedLength: "+str(self.roundResult.ExtensionContigs.extensionLength)+"\n"
+			logLine+="\textensionSeedSequenceFile: "+str(self.roundResult.ExtensionContigs.extensionSequence)+"\n"
+			logLine+="\textensionLength: "+str(self.roundResult.ExtensionContigs.extensionLength)+"\n"
 			logLine+="\t\textensionContigOrReadsID:\n\t\t\t"+'\n\t\t\t'.join(self.roundResult.ExtensionContigs.extensionContigID)+"\n"
 			newReads,note=self.updateUsedReads()
 			logLine+=note
@@ -231,6 +246,7 @@ class Elongation(object):
 			logLine+="\t\tusedNewReads:\n\t\t\t"+"\n\t\t\t".join(newReads)+"\n\n"
 			logLine+="\toutputFile: "+str(self.roundResult.roundOutput.outputSequence)+"\n"
 			logLine+="\t\toutputSequenceLength: "+str(self.roundResult.roundOutput.totalOutputSequenceLength)+"\n\n"
+			logLine+="\t\ttotalExtensionLength: "+str(extensionLen)+"\n\n"
 			
 			if self.roundResult.roundOutput.linkedSequenceNote!='':
 				logLine+='\tGAP can be closed!\n'+str(self.roundResult.roundOutput.linkedSequenceNote)+"\nLinkedSequence File: "+str(self.roundResult.roundOutput.linkedSequence)+"\n"
@@ -251,8 +267,12 @@ class Elongation(object):
 			summeryLine='round'+str(self.roundNum)+"\t"+str(len(inputSeq.seq))+"\t"+str(self.roundResult.roundOutput.totalOutputSequenceLength)+"\t"+str(self.roundResult.ExtensionContigs.extensionLength)+"\t"+"-ovl-".join(self.roundResult.ExtensionContigs.extensionContigID)+"\t"+str(len(newReads))+"\t"+";".join(newReads)+"\t"+str(len(self.roundResult.roundOutput.ExtensionUsedReads))+"\t"+";".join(self.roundResult.roundOutput.ExtensionUsedReads)+"\n"
 			return logLine,summeryLine
 		else:
-			logLine+='No ExtensionReads or  ExtensionContig Found\n'
+			if "Reach the maximum Length" not in self.roundResult.ExtensionContigs.selectContigNote:
+				logLine+='No ExtensionReads or ExtensionContig Found\n'
+			else:
+				logLine+='Reach the maximum Length\n'
 			logLine+="Endloop!\t"+self.roundResult.ExtensionReads.note+"\n"
+			logLine+="\t\ttotalExtensionLength: "+str(extensionLen)+"\n\n"
 			self.endSignal=True
 			summeryLine=''
 			return logLine,summeryLine

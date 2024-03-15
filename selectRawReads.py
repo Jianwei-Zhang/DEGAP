@@ -12,13 +12,13 @@ class selectRawReads(object):
 	def __init__(self,parameterlist,seedLen):
 		self.seedLen=seedLen
 		if len(parameterlist)==9:
-			self.mode,self.remove,self.thread,self.reads,self.out,self.genomeSeq,self.edge,self.filterDepth,self.readsDict=parameterlist
+			self.mode,self.remove,self.thread,self.reads,self.out,self.genomeSeq,self.edge,self.filterDepth,self.MaximunExtensionLength,self.readsDict=parameterlist
 			self.inputSeq=self.genomeSeq
 			self.inputSeqDict={}
 			for gseq in SeqIO.parse(self.inputSeq,'fasta'):
 				self.inputSeqDict[gseq.id]=len(gseq.seq)
 		else:
-			self.mode,self.remove,self.thread,self.reads,self.out,self.seqLeft,self.seqRight,self.flag,self.edge,self.filterDepth,self.readsDict=parameterlist
+			self.mode,self.remove,self.thread,self.reads,self.out,self.seqLeft,self.seqRight,self.flag,self.edge,self.filterDepth,self.MaximunExtensionLength,self.readsDict=parameterlist
 			self.inputSeq=self.out+"/Genome.inputCtg.fa"
 			filet=open(self.inputSeq,'w')
 			self.inputSeqDict={}

@@ -13,7 +13,7 @@ from N50Check import N50Check
 
 class CtgLinker(object):
 	def __init__(self,parameterlist):
-		self.mode,self.remove,self.thread,self.reads,self.out,self.genomeSeq,self.edge,self.filterDepth,self.readsDict,self.maxReadsLen,self.seedLen=parameterlist
+		self.mode,self.remove,self.thread,self.reads,self.out,self.genomeSeq,self.edge,self.filterDepth,self.MaximunExtensionLength,self.readsDict,self.maxReadsLen,self.seedLen=parameterlist
 		self.ctgSeq=self.out+"/Genome.inputCtg.fa"
 		self.ctgSeqLog=self.out+"/Genome.inputCtg.log"
 		if os.path.exists(self.ctgSeqLog)!=True or os.path.getsize(self.ctgSeqLog)==0:
@@ -375,11 +375,11 @@ class CtgLinker(object):
 		file1=open(self.used,'r')
 		file2=open(self.projectOut+'/temp','w')
 		if len(ltused)!=0:
-			if 'noExtensionContigsorReads' in ltused[0] or 'noNewExtensionReads' in ltused[0] or stag=='*':
+			if 'noExtensionContigsorReads' in ltused[0] or 'noNewExtensionReads' in ltused[0] or stag=='*' or 'reachMaximumLength' in ltused[0]:
 				stag='*'
 			else:
 				stag=''
-			if 'noExtensionContigsorReads' in ltused[-1] or 'noNewExtensionReads' in ltused[-1] or etag=='*':
+			if 'noExtensionContigsorReads' in ltused[-1] or 'noNewExtensionReads' in ltused[-1] or etag=='*' or 'reachMaximumLength' in ltused[-1]:
 				etag='*'
 			else:
 				etag=''
@@ -628,11 +628,11 @@ class CtgLinker(object):
 				ft.close()	
 				
 			if flag1=='left':
-				gfout=GapFiller([self.mode,self.remove,self.thread,self.reads,projectoutEX,self.roundInputSeqFile,self.ctgsEdgeFile,flag1,self.edge,self.filterDepth,self.readsDict,self.maxReadsLen,self.seedLen])
+				gfout=GapFiller([self.mode,self.remove,self.thread,self.reads,projectoutEX,self.roundInputSeqFile,self.ctgsEdgeFile,flag1,self.edge,self.filterDepth,self.MaximunExtensionLength,self.readsDict,self.maxReadsLen,self.seedLen])
 			else:
-				gfout=GapFiller([self.mode,self.remove,self.thread,self.reads,projectoutEX,self.ctgsEdgeFile,self.roundInputSeqFile,flag1,self.edge,self.filterDepth,self.readsDict,self.maxReadsLen,self.seedLen])
+				gfout=GapFiller([self.mode,self.remove,self.thread,self.reads,projectoutEX,self.ctgsEdgeFile,self.roundInputSeqFile,flag1,self.edge,self.filterDepth,self.MaximunExtensionLength,self.readsDict,self.maxReadsLen,self.seedLen])
 			outdict[flag1]=gfout
-			if gfout.Elongation.roundResult.ExtensionReads.note=='' and 'No extension contigs or reads found' not in gfout.Elongation.roundResult.ExtensionContigs.selectContigNote:
+			if gfout.Elongation.roundResult.ExtensionReads.note=='' and 'No extension contigs or reads found' not in gfout.Elongation.roundResult.ExtensionContigs.selectContigNote and "Reach the maximum Length" not in gfout.Elongation.roundResult.ExtensionContigs.selectContigNote:
 				seedlen=int(self.seedLen)
 				if gfout.Elongation.roundResult.roundOutput.linkedSequenceNote!='':
 					for gseq in SeqIO.parse(gfout.Elongation.roundResult.roundOutput.linkedSequence,'fasta'):
@@ -835,9 +835,9 @@ class CtgLinker(object):
 		else:
 			self.flaglist=[]
 			des2=des1[1].split(';')
-			if 'noExtensionContigsorReads' not in des2[-1] and 'noNewExtensionReads' not in des2[-1] and ltagt=='':
+			if 'noExtensionContigsorReads' not in des2[-1] and 'noNewExtensionReads' not in des2[-1] and ltagt=='' and 'reachMaximumLength' not in des2[-1]:
 				self.flaglist.append('left')
-			if 'noExtensionContigsorReads' not in des2[0] and 'noNewExtensionReads' not in des2[0] and rtagt=='':
+			if 'noExtensionContigsorReads' not in des2[0] and 'noNewExtensionReads' not in des2[0] and rtagt=='' and 'reachMaximumLength' not in des2[0]:
 				self.flaglist.append('right')
 		print (self.flaglist)
 		ft=open(self.projectData+'/temp','w')
