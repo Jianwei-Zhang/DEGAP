@@ -267,10 +267,13 @@ class Elongation(object):
 			summeryLine='round'+str(self.roundNum)+"\t"+str(len(inputSeq.seq))+"\t"+str(self.roundResult.roundOutput.totalOutputSequenceLength)+"\t"+str(self.roundResult.ExtensionContigs.extensionLength)+"\t"+"-ovl-".join(self.roundResult.ExtensionContigs.extensionContigID)+"\t"+str(len(newReads))+"\t"+";".join(newReads)+"\t"+str(len(self.roundResult.roundOutput.ExtensionUsedReads))+"\t"+";".join(self.roundResult.roundOutput.ExtensionUsedReads)+"\n"
 			return logLine,summeryLine
 		else:
-			if "Reach the maximum Length" not in self.roundResult.ExtensionContigs.selectContigNote:
+			if self.roundResult.ExtensionReads.note!='':
 				logLine+='No ExtensionReads or ExtensionContig Found\n'
 			else:
-				logLine+='Reach the maximum Length\n'
+				if "Reach the maximum Length" not in self.roundResult.ExtensionContigs.selectContigNote:
+					logLine+='No ExtensionReads or ExtensionContig Found\n'
+				else:
+					logLine+='Reach the maximum Length\n'
 			logLine+="Endloop!\t"+self.roundResult.ExtensionReads.note+"\n"
 			logLine+="\t\ttotalExtensionLength: "+str(extensionLen)+"\n\n"
 			self.endSignal=True
