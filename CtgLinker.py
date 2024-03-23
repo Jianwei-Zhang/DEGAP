@@ -254,14 +254,15 @@ class CtgLinker(object):
 						lt="DG"+str(self.projectID)+"\t"+"\t".join(agpl1[1:5])+"\t"+"DG"+str(self.projectID)+"-"+"\t".join(agpl1[5:])
 						nametemp=agpl1[5].split("DG"+str(self.projectID))[-1]
 						ltused.append(InitialSeq.id+nametemp)
-					if k=='Left' and InitialSeq.id in agpl:
+					if k=='left' and InitialSeq.id in agpl:
 						s2=int(agpl1[1])-1
 						e2=int(agpl1[2])
-					if k=='Right' and InitialSeq.id in agpl:
+					if k=='right' and InitialSeq.id in agpl:
 						s1=int(agpl1[1])-1
 						e1=int(agpl1[2])
 					file1.writelines(lt)
 					logline=logline+'projectagp\t'+lt
+					print (agpl,InitialSeq.id,k=='Left',k, InitialSeq.id in agpl)
 			file1.close()
 			if rownum==1 and k=='left':
 				etag='*'
@@ -374,6 +375,7 @@ class CtgLinker(object):
 
 		file1=open(self.used,'r')
 		file2=open(self.projectOut+'/temp','w')
+
 		if len(ltused)!=0:
 			if 'noExtensionContigsorReads' in ltused[0] or 'noNewExtensionReads' in ltused[0] or stag=='*' or 'reachMaximumLength' in ltused[0]:
 				stag='*'
@@ -390,17 +392,21 @@ class CtgLinker(object):
 				etag='*'
 		else:
 			if 'right' in self.outdict:
+				print (s1,e1)
 				if s1==-1 and e1==-1:
 					stag='*'
 				etag='*'
 			if 'left' in self.outdict:
+				print (s2,e2)
 				if s2==-1 and e2==-1:
 					etag='*'
 				stag='*'
+		print (stag,etag,"1,stag,etag!!!!!\n")
 		self.placedlist=ltunplaced
 		logline=logline+"placedlist\t"+";".join(ltunplaced)+"\n"
 		DGusetaglist=[]
 		for row in file1:
+			print (row)
 			row1=row.split('\t')
 			if row1[0] in ltused:
 				stt=row1[1]
@@ -411,6 +417,7 @@ class CtgLinker(object):
 					etag='*'
 				DGn=row1[0]
 				DGusetaglist.append(DGn)
+				setDGusetaglist=sorted(list(set(DGusetaglist)))
 				while DGn!='':
 					file3=open(self.used,'r')
 					for r3 in file3:
@@ -420,10 +427,18 @@ class CtgLinker(object):
 							DGn=''
 							r32=r31[3].split(';')
 							for dgn in r32:
+								print (dgn,'DG' in dgn,r31[0] not in dgn,r31[0])
 								if 'DG' in dgn and r31[0] not in dgn:
 									DGn=dgn
-									DGusetaglist.append(DGn)
+									if DGn not in DGusetaglist:
+										DGusetaglist.append(DGn)
 					file3.close()
+					if sorted(list(set(DGusetaglist)))==setDGusetaglist:
+						DGn=''
+					else:
+						print (DGusetaglist)
+						setDGusetaglist=sorted(list(set(DGusetaglist)))
+		print (stag,etag,"2,stag,etag!!!!!\n")
 		self.DGUsedCtgList=DGusetaglist
 		logline=logline+"DGUsedCtgList\t"+";".join(self.DGUsedCtgList)+"\n"
 		file1.close()
@@ -440,6 +455,7 @@ class CtgLinker(object):
 		if stag=='*' and etag=='*':
 			stag='**'
 			etag='**'
+		print (stag,etag,"3,stag,etag!!!!!\n")
 		ltusedl="DG"+str(self.projectID)+"\t"+stag+"\t"+etag+"\t"+";".join(ltused)+"\n"
 		logline=logline+'projectusedLine\t'+ltusedl+"\n"
 		self.projectusedLine=ltusedl

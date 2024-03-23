@@ -85,8 +85,11 @@ class Elongation(object):
 			fileofs.close()
 		elif self.roundResult.ExtensionReads.note!='' or 'No extension contigs or reads found' in self.roundResult.ExtensionContigs.selectContigNote or "Reach the maximum Length" in self.roundResult.ExtensionContigs.selectContigNote:
 			fileofs=open(self.finalSeq,'w')
-			if 'Reach the maximum Length' in self.roundResult.ExtensionContigs.selectContigNote:
-				l='>'+self.base.name+"_reachMaximumLength\n"
+			if self.roundResult.ExtensionReads.note=='':
+				if 'Reach the maximum Length' in self.roundResult.ExtensionContigs.selectContigNote:
+					l='>'+self.base.name+"_reachMaximumLength\n"
+				else:
+					l='>'+self.base.name+"_noExtensionContigsorReads\n"
 			else:
 				l='>'+self.base.name+"_noExtensionContigsorReads\n"
 			fileofs.writelines(l)
