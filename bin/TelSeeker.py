@@ -1,0 +1,1237 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+TelSeeker.py - Main module for telomere extension workflow
+
+Receives parameters from DEGAP.py and orchestrates telomere extension.
+"""
+
+import os
+import sys
+from pathlib import Path
+
+
+class TelSeeker:
+    """
+    TelSeeker main class - receives and validates parameters from DEGAP.py
+    """
+    
+    def __init__(self, parameter: list, kparameters: list):
+        """
+        Initialize TelSeeker with parameters from DEGAP.py.
+
+        Args:
+            parameter: List of 21 parameters from DEGAP.py
+                [0]  mode: 'telseeker'
+                [1]  remove: File cleanup level (1-3)
+                [2]  thread: Number of threads (str)
+                [3]  reads: HiFi/ONT reads file path (working FASTA)
+                [4]  out: Output directory
+                [5]  genome_file: Genome FASTA file
+                [6]  motif: Telomere motif (e.g., 'TTAGGG')
+                [7]  work: Number of parallel workers
+                [8]  edge: Edge tolerance (bp)
+                [9]  filterDepthHifi: HiFi depth filter (or None)
+                [10] filterDepthOnt: ONT depth filter (or None)
+                [11] MaximumExtensionLength: Max extension length (default: 1000000)
+                [12] MaximumExtensionRound: Max extension rounds (default: 20)
+                [13] data_type: 'hifi', 'ont', or 'mixed'
+                [14] ont_reads: ONT reads file path (or None)
+                [15] readsDict: Path to HiFi reads index
+                [16] maxReadsLen: Maximum read length
+                [17] hifiSeedLen: HiFi seed length
+                [18] ontSeedLen: ONT seed length (or None)
+                [19] original_reads_info: Dict with file paths
+                [20] ont_readsdict: Path to ONT reads index (or None)
+
+            kparameters: List of 2-3 k-mer parameters
+                [0] kmer_size: K-mer size (default: 41)
+                [1] kmer_num: Number of k-mers (default: 20)
+                [2] kmer_filter: Enable k-mer filtering (default: False)
+        """
+        print(f"\n{'='*80}")
+        print(f"TelSeeker Initialization")
+        print(f"{'='*80}")
+
+        # Validate parameter list lengths (support both old 20-param and new 21-param formats)
+        if len(parameter) < 20:
+            raise ValueError(f"Expected at least 20 parameters, got {len(parameter)}")
+        if len(kparameters) < 2:
+            raise ValueError(f"Expected 2-3 k-parameters, got {len(kparameters)}")
+
+        print(f"[TelSeeker] Receiving parameters from DEGAP.py...")
+        print(f"  Parameter count: {len(parameter)}")
+        print(f"  K-parameter count: {len(kparameters)}")
+
+        # Parse basic parameters (0-14)
+        self.mode = parameter[0]
+        self.remove = parameter[1]
+        self.thread = int(parameter[2]) if parameter[2] else 20
+        self.reads = parameter[3]
+        self.out = Path(parameter[4])
+        self.genome_file = Path(parameter[5])
+        self.motif = parameter[6]
+        self.work = parameter[7]
+        self.edge = parameter[8]
+        self.filterDepthHifi = parameter[9]
+        self.filterDepthOnt = parameter[10]
+        self.MaximumExtensionLength = parameter[11]
+
+        # Handle both old (20 params) and new (21 params) formats
+        if len(parameter) >= 21:
+            # New format with MaximumExtensionRound
+            self.MaximumExtensionRound = parameter[12]
+            self.data_type = parameter[13]
+            self.ont_reads = parameter[14]
+            # Parse extended parameters (15-20)
+            self.readsDict = parameter[15]
+            self.maxReadsLen = parameter[16]
+            self.hifiSeedLen = parameter[17]
+            self.ontSeedLen = parameter[18]
+            self.original_reads_info = parameter[19]
+            self.ont_readsdict = parameter[20]
+        else:
+            # Old format without MaximumExtensionRound (backward compatibility)
+            self.MaximumExtensionRound = None  # Default value
+            self.data_type = parameter[12]
+            self.ont_reads = parameter[13]
+            # Parse extended parameters (14-19)
+            self.readsDict = parameter[14]
+            self.maxReadsLen = parameter[15]
+            self.hifiSeedLen = parameter[16]
+            self.ontSeedLen = parameter[17]
+            self.original_reads_info = parameter[18]
+            self.ont_readsdict = parameter[19]
+
+        # Parse k-mer parameters
+        self.kmer_size = kparameters[0]
+        self.kmer_num = kparameters[1]
+        self.kmer_filter = kparameters[2] if len(kparameters) >= 3 else False
+        
+        # Validate parameters
+        self._validate_parameters()
+        
+        # Print configuration
+        self._print_configuration()
+        
+        print(f"[TelSeeker] Initialization complete ✓")
+        print(f"{'='*80}\n")
+    
+    def _validate_parameters(self):
+        """Validate all received parameters."""
+        print(f"\n[TelSeeker] Validating parameters...")
+        
+        # Validate mode
+        if self.mode != 'telseeker':
+            raise ValueError(f"Invalid mode: {self.mode}")
+        
+        # Validate genome file
+        if not self.genome_file.exists():
+            raise FileNotFoundError(f"Genome file not found: {self.genome_file}")
+        
+        # Validate motif
+        if not self.motif or not all(c in 'ACGT' for c in self.motif):
+            raise ValueError(f"Invalid motif: {self.motif}")
+        
+        # Validate numeric parameters
+        if self.thread <= 0:
+            raise ValueError(f"Invalid thread count: {self.thread}")
+        if self.work <= 0:
+            raise ValueError(f"Invalid work parameter: {self.work}")
+        if self.edge < 0:
+            raise ValueError(f"Invalid edge: {self.edge}")
+        
+        # Validate data type
+        if self.data_type not in ['hifi', 'ont', 'mixed']:
+            raise ValueError(f"Invalid data_type: {self.data_type}")
+        
+        # Validate mixed mode requirements
+        if self.data_type == 'mixed' and not self.ont_reads:
+            raise ValueError("Mixed mode requires ONT reads")
+        
+        # Validate seed lengths
+        if not self.hifiSeedLen or self.hifiSeedLen <= 0:
+            raise ValueError(f"Invalid HiFi seed length: {self.hifiSeedLen}")
+        
+        if self.data_type in ['ont', 'mixed']:
+            if not self.ontSeedLen or self.ontSeedLen <= 0:
+                print(f"  Warning: Invalid ONT seed length: {self.ontSeedLen}")
+        
+        # In mixed mode, each data type uses its own seed length
+        if self.data_type == 'mixed':
+            print(f"  Mixed mode seed lengths:")
+            print(f"    HiFi seedLen: {self.hifiSeedLen} bp (for hifi.inputCutSequence.fasta)")
+            print(f"    ONT seedLen:  {self.ontSeedLen} bp (for ont.inputCutSequence.fasta)")
+            # Use HiFi seedLen as primary (hifiasm uses HiFi as main input)
+            self.seedLen = self.hifiSeedLen
+        else:
+            # Single mode: use respective seed length
+            self.seedLen = self.hifiSeedLen if self.data_type == 'hifi' else self.ontSeedLen
+        
+        # Validate max read length
+        if not self.maxReadsLen or self.maxReadsLen <= 0:
+            raise ValueError(f"Invalid max read length: {self.maxReadsLen}")
+        
+        # Validate k-mer parameters
+        if self.kmer_size <= 0:
+            raise ValueError(f"Invalid kmer_size: {self.kmer_size}")
+        if self.kmer_num <= 0:
+            raise ValueError(f"Invalid kmer_num: {self.kmer_num}")
+        
+        # Validate readsDict
+        if not self.readsDict:
+            raise ValueError("HiFi readsDict path is empty")
+        
+        # Validate original_reads_info
+        if not isinstance(self.original_reads_info, dict):
+            raise ValueError(f"original_reads_info must be dict, got {type(self.original_reads_info)}")
+        
+        required_keys = ['original_hifi', 'original_ont', 'working_hifi', 'working_ont']
+        for key in required_keys:
+            if key not in self.original_reads_info:
+                raise ValueError(f"original_reads_info missing key: {key}")
+        
+        print(f"[TelSeeker] Validation passed ✓")
+    
+    def _print_configuration(self):
+        """Print configuration summary."""
+        print(f"\n{'='*80}")
+        print(f"TelSeeker Configuration")
+        print(f"{'='*80}")
+        
+        print(f"\nGenome & Motif:")
+        print(f"  Genome file:        {self.genome_file}")
+        print(f"  Motif:              {self.motif}")
+        print(f"  Output directory:   {self.out}")
+        
+        print(f"\nData Type:")
+        print(f"  Data type:          {self.data_type}")
+        print(f"  HiFi reads:         {self.reads}")
+        if self.ont_reads:
+            print(f"  ONT reads:          {self.ont_reads}")
+        
+        print(f"\nProcessing Parameters:")
+        print(f"  Threads:            {self.thread}")
+        print(f"  Parallel workers:   {self.work}")
+        print(f"  Edge tolerance:     {self.edge} bp")
+        if self.MaximumExtensionLength:
+            print(f"  Max extension:      {self.MaximumExtensionLength} bp")
+        
+        print(f"\nK-mer Parameters:")
+        print(f"  K-mer size:         {self.kmer_size}")
+        print(f"  K-mer number:       {self.kmer_num}")
+        print(f"  K-mer filter:       {'Enabled' if self.kmer_filter else 'Disabled'}")
+        
+        print(f"\nSeed Lengths:")
+        if self.data_type == 'mixed':
+            # In mixed mode, show ONT seedlen strategy
+            print(f"  HiFi seed length:   {self.hifiSeedLen} bp (for hifi.inputCutSequence.fasta)")
+            print(f"  ONT seed length:    {self.ontSeedLen} bp (for ont.inputCutSequence.fasta)")
+            print(f"  Strategy:           Each data type uses its own seed length")
+        else:
+            # Single mode
+            print(f"  HiFi seed length:   {self.hifiSeedLen} bp")
+            if self.ontSeedLen:
+                print(f"  ONT seed length:    {self.ontSeedLen} bp")
+        print(f"  Max read length:    {self.maxReadsLen} bp")
+        
+        print(f"\nReads Index Files:")
+        print(f"  HiFi index:         {self.readsDict}")
+        if self.ont_readsdict:
+            print(f"  ONT index:          {self.ont_readsdict}")
+        
+        print(f"\nOriginal Reads Info:")
+        for key, value in self.original_reads_info.items():
+            if value:
+                print(f"  {key:20s}: {value}")
+        
+        print(f"{'='*80}")
+    
+    def run(self):
+        """
+        Execute TelSeeker workflow.
+
+        Workflow:
+        0. Check telomeres (window-based method)
+        1. Extract telomeric reads (TelSeekerPart1)
+        2. Extend chromosome ends (TelSeekerPart2)
+        3. Integrate and summarize results (TelSeekerPart3)
+        4. Generate visualization report (TelSeekerVisualizer)
+        """
+        print(f"\n{'='*80}")
+        print(f"Starting TelSeeker Workflow")
+        print(f"{'='*80}\n")
+
+        try:
+            # Step 0: Check telomeres (window-based method)
+            self._step0_check_telomeres()
+
+            # Step 1: Extract telomeric reads
+            self._step1_extract_telomeric_reads()
+
+            # Step 2: Extend chromosome ends
+            self._step2_extend_chromosome_ends()
+
+            # Step 3: Integrate results
+            self._step3_integrate_results()
+
+            # Step 4: Generate visualization report
+            self._step4_generate_visualization()
+
+            # Print final summary
+            print(f"\n{'='*80}")
+            print(f"TelSeeker Workflow Completed Successfully")
+            print(f"{'='*80}")
+            print(f"Output directory: {self.out}")
+            print(f"  - genome.telomere.check/      : Initial telomere quality check")
+            print(f"  - part1.telo.reads/           : Telomeric reads extraction results")
+            print(f"  - part2.chr.end.job/          : Chromosome end extension results")
+            print(f"  - part3.integration.results/  : Integration and summary")
+            print(f"  - visual.report/              : Visualization reports")
+            print(f"    - Global.report.html        : Global overview report")
+            print(f"    - <Chr.X>.report.html       : Individual chromosome end reports")
+            print(f"{'='*80}\n")
+
+        except Exception as e:
+            print(f"\n{'='*80}")
+            print(f"TelSeeker Workflow FAILED")
+            print(f"{'='*80}")
+            print(f"Error: {e}")
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+
+    def _step0_check_telomeres(self):
+        """
+        Step 0: Check telomere quality using window-based scanning method.
+
+        Uses TelSeekerCheck.TelomereChecker to:
+        - Extract 5kb from each chromosome end (default, to avoid ITS interference)
+        - Use window markers (motif*2) to scan for telomeric regions
+        - Calculate TRC for each window and take the maximum
+        - Identify chromosome ends that need telomere extension
+
+        Input:
+            - genome_file (from DEGAP.py)
+
+        Output:
+            - genome.telomere.check/genome.telomere.check.csv
+            - genome.telomere.check/need_extension_chr_end.txt
+            - genome.telomere.check/genome.telomere.check.left.2kb.fa
+            - genome.telomere.check/genome.telomere.check.right.2kb.fa
+        """
+        print(f"[Step 0/4] Checking telomere quality (window-based method)...")
+        print(f"-" * 80)
+
+        # Check if Step 0 output already exists (skip mechanism)
+        check_dir = self.out / "genome.telomere.check"
+        need_extension_file = check_dir / "need_extension_chr_end.txt"
+        csv_file = check_dir / "genome.telomere.check.csv"
+
+        if self._check_step0_complete(need_extension_file, csv_file):
+            print(f"[Step 0/4] Found existing telomere check results:")
+            print(f"  - {csv_file}")
+            print(f"  - {need_extension_file}")
+
+            # Display summary of ends needing extension
+            if need_extension_file.exists():
+                with open(need_extension_file, 'r') as f:
+                    chr_ends = [line.strip() for line in f if line.strip()]
+                    if chr_ends:
+                        print(f"[Step 0/4] Chromosome ends requiring extension: {len(chr_ends)}")
+                        for chr_end in chr_ends[:5]:  # Show first 5
+                            print(f"    - {chr_end}")
+                        if len(chr_ends) > 5:
+                            print(f"    ... and {len(chr_ends) - 5} more")
+                    else:
+                        print(f"[Step 0/4] All chromosome ends have reached telomeres! ✓")
+
+            print(f"[Step 0/4] Skipping telomere check (already complete) ✓")
+            print()
+            return
+
+        try:
+            # Import TelomereChecker
+            from TelSeekerCheck import TelomereChecker
+
+            # Create checker with window-based method parameters
+            checker = TelomereChecker(
+                genome_file=str(self.genome_file),
+                motif=self.motif,
+                output_dir=str(self.out),
+                trc_threshold=0.7,          # TRC threshold
+                check_length=5000,          # Check 5kb from each end (avoid ITS interference)
+                extract_length=2000,        # Extract 2kb for output
+                window_flank=500            # Window flank size (500bp)
+            )
+
+            # Run telomere check
+            print(f"[Step 0/4] Running window-based telomere check...")
+            print(f"  Genome: {self.genome_file}")
+            print(f"  Motif: {self.motif}")
+            print(f"  Check length: 5kb (avoid ITS interference)")
+            print(f"  Window flank: 500bp")
+            print(f"  TRC threshold: 0.7")
+            print()
+
+            checker.run()
+
+            # Display results summary
+            if need_extension_file.exists():
+                with open(need_extension_file, 'r') as f:
+                    chr_ends = [line.strip() for line in f if line.strip()]
+                    print(f"\n[Step 0/4] Telomere check complete!")
+                    print(f"  Total chromosome ends requiring extension: {len(chr_ends)}")
+                    if chr_ends:
+                        print(f"  Ends to extend:")
+                        for chr_end in chr_ends[:10]:  # Show first 10
+                            print(f"    - {chr_end}")
+                        if len(chr_ends) > 10:
+                            print(f"    ... and {len(chr_ends) - 10} more")
+
+            print(f"\n[Step 0/4] Telomere quality check complete ✓")
+            print()
+
+        except Exception as e:
+            print(f"\n[Step 0/4] ERROR: Telomere check failed")
+            print(f"  Error: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
+
+    def _check_step0_complete(self, need_extension_file: Path, csv_file: Path) -> bool:
+        """
+        Check if Step 0 (telomere check) is already complete.
+
+        Args:
+            need_extension_file: Path to need_extension_chr_end.txt
+            csv_file: Path to genome.telomere.check.csv
+
+        Returns:
+            True if both files exist, False otherwise
+        """
+        return need_extension_file.exists() and csv_file.exists()
+
+    def _step1_extract_telomeric_reads(self):
+        """
+        Step 1: Extract telomeric reads from preprocessed data.
+        
+        Uses TelSeekerPart1.TeloReadsExtractor to extract reads that contain
+        telomeric sequences at their ends.
+        
+        Input: 
+            - hifi_reads_part/ and/or ont_reads_part/ (created by DEGAP)
+        
+        Output:
+            - part1.telo.reads/left.telo.reads.fa
+            - part1.telo.reads/right.telo.reads.fa
+            - part1.telo.reads/Global.*.fa
+            - part1.telo.reads/part1.log
+        """
+        print(f"[Step 1/4] Extracting telomeric reads...")
+        print(f"-" * 80)
+
+        # Check if Step 1 output already exists (skip mechanism)
+        part1_dir = self.out / "part1.telo.reads"
+        global_left = part1_dir / "Global.left.telo.reads.fa"
+        global_right = part1_dir / "Global.right.telo.reads.fa"
+
+        if self._check_step1_complete(global_left, global_right):
+            print(f"[Step 1/4] Found existing telomeric reads files:")
+            print(f"  - {global_left}")
+            print(f"  - {global_right}")
+            print(f"[Step 1/4] Skipping telomeric reads extraction (already complete) ✓")
+            print()
+            return
+        
+        try:
+            # Import TeloReadsExtractor
+            from TelSeekerPart1 import TeloReadsExtractor
+            
+            # Create extractor with parameters from TelSeeker
+            extractor = TeloReadsExtractor(
+                output_dir=str(self.out),           # TelSeeker output directory
+                motif=self.motif,                    # Telomere motif
+                threads=self.thread,                 # Use thread parameter for parallel processing
+                trc_threshold=0.7,                   # TRC threshold (default)
+                check_length=1000,                   # Check length (default 1000bp)
+                batch_size=1000,                     # Batch size (default 1000 reads)
+                enable_second_filter=True,           # Enable second-level motif filter
+                min_motif_count=10,                  # Min motif count (default 10)
+                overlapping=False                    # Non-overlapping count
+            )
+            
+            # Run extraction
+            extractor.run()
+
+            print(f"\n[Step 1/4] Telomeric reads extraction complete ✓")
+            print()
+
+        except ImportError as e:
+            print(f"\n[Step 1/4] ERROR: Failed to import TelSeekerPart1")
+            print(f"  Error: {e}")
+            raise
+        except Exception as e:
+            print(f"\n[Step 1/4] ERROR: Telomeric reads extraction failed")
+            print(f"  Error: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
+    
+    def _check_step1_complete(self, global_left: Path, global_right: Path) -> bool:
+        """
+        Check if Step 1 (telomeric reads extraction) is already complete.
+        
+        Args:
+            global_left: Path to Global.left.telo.reads.fa
+            global_right: Path to Global.right.telo.reads.fa
+        
+        Returns:
+            True if both files exist and are not empty, False otherwise
+        """
+        # Check if both files exist
+        if not global_left.exists() or not global_right.exists():
+            return False
+        
+        # Check if both files are not empty
+        try:
+            if global_left.stat().st_size == 0 or global_right.stat().st_size == 0:
+                print(f"[Step 1/4] Warning: Found empty telomeric reads files, will re-run extraction")
+                return False
+        except Exception as e:
+            print(f"[Step 1/4] Warning: Error checking file sizes: {e}")
+            return False
+        
+        return True
+    
+    def _check_step2_complete(self, part2_dir: Path) -> bool:
+        """
+        Check if Step 2 (chromosome end extension) is already complete.
+        
+        Args:
+            part2_dir: Path to part2.chr.end.job directory
+        
+        Returns:
+            True if directory exists and contains chromosome end subdirectories, False otherwise
+        """
+        # Check if directory exists
+        if not part2_dir.exists():
+            return False
+        
+        # Check if directory is not empty (has at least one subdirectory)
+        try:
+            subdirs = [d for d in part2_dir.iterdir() if d.is_dir()]
+            if not subdirs:
+                print(f"[Step 2/4] Warning: Found empty part2.chr.end.job directory, will re-run extension")
+                return False
+
+            # Found existing results
+            return True
+
+        except Exception as e:
+            print(f"[Step 2/4] Warning: Error checking part2 directory: {e}")
+            return False
+    
+    def _step2_extend_chromosome_ends(self):
+        """
+        Step 2: Extend chromosome ends.
+        
+        Calls TelSeekerPart2.py via command line to:
+        - Build workspace for each chromosome end
+        - Check direct connections
+        - Perform iterative extension
+        
+        Input:
+            - genome.telomere.check/need_extension_chr_end.txt
+            - part1.telo.reads/Global.*.fa
+            - HiFi.reads.stat / ONT.reads.stat
+        
+        Output:
+            - part2.chr.end.job/<chr_end>/
+        """
+        print(f"[Step 2/4] Extending chromosome ends...")
+        print(f"-" * 80)
+
+        # Check if Step 2 output already exists (skip mechanism)
+        part2_dir = self.out / 'part2.chr.end.job'
+        if self._check_step2_complete(part2_dir):
+            print(f"[Step 2/4] Found existing chromosome end extension results:")
+            print(f"  - {part2_dir}")
+            print(f"[Step 2/4] Skipping chromosome end extension (already complete) ✓")
+            print()
+            return
+
+        # Check if Step 2 prerequisites exist
+        if not self._check_step2_prerequisites():
+            print(f"[Step 2/4] ERROR: Missing prerequisites for Step 2")
+            raise FileNotFoundError("Required files for Step 2 not found")
+        
+        try:
+            # Build TelSeekerPart2.py command
+            cmd = self._build_part2_command()
+            
+            print(f"\n[Step 2/4] Launching TelSeekerPart2.py...")
+            print(f"  Command: {' '.join(cmd[:5])}... ({len(cmd)} args total)")
+            print()
+
+            # Execute TelSeekerPart2.py
+            import subprocess
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True
+            )
+
+            # Print Part2 output
+            if result.stdout:
+                print(result.stdout)
+
+            # Check execution result
+            if result.returncode != 0:
+                print(f"\n[Step 2/4] ERROR: TelSeekerPart2.py failed with exit code {result.returncode}")
+                if result.stderr:
+                    print(f"\nError output:")
+                    print(result.stderr)
+                raise RuntimeError(f"TelSeekerPart2.py failed")
+
+            print(f"\n[Step 2/4] Chromosome end extension complete ✓")
+            print()
+
+        except FileNotFoundError as e:
+            print(f"\n[Step 2/4] ERROR: TelSeekerPart2.py not found")
+            print(f"  Error: {e}")
+            print(f"  Make sure TelSeekerPart2.py is in the same directory as TelSeeker.py")
+            raise
+        except Exception as e:
+            print(f"\n[Step 2/4] ERROR: Chromosome end extension failed")
+            print(f"  Error: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
+    
+    def _build_part2_command(self) -> list:
+        """
+        Build command line arguments for TelSeekerPart2.py.
+
+        Returns:
+            List of command arguments
+        """
+        # Get the directory where TelSeeker.py is located
+        telseeker_dir = Path(__file__).parent.resolve()
+        part2_script = telseeker_dir / 'TelSeekerPart2.py'
+
+        cmd = [
+            sys.executable,              # python
+            str(part2_script),           # absolute path to TelSeekerPart2.py
+            '--out', str(self.out),
+            '--genome', str(self.genome_file),
+            '--kmer_num', str(self.kmer_num),
+            '--kmer_size', str(self.kmer_size),
+            '--work', str(self.work),
+            '-t', str(self.thread),
+            '--edge', str(self.edge)
+        ]
+
+        # Add kmer_filter flag if enabled
+        if self.kmer_filter:
+            cmd.append('--kmer_filter')
+
+        # Add max_rounds parameter (unified with gapfiller and ctglinker)
+        if hasattr(self, 'MaximumExtensionRound') and self.MaximumExtensionRound is not None:
+            cmd.extend(['--max_rounds', str(self.MaximumExtensionRound)])
+
+        # Add max_extension_length parameter
+        if hasattr(self, 'MaximumExtensionLength') and self.MaximumExtensionLength is not None:
+            cmd.extend(['--max_extension_length', str(self.MaximumExtensionLength)])
+
+        # Add original reads paths if available (support single file or multiple files)
+        original_hifi = self.original_reads_info.get('original_hifi')
+        if original_hifi:
+            if isinstance(original_hifi, (list, tuple)):
+                cmd.extend(['--hifi'] + [str(p) for p in original_hifi])
+            else:
+                cmd.extend(['--hifi', str(original_hifi)])
+
+        original_ont = self.original_reads_info.get('original_ont')
+        if original_ont:
+            if isinstance(original_ont, (list, tuple)):
+                cmd.extend(['--ont'] + [str(p) for p in original_ont])
+            else:
+                cmd.extend(['--ont', str(original_ont)])
+
+        return cmd
+    
+    def _step3_integrate_results(self):
+        """
+        Step 3: Integrate and summarize Part2 extension results.
+        
+        Reads all chromosome end results from part2.chr.end.job/ and generates:
+        - check_part2_jobs.csv: Summary of all chromosome ends
+        
+        Output:
+            - part3.integration.results/check_part2_jobs.csv
+        """
+        print(f"[Step 3/4] Integrating results...")
+        print(f"-" * 80)
+        
+        part2_dir = self.out / 'part2.chr.end.job'
+        part3_dir = self.out / 'part3.integration.results'
+        
+        # Check if Part2 results exist
+        if not part2_dir.exists():
+            print(f"[Step 3/4] Warning: No Part2 results found at {part2_dir}")
+            print(f"[Step 3/4] Skipping integration")
+            print()
+            return
+        
+        # Create Part3 output directory
+        part3_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Collect results from all chromosome ends
+        results = self._collect_part2_results(part2_dir)
+        
+        # Write summary CSV
+        csv_file = part3_dir / 'check_part2_jobs.csv'
+        self._write_results_csv(results, csv_file)
+        
+        # Print summary statistics
+        self._print_integration_summary(results)
+        
+        # Integrate genome sequences
+        print(f"\n[Step 3/4] Integrating genome sequences...")
+        final_genome = self._integrate_genome_sequences(part2_dir, results, part3_dir)
+        
+        # Analyze final genome with telomere checker
+        if final_genome and final_genome.exists():
+            print(f"\n[Step 3/4] Analyzing final genome telomeres...")
+            self._analyze_final_genome(final_genome, part3_dir)
+        
+        print(f"\n[Step 3/4] Integration complete ✓")
+        print(f"  Statistics saved to: {csv_file}")
+        if final_genome:
+            print(f"  Final genome saved to: {final_genome}")
+            print(f"  Telomere check results: {part3_dir / 'final.genome.telomere.check'}")
+        print()
+    
+    def _collect_part2_results(self, part2_dir: Path) -> list:
+        """
+        Collect results from all chromosome end subdirectories.
+        
+        Args:
+            part2_dir: Path to part2.chr.end.job directory
+        
+        Returns:
+            List of result dictionaries
+        """
+        results = []
+        
+        # Get all subdirectories
+        chr_end_dirs = sorted([d for d in part2_dir.iterdir() if d.is_dir()])
+        
+        print(f"[Step 3/4] Found {len(chr_end_dirs)} chromosome ends to analyze")
+        print()
+        
+        for chr_end_dir in chr_end_dirs:
+            chr_end = chr_end_dir.name
+            result = {
+                'chr_end': chr_end,
+                'telomeric': 'no',
+                'connected_read': 'NA',
+                'round_num': 'NA',
+                'connection_type': 'NA'
+            }
+            
+            # Check if linker.fa and linker.info exist
+            linker_fa = chr_end_dir / 'linker.fa'
+            linker_info = chr_end_dir / 'linker.info'
+            
+            if linker_fa.exists() and linker_info.exists():
+                # Successfully connected to telomere
+                result['telomeric'] = 'yes'
+                
+                # Parse linker.info
+                info = self._parse_linker_info(linker_info)
+                result['connected_read'] = info.get('connected_read', 'NA')
+                result['round_num'] = info.get('round_num', 'NA')
+                result['connection_type'] = info.get('connection_type', 'NA')
+            
+            results.append(result)
+        
+        return results
+    
+    def _parse_linker_info(self, linker_info_file: Path) -> dict:
+        """
+        Parse linker.info file to extract connection information.
+        
+        Args:
+            linker_info_file: Path to linker.info file
+        
+        Returns:
+            Dictionary with parsed information
+        """
+        info = {
+            'connection_type': 'NA',
+            'round_num': 'NA',
+            'connected_read': 'NA'
+        }
+        
+        try:
+            with open(linker_info_file, 'r') as f:
+                lines = [line.strip() for line in f.readlines()]
+            
+            # Parse line 5 (index 4) for connection type
+            if len(lines) > 4:
+                line5 = lines[4]
+                if 'Status: Direct connection found' in line5:
+                    info['connection_type'] = 'direct'
+                    info['round_num'] = '0'
+                elif 'Extension Rounds:' in line5:
+                    info['connection_type'] = 'extension'
+                    # Extract round number
+                    parts = line5.split(':')
+                    if len(parts) >= 2:
+                        try:
+                            info['round_num'] = parts[1].strip()
+                        except:
+                            pass
+            
+            # Parse last line for connected read
+            if lines:
+                last_line = lines[-1]
+                if 'Connected Read:' in last_line:
+                    parts = last_line.split(':', 1)
+                    if len(parts) >= 2:
+                        info['connected_read'] = parts[1].strip()
+        
+        except Exception as e:
+            print(f"  Warning: Error parsing {linker_info_file}: {e}")
+        
+        return info
+    
+    def _write_results_csv(self, results: list, csv_file: Path):
+        """
+        Write results to CSV file.
+        
+        Args:
+            results: List of result dictionaries
+            csv_file: Output CSV file path
+        """
+        import csv
+        
+        with open(csv_file, 'w', newline='') as f:
+            writer = csv.writer(f)
+            # Write header
+            writer.writerow(['Chr_end', 'Telomeric', 'Connected_read', 'Round_num', 'Connection_type'])
+            
+            # Write data rows
+            for result in results:
+                writer.writerow([
+                    result['chr_end'],
+                    result['telomeric'],
+                    result['connected_read'],
+                    result['round_num'],
+                    result['connection_type']
+                ])
+    
+    def _integrate_genome_sequences(self, part2_dir: Path, results: list, part3_dir: Path) -> Path:
+        """
+        Integrate successful linker sequences into the original genome.
+        
+        Args:
+            part2_dir: Path to part2.chr.end.job directory
+            results: List of result dictionaries
+            part3_dir: Path to part3.integration.results directory
+        
+        Returns:
+            Path to final genome file, or None if integration failed
+        """
+        from Bio import SeqIO
+        from Bio.SeqRecord import SeqRecord
+        
+        # Filter successful results
+        successful = [r for r in results if r['telomeric'] == 'yes']
+        
+        if not successful:
+            print(f"  No successful connections to integrate")
+            return None
+        
+        print(f"  Integrating {len(successful)} successful connections...")
+        
+        # Load original genome
+        try:
+            genome_records = {rec.id: rec for rec in SeqIO.parse(self.genome_file, 'fasta')}
+            print(f"  Loaded {len(genome_records)} chromosomes from original genome")
+        except Exception as e:
+            print(f"  Error loading genome: {e}")
+            return None
+        
+        # Process each successful connection
+        modifications = {}
+        for result in successful:
+            chr_end = result['chr_end']
+            chr_end_dir = part2_dir / chr_end
+            
+            # Parse chromosome name and end type
+            parts = chr_end.rsplit('.', 1)
+            if len(parts) != 2:
+                print(f"  Warning: Invalid chr_end format: {chr_end}")
+                continue
+            
+            chr_name, end_type = parts
+            
+            if chr_name not in genome_records:
+                print(f"  Warning: Chromosome {chr_name} not found in genome")
+                continue
+            
+            # Determine seedlen from seed.fa
+            seed_file = chr_end_dir / 'seed.fa'
+            if not seed_file.exists():
+                print(f"  Warning: seed.fa not found for {chr_end}")
+                continue
+            
+            try:
+                seed_record = next(SeqIO.parse(seed_file, 'fasta'))
+                seedlen = len(seed_record.seq)
+            except Exception as e:
+                print(f"  Warning: Error reading seed.fa for {chr_end}: {e}")
+                continue
+            
+            # Read linker sequence
+            linker_file = chr_end_dir / 'linker.fa'
+            if not linker_file.exists():
+                print(f"  Warning: linker.fa not found for {chr_end}")
+                continue
+            
+            try:
+                linker_record = next(SeqIO.parse(linker_file, 'fasta'))
+                linker_seq = linker_record.seq
+            except Exception as e:
+                print(f"  Warning: Error reading linker.fa for {chr_end}: {e}")
+                continue
+            
+            # Store modification
+            if chr_name not in modifications:
+                modifications[chr_name] = {}
+            
+            modifications[chr_name][end_type] = {
+                'seedlen': seedlen,
+                'linker_seq': linker_seq
+            }
+            
+            print(f"    ✓ {chr_end}: seedlen={seedlen}bp, linker={len(linker_seq)}bp")
+        
+        # Apply modifications to genome
+        print(f"\n  Applying modifications to genome...")
+        modified_records = []
+        
+        for chr_name, record in genome_records.items():
+            if chr_name in modifications:
+                original_seq = record.seq
+                original_len = len(original_seq)
+                
+                # Determine which parts to use
+                left_mod = modifications[chr_name].get('L')
+                right_mod = modifications[chr_name].get('R')
+                
+                if left_mod and right_mod:
+                    # Both ends need modification
+                    left_seedlen = left_mod['seedlen']
+                    right_seedlen = right_mod['seedlen']
+                    left_linker = left_mod['linker_seq']
+                    right_linker = right_mod['linker_seq']
+                    
+                    # New sequence = left_linker + middle + right_linker
+                    middle = original_seq[left_seedlen:-right_seedlen]
+                    new_seq = left_linker + middle + right_linker
+                    print(f"    ✓ {chr_name}.L+R: {original_len}bp → {len(new_seq)}bp")
+                    
+                elif left_mod:
+                    # Only left end modification
+                    seedlen = left_mod['seedlen']
+                    linker_seq = left_mod['linker_seq']
+                    new_seq = linker_seq + original_seq[seedlen:]
+                    print(f"    ✓ {chr_name}.L: {original_len}bp → {len(new_seq)}bp")
+                    
+                elif right_mod:
+                    # Only right end modification
+                    seedlen = right_mod['seedlen']
+                    linker_seq = right_mod['linker_seq']
+                    new_seq = original_seq[:-seedlen] + linker_seq
+                    print(f"    ✓ {chr_name}.R: {original_len}bp → {len(new_seq)}bp")
+                else:
+                    # Should not happen
+                    new_seq = original_seq
+                
+                # Create modified record
+                modified_record = SeqRecord(
+                    seq=new_seq,
+                    id=record.id,
+                    description=f"{record.description} [telomere_extended]"
+                )
+                modified_records.append(modified_record)
+            else:
+                # Keep original record
+                modified_records.append(record)
+        
+        # Write final genome
+        final_genome_file = part3_dir / 'final.genome.fa'
+        try:
+            SeqIO.write(modified_records, final_genome_file, 'fasta')
+            print(f"\n  Successfully integrated genome with {len(modifications)} modified chromosomes")
+            return final_genome_file
+        except Exception as e:
+            print(f"  Error writing final genome: {e}")
+            return None
+    
+    def _analyze_final_genome(self, final_genome_file: Path, part3_dir: Path):
+        """
+        Analyze final integrated genome using TelomereChecker (window-based method).
+
+        Args:
+            final_genome_file: Path to final.genome.fa
+            part3_dir: Path to part3.integration.results directory
+        """
+        try:
+            # Import TelomereChecker
+            from TelSeekerCheck import TelomereChecker
+
+            # Create checker instance
+            # Output will be placed in part3_dir, and TelomereChecker will create
+            # a subdirectory named 'genome.telomere.check'
+            # But we want it named 'final.genome.telomere.check' instead
+
+            # Create custom output directory name
+            check_output_dir = part3_dir / 'final.genome.telomere.check'
+            check_output_dir.parent.mkdir(parents=True, exist_ok=True)
+
+            # Create checker with window-based method parameters
+            checker = TelomereChecker(
+                genome_file=str(final_genome_file),
+                motif=self.motif,
+                output_dir=str(part3_dir),
+                trc_threshold=0.7,
+                check_length=5000,          # 5kb window-based scanning (avoid ITS)
+                extract_length=2000,
+                window_flank=500            # Window flank size
+            )
+            
+            # Override the check_dir to use our custom name
+            checker.check_dir = str(check_output_dir)
+            
+            # Create the directory
+            check_output_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Run telomere check (window-based method, but suppress its output)
+            print(f"  Running telomere check on final genome (window-based method)...")
+            print(f"    Check length: 5kb (avoid ITS), Window flank: 500bp")
+
+            # Temporarily redirect stdout to suppress verbose output
+            import sys
+            from io import StringIO
+            old_stdout = sys.stdout
+            sys.stdout = StringIO()
+
+            try:
+                # Process genome directly without calling run()
+                checker._process_genome()
+                checker._write_csv_report()
+                checker._write_extension_list()
+                checker._write_left_sequences()
+                checker._write_right_sequences()
+            finally:
+                sys.stdout = old_stdout
+
+            # Print summary of results
+            telomeric_count = sum(1 for r in checker.results if r['status'] == 'telomeric')
+            total_count = len(checker.results)
+
+            print(f"  ✓ Analysis complete (window-based method)")
+            print(f"    Total ends checked: {total_count}")
+            if total_count > 0:
+                print(f"    Telomeric ends:     {telomeric_count} ({telomeric_count/total_count*100:.1f}%)")
+            else:
+                print(f"    Telomeric ends:     {telomeric_count}")
+            print(f"    Results saved to:   {check_output_dir}")
+            
+        except ImportError as e:
+            print(f"  Warning: Could not import TelomereChecker: {e}")
+        except Exception as e:
+            print(f"  Warning: Error during telomere analysis: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _print_integration_summary(self, results: list):
+        """
+        Print summary statistics of integration results.
+        
+        Args:
+            results: List of result dictionaries
+        """
+        total = len(results)
+        
+        if total == 0:
+            print(f"\n[Step 3/4] Summary Statistics:")
+            print(f"  No chromosome ends found to analyze")
+            return
+        
+        telomeric_yes = sum(1 for r in results if r['telomeric'] == 'yes')
+        telomeric_no = total - telomeric_yes
+        
+        direct = sum(1 for r in results if r['connection_type'] == 'direct')
+        extension = sum(1 for r in results if r['connection_type'] == 'extension')
+        
+        print(f"\n[Step 3/4] Summary Statistics:")
+        print(f"  Total chromosome ends:     {total}")
+        print(f"  Successfully extended:     {telomeric_yes} ({telomeric_yes/total*100:.1f}%)")
+        print(f"  Failed to extend:          {telomeric_no} ({telomeric_no/total*100:.1f}%)")
+        
+        if telomeric_yes > 0:
+            print(f"\n  Connection Methods:")
+            print(f"    Direct connection:       {direct}")
+            print(f"    Extension connection:    {extension}")
+    
+    def _check_step2_prerequisites(self) -> bool:
+        """
+        Check if all prerequisites for Step 2 exist.
+        
+        Required files:
+        - genome.telomere.check/need_extension_chr_end.txt
+        - part1.telo.reads/Global.left.telo.reads.fa
+        - part1.telo.reads/Global.right.telo.reads.fa
+        - HiFi.reads.stat or ONT.reads.stat
+        
+        Returns:
+            True if all prerequisites exist, False otherwise
+        """
+        print(f"[Step 2/4] Checking prerequisites...")
+        
+        missing_files = []
+        
+        # Check need_extension_chr_end.txt
+        need_extension_file = self.out / 'genome.telomere.check' / 'need_extension_chr_end.txt'
+        if not need_extension_file.exists():
+            missing_files.append(str(need_extension_file))
+            print(f"  ✗ Missing: {need_extension_file}")
+            print(f"     Hint: Run TelSeekerCheck.py first to identify chromosome ends needing extension")
+        else:
+            print(f"  ✓ Found: need_extension_chr_end.txt")
+        
+        # Check Global telomeric reads files
+        part1_dir = self.out / 'part1.telo.reads'
+        global_left = part1_dir / 'Global.left.telo.reads.fa'
+        global_right = part1_dir / 'Global.right.telo.reads.fa'
+        
+        if not global_left.exists():
+            missing_files.append(str(global_left))
+            print(f"  ✗ Missing: {global_left}")
+        else:
+            print(f"  ✓ Found: Global.left.telo.reads.fa")
+        
+        if not global_right.exists():
+            missing_files.append(str(global_right))
+            print(f"  ✗ Missing: {global_right}")
+        else:
+            print(f"  ✓ Found: Global.right.telo.reads.fa")
+        
+        # Check reads statistics files
+        hifi_stat = self.out / 'HiFi.reads.stat'
+        ont_stat = self.out / 'ONT.reads.stat'
+        
+        if not hifi_stat.exists() and not ont_stat.exists():
+            missing_files.append("HiFi.reads.stat or ONT.reads.stat")
+            print(f"  ✗ Missing: reads statistics files")
+        else:
+            if hifi_stat.exists():
+                print(f"  ✓ Found: HiFi.reads.stat")
+            if ont_stat.exists():
+                print(f"  ✓ Found: ONT.reads.stat")
+        
+        if missing_files:
+            print(f"\n  Missing {len(missing_files)} required file(s)")
+            return False
+        
+        print(f"  All prerequisites found ✓")
+        return True
+    
+    def _step4_generate_visualization(self):
+        """
+        Step 4: Generate interactive HTML visualization report.
+        
+        Calls TelSeekerVisualizer.py to generate an interactive HTML report
+        that visualizes all results from previous steps.
+        
+        Output:
+            - visual.report/Global.report.html: Interactive visualization report
+        """
+        print(f"[Step 4/4] Generating visualization report...")
+        print(f"-" * 80)
+        
+        try:
+            # Get the directory where TelSeeker.py is located
+            telseeker_dir = Path(__file__).parent.resolve()
+            visualizer_script = telseeker_dir / 'TelSeekerVisualizer.py'
+            
+            # Check if visualizer script exists
+            if not visualizer_script.exists():
+                print(f"[Step 4/4] Warning: TelSeekerVisualizer.py not found at {visualizer_script}")
+                print(f"[Step 4/4] Skipping visualization report generation")
+                print()
+                return
+            
+            # Build command to run visualizer
+            cmd = [
+                sys.executable,                  # python
+                str(visualizer_script),          # TelSeekerVisualizer.py
+                '--out', str(self.out)           # output directory
+            ]
+            
+            print(f"[Step 4/4] Running TelSeekerVisualizer.py...")
+            print(f"  Output directory: {self.out}")
+            print()
+            
+            # Execute visualizer
+            import subprocess
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True
+            )
+            
+            # Print visualizer output
+            if result.stdout:
+                print(result.stdout)
+            
+            # Check execution result
+            if result.returncode != 0:
+                print(f"\n[Step 4/4] Warning: TelSeekerVisualizer.py failed with exit code {result.returncode}")
+                if result.stderr:
+                    print(f"Error output:")
+                    print(result.stderr)
+                print(f"[Step 4/4] Visualization report generation failed, but workflow can continue")
+                print()
+                return
+            
+            # Check if report was generated in new location
+            report_file = self.out / 'visual.report' / 'Global.report.html'
+            if report_file.exists():
+                print(f"\n[Step 4/4] Visualization report generated successfully ✓")
+                print(f"  Report location: {report_file}")
+                print(f"  Open this file in a web browser to view the interactive report")
+            else:
+                print(f"\n[Step 4/4] Warning: Global.report.html was not generated")
+            
+            print()
+            
+        except Exception as e:
+            print(f"\n[Step 4/4] Warning: Visualization report generation failed")
+            print(f"  Error: {e}")
+            print(f"  This is non-critical, workflow can continue")
+            import traceback
+            traceback.print_exc()
+            print()
+
+
+# For testing
+if __name__ == '__main__':
+    print("TelSeeker module")
+    print("Usage: Called from DEGAP.py with --mode telseeker")
