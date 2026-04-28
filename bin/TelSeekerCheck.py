@@ -26,6 +26,7 @@ Output:
 import os
 import sys
 import re
+import math
 import argparse
 from pathlib import Path
 from typing import List, Tuple
@@ -382,11 +383,16 @@ def classify_terminal_telomere_signal(windows: List[dict], end: str,
 
 
 class TelomereChecker:
-    """Check chromosome ends for telomeric content using window-based scanning"""
+    """Check chromosome ends for telomeric content using terminal window counts"""
 
     def __init__(self, genome_file: str, motif: str, output_dir: str,
                  trc_threshold: float = 0.7, check_length: int = 5000,
-                 extract_length: int = 2000, window_flank: int = 500):
+                 extract_length: int = 2000, window_flank: int = 500,
+                 window_size: int = 10000, terminal_windows: int = 1,
+                 min_terminal_repeats: int = 100,
+                 min_terminal_density: float = 10.0,
+                 min_terminal_to_internal_ratio: float = 3.0,
+                 method: str = "window_count"):
         """
         Initialize TelomereChecker
 
@@ -398,7 +404,16 @@ class TelomereChecker:
             check_length: Length to extract from chromosome end for window scanning (default: 5000bp)
             extract_length: Length to extract for output sequences (default: 2000bp)
             window_flank: Flank size for window creation (default: 500bp)
+            window_size: Fixed repeat-count bin size (default: 10000bp)
+            terminal_windows: Number of terminal bins used for classification (default: 1)
+            min_terminal_repeats: Minimum terminal motif hits for telomeric call
+            min_terminal_density: Minimum terminal motif hits per kb for telomeric call
+            min_terminal_to_internal_ratio: Required terminal/internal density enrichment
+            method: Detection method, either 'window_count' or 'legacy_trc'
         """
+        if method not in {"window_count", "legacy_trc"}:
+            raise ValueError("method must be 'window_count' or 'legacy_trc'")
+
         self.genome_file = genome_file
         self.motif = motif.upper()
         self.output_dir = output_dir
@@ -406,6 +421,12 @@ class TelomereChecker:
         self.check_length = check_length
         self.extract_length = extract_length
         self.window_flank = window_flank
+        self.window_size = window_size
+        self.terminal_windows = terminal_windows
+        self.min_terminal_repeats = min_terminal_repeats
+        self.min_terminal_density = min_terminal_density
+        self.min_terminal_to_internal_ratio = min_terminal_to_internal_ratio
+        self.method = method
         self.kmer_length = len(motif) - 2
 
         # Window markers (motif*2)
@@ -419,14 +440,19 @@ class TelomereChecker:
         
     def run(self):
         """Run the complete telomere checking workflow"""
-        print(f"[TelomereChecker] Starting telomere check (window-based method)...")
+        print(f"[TelomereChecker] Starting telomere check ({self.method} method)...")
         print(f"  Genome: {self.genome_file}")
         print(f"  Motif: {self.motif}")
         print(f"  Window markers:")
         print(f"    Right (forward): {self.pat_right}")
         print(f"    Left (reverse):  {self.pat_left}")
-        print(f"  TRC threshold: {self.trc_threshold}")
+        print(f"  Legacy TRC threshold: {self.trc_threshold}")
         print(f"  Check length: {self.check_length} bp (extract from each end)")
+        print(f"  Count window size: {self.window_size} bp")
+        print(f"  Terminal windows: {self.terminal_windows}")
+        print(f"  Min terminal repeats: {self.min_terminal_repeats}")
+        print(f"  Min terminal density: {self.min_terminal_density:.2f} repeats/kb")
+        print(f"  Min terminal/internal ratio: {self.min_terminal_to_internal_ratio:.2f}")
         print(f"  Window flank: {self.window_flank} bp")
         print(f"  Extract length: {self.extract_length} bp (for output)")
         print()
@@ -440,6 +466,7 @@ class TelomereChecker:
         # Step 3: Write results
         self._write_csv_report()
         self._write_extension_list()
+        self._write_uncertain_list()
         self._write_left_sequences()
         self._write_right_sequences()
 
@@ -513,7 +540,7 @@ class TelomereChecker:
         else:  # Right
             check_seq = seq_str[-min(self.check_length, len(seq_str)):]
 
-        # Calculate TRC using window-based method
+        # Keep the historical TRC score in the report for continuity.
         max_trc, num_windows = calculate_trc_window_based(
             check_seq,
             self.motif,
@@ -521,16 +548,57 @@ class TelomereChecker:
             self.window_flank
         )
 
-        # Determine status based on maximum TRC across all windows
-        status = "telomeric" if max_trc >= self.trc_threshold else "untelomeric"
+        count_windows = count_telomere_repeat_windows(
+            check_seq,
+            self.motif,
+            self.window_size
+        )
+        classification = classify_terminal_telomere_signal(
+            count_windows,
+            end,
+            terminal_window_count=self.terminal_windows,
+            min_terminal_repeats=self.min_terminal_repeats,
+            min_terminal_density=self.min_terminal_density,
+            min_terminal_to_internal_ratio=self.min_terminal_to_internal_ratio,
+        )
+
+        forward_count = sum(window["forward_count"] for window in count_windows)
+        reverse_count = sum(window["reverse_count"] for window in count_windows)
+        if forward_count > reverse_count:
+            dominant_direction = "forward"
+        elif reverse_count > forward_count:
+            dominant_direction = "reverse"
+        elif forward_count > 0:
+            dominant_direction = "mixed"
+        else:
+            dominant_direction = "none"
+
+        if self.method == "legacy_trc":
+            status = "telomeric" if max_trc >= self.trc_threshold else "untelomeric"
+            classification["confidence"] = "legacy"
+            classification["reason"] = "legacy TRC threshold was used for classification"
+        else:
+            status = classification["status"]
 
         return {
             'chr': chr_name,
             'end': end,
             'status': status,
+            'method': self.method,
             'trc': max_trc,
             'num_windows': num_windows,
-            'check_length': len(check_seq)
+            'check_length': len(check_seq),
+            'motif': self.motif,
+            'forward_count': forward_count,
+            'reverse_count': reverse_count,
+            'dominant_direction': dominant_direction,
+            'count_windows': len(count_windows),
+            'terminal_repeat_count': classification["terminal_repeat_count"],
+            'terminal_density': classification["terminal_density"],
+            'internal_max_density': classification["internal_max_density"],
+            'terminal_to_internal_ratio': classification["terminal_to_internal_ratio"],
+            'confidence': classification["confidence"],
+            'reason': classification["reason"],
         }
     
     def _extract_left_sequence(self, chr_name: str, seq_str: str) -> SeqRecord:
@@ -556,7 +624,7 @@ class TelomereChecker:
         )
     
     def _write_csv_report(self):
-        """Write CSV report with window-based results"""
+        """Write CSV report with terminal window-count results"""
         # Fixed filename: genome.telomere.check.csv
         csv_file = os.path.join(self.check_dir, "genome.telomere.check.csv")
 
@@ -565,11 +633,24 @@ class TelomereChecker:
         with open(csv_file, 'w') as f:
             # Write results with additional window information
             for result in self.results:
-                # Format: Chr01,Left,telomeric,TRC=0.98,Windows=5,CheckLen=5000
+                ratio = result['terminal_to_internal_ratio']
+                ratio_text = "Inf" if math.isinf(ratio) else f"{ratio:.2f}"
                 line = (f"{result['chr']},{result['end']},{result['status']},"
                        f"TRC={result['trc']:.2f},"
                        f"Windows={result['num_windows']},"
-                       f"CheckLen={result['check_length']}\n")
+                       f"CheckLen={result['check_length']},"
+                       f"Method={result['method']},"
+                       f"Motif={result['motif']},"
+                       f"ForwardCount={result['forward_count']},"
+                       f"ReverseCount={result['reverse_count']},"
+                       f"DominantDirection={result['dominant_direction']},"
+                       f"CountWindows={result['count_windows']},"
+                       f"TerminalRepeatCount={result['terminal_repeat_count']},"
+                       f"TerminalDensity={result['terminal_density']:.2f},"
+                       f"InternalMaxDensity={result['internal_max_density']:.2f},"
+                       f"TerminalToInternalRatio={ratio_text},"
+                       f"Confidence={result['confidence']},"
+                       f"Reason={result['reason']}\n")
                 f.write(line)
 
         print(f"  Written {len(self.results)} records")
@@ -594,6 +675,24 @@ class TelomereChecker:
                 f.write(f"{end}\n")
         
         print(f"  Written {len(untelomeric_ends)} ends requiring extension")
+
+    def _write_uncertain_list(self):
+        """Write list of chromosome ends that need manual telomere review"""
+        uncertain_file = os.path.join(self.check_dir, "uncertain_chr_end.txt")
+
+        print(f"[TelomereChecker] Writing uncertain list: {uncertain_file}")
+
+        uncertain_ends = []
+        for result in self.results:
+            if result['status'] == 'uncertain':
+                end_suffix = 'L' if result['end'] == 'Left' else 'R'
+                uncertain_ends.append(f"{result['chr']}.{end_suffix}")
+
+        with open(uncertain_file, 'w') as f:
+            for end in uncertain_ends:
+                f.write(f"{end}\n")
+
+        print(f"  Written {len(uncertain_ends)} ends requiring manual review")
     
     def _write_left_sequences(self):
         """Write left end sequences"""
@@ -624,13 +723,15 @@ class TelomereChecker:
         total_ends = len(self.results)
         telomeric_count = sum(1 for r in self.results if r['status'] == 'telomeric')
         untelomeric_count = sum(1 for r in self.results if r['status'] == 'untelomeric')
+        uncertain_count = sum(1 for r in self.results if r['status'] == 'uncertain')
 
         print(f"\n{'='*60}")
-        print(f"SUMMARY (Window-based Method)")
+        print(f"SUMMARY ({self.method} Method)")
         print(f"{'='*60}")
         print(f"Total chromosome ends checked: {total_ends}")
         print(f"  Telomeric ends:   {telomeric_count} ({telomeric_count/total_ends*100:.1f}%)")
         print(f"  Untelomeric ends: {untelomeric_count} ({untelomeric_count/total_ends*100:.1f}%)")
+        print(f"  Uncertain ends:   {uncertain_count} ({uncertain_count/total_ends*100:.1f}%)")
         print(f"{'='*60}")
 
         if untelomeric_count > 0:
@@ -638,7 +739,16 @@ class TelomereChecker:
             for result in self.results:
                 if result['status'] == 'untelomeric':
                     print(f"  - {result['chr']} ({result['end']}): "
-                          f"TRC={result['trc']:.2f}, Windows={result['num_windows']}")
+                          f"TRC={result['trc']:.2f}, "
+                          f"TerminalRepeats={result['terminal_repeat_count']}")
+
+        if uncertain_count > 0:
+            print(f"\nChromosome ends requiring manual telomere review:")
+            for result in self.results:
+                if result['status'] == 'uncertain':
+                    print(f"  - {result['chr']} ({result['end']}): "
+                          f"TerminalDensity={result['terminal_density']:.2f}, "
+                          f"InternalMaxDensity={result['internal_max_density']:.2f}")
 
 
 def main():
