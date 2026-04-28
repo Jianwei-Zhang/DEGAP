@@ -1,5 +1,6 @@
 import sys
 import unittest
+import subprocess
 from pathlib import Path
 
 
@@ -136,6 +137,53 @@ class TelomereCheckerIntegrationTests(unittest.TestCase):
                     check_dir / "need_extension_chr_end.txt"
                 ).read_text().splitlines()
                 self.assertEqual(need_extension, ["Chr01.R"])
+
+
+class TelSeekerCheckCliTests(unittest.TestCase):
+    def test_cli_accepts_window_count_threshold_options(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            genome = tmp_path / "genome.fa"
+            genome.write_text(">Chr01\n" + "TTAGGG" * 10 + "A" * 120 + "\n")
+            out_dir = tmp_path / "out"
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(BIN_DIR / "TelSeekerCheck.py"),
+                    "--genome",
+                    str(genome),
+                    "--motif",
+                    "TTAGGG",
+                    "--out",
+                    str(out_dir),
+                    "--check-length",
+                    "180",
+                    "--window-size",
+                    "60",
+                    "--terminal-windows",
+                    "1",
+                    "--min-terminal-repeats",
+                    "4",
+                    "--min-terminal-density",
+                    "50",
+                    "--min-terminal-to-internal-ratio",
+                    "2",
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            csv_text = (
+                out_dir
+                / "genome.telomere.check"
+                / "genome.telomere.check.csv"
+            ).read_text()
+            self.assertIn("Method=window_count", csv_text)
+            self.assertIn("TerminalRepeatCount=10", csv_text)
 
 
 if __name__ == "__main__":

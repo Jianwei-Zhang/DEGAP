@@ -413,12 +413,12 @@ class TelSeeker:
 
     def _step0_check_telomeres(self):
         """
-        Step 0: Check telomere quality using window-based scanning method.
+        Step 0: Check telomere quality using terminal window-count method.
 
         Uses TelSeekerCheck.TelomereChecker to:
-        - Extract 5kb from each chromosome end (default, to avoid ITS interference)
-        - Use window markers (motif*2) to scan for telomeric regions
-        - Calculate TRC for each window and take the maximum
+        - Extract 100kb from each chromosome end
+        - Count motif and reverse-complement motif in fixed 10kb bins
+        - Require terminal repeat signal and terminal/internal enrichment
         - Identify chromosome ends that need telomere extension
 
         Input:
@@ -430,7 +430,7 @@ class TelSeeker:
             - genome.telomere.check/genome.telomere.check.left.2kb.fa
             - genome.telomere.check/genome.telomere.check.right.2kb.fa
         """
-        print(f"[Step 0/4] Checking telomere quality (window-based method)...")
+        print(f"[Step 0/4] Checking telomere quality (window_count method)...")
         print(f"-" * 80)
 
         # Check if Step 0 output already exists (skip mechanism)
@@ -464,24 +464,30 @@ class TelSeeker:
             # Import TelomereChecker
             from TelSeekerCheck import TelomereChecker
 
-            # Create checker with window-based method parameters
+            # Create checker with terminal window-count method parameters
             checker = TelomereChecker(
                 genome_file=str(self.genome_file),
                 motif=self.motif,
                 output_dir=str(self.out),
-                trc_threshold=0.7,          # TRC threshold
-                check_length=5000,          # Check 5kb from each end (avoid ITS interference)
-                extract_length=2000,        # Extract 2kb for output
-                window_flank=500            # Window flank size (500bp)
+                trc_threshold=0.7,
+                check_length=100000,
+                extract_length=2000,
+                window_flank=500,
+                window_size=10000,
+                terminal_windows=1,
+                min_terminal_repeats=100,
+                min_terminal_density=10.0,
+                min_terminal_to_internal_ratio=3.0,
+                method="window_count"
             )
 
             # Run telomere check
-            print(f"[Step 0/4] Running window-based telomere check...")
+            print(f"[Step 0/4] Running terminal window-count telomere check...")
             print(f"  Genome: {self.genome_file}")
             print(f"  Motif: {self.motif}")
-            print(f"  Check length: 5kb (avoid ITS interference)")
-            print(f"  Window flank: 500bp")
-            print(f"  TRC threshold: 0.7")
+            print(f"  Check length: 100kb")
+            print(f"  Window size: 10kb")
+            print(f"  Terminal windows: 1")
             print()
 
             checker.run()
@@ -1146,15 +1152,21 @@ class TelSeeker:
             check_output_dir = part3_dir / 'final.genome.telomere.check'
             check_output_dir.parent.mkdir(parents=True, exist_ok=True)
 
-            # Create checker with window-based method parameters
+            # Create checker with terminal window-count method parameters
             checker = TelomereChecker(
                 genome_file=str(final_genome_file),
                 motif=self.motif,
                 output_dir=str(part3_dir),
                 trc_threshold=0.7,
-                check_length=5000,          # 5kb window-based scanning (avoid ITS)
+                check_length=100000,
                 extract_length=2000,
-                window_flank=500            # Window flank size
+                window_flank=500,
+                window_size=10000,
+                terminal_windows=1,
+                min_terminal_repeats=100,
+                min_terminal_density=10.0,
+                min_terminal_to_internal_ratio=3.0,
+                method="window_count"
             )
             
             # Override the check_dir to use our custom name
@@ -1163,9 +1175,9 @@ class TelSeeker:
             # Create the directory
             check_output_dir.mkdir(parents=True, exist_ok=True)
             
-            # Run telomere check (window-based method, but suppress its output)
-            print(f"  Running telomere check on final genome (window-based method)...")
-            print(f"    Check length: 5kb (avoid ITS), Window flank: 500bp")
+            # Run telomere check (terminal window-count method, but suppress its output)
+            print(f"  Running telomere check on final genome (window_count method)...")
+            print(f"    Check length: 100kb, Window size: 10kb")
 
             # Temporarily redirect stdout to suppress verbose output
             import sys

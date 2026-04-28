@@ -5,12 +5,12 @@ TelSeekerCheck.py - Check if chromosome ends have reached telomeres
 This script analyzes a genome assembly and identifies which chromosome ends
 have successfully reached telomeric sequences and which need telomere extension.
 
-Modified to use window-based scanning method:
-- Extract 5kb from each chromosome end (default, to avoid ITS region interference)
-- Use window markers (motif*2) to scan for telomeric regions
-- Create windows (500bp upstream + marker + 500bp downstream)
-- Calculate TRC for each window and take the maximum
-- If max TRC >= 0.7, consider the end as telomeric
+Default method:
+- Extract 100kb from each chromosome end
+- Count the motif and reverse-complement motif in fixed 10kb bins
+- Classify an end as telomeric only when the terminal bin has enough repeat
+  signal and is enriched over internal bins in the checked region
+- Keep the historical TRC field in the report for review and compatibility
 
 Usage:
     python TelSeekerCheck.py --genome genome.fa --motif TTAGGG --out output_dir
@@ -20,7 +20,8 @@ Output:
         ├── genome.telomere.check.csv          # Summary report
         ├── genome.telomere.check.left.2kb.fa  # Left end sequences (2kb)
         ├── genome.telomere.check.right.2kb.fa # Right end sequences (2kb)
-        └── need_extension_chr_end.txt         # List of ends needing extension
+        ├── need_extension_chr_end.txt         # Untelomeric ends
+        └── uncertain_chr_end.txt              # Ends requiring manual review
 """
 
 import os
@@ -386,7 +387,7 @@ class TelomereChecker:
     """Check chromosome ends for telomeric content using terminal window counts"""
 
     def __init__(self, genome_file: str, motif: str, output_dir: str,
-                 trc_threshold: float = 0.7, check_length: int = 5000,
+                 trc_threshold: float = 0.7, check_length: int = 100000,
                  extract_length: int = 2000, window_flank: int = 500,
                  window_size: int = 10000, terminal_windows: int = 1,
                  min_terminal_repeats: int = 100,
@@ -400,8 +401,8 @@ class TelomereChecker:
             genome_file: Path to input genome FASTA file
             motif: Telomere repeat motif (e.g., 'TTAGGG')
             output_dir: Output directory
-            trc_threshold: TRC threshold to consider telomeric (default: 0.7)
-            check_length: Length to extract from chromosome end for window scanning (default: 5000bp)
+            trc_threshold: TRC threshold for legacy_trc mode (default: 0.7)
+            check_length: Length to extract from chromosome end for window scanning (default: 100000bp)
             extract_length: Length to extract for output sequences (default: 2000bp)
             window_flank: Flank size for window creation (default: 500bp)
             window_size: Fixed repeat-count bin size (default: 10000bp)
@@ -754,23 +755,26 @@ class TelomereChecker:
 def main():
     """Main function"""
     parser = argparse.ArgumentParser(
-        description="Check if chromosome ends have reached telomeres (window-based method)",
+        description="Check if chromosome ends have reached telomeres",
         formatter_class=argparse.RawTextHelpFormatter,
         epilog="""
 Example usage:
   python TelSeekerCheck.py --genome genome.fa --motif TTAGGG --out results
 
-Window-based method:
-  - Extracts 5kb from each chromosome end (default, to avoid ITS interference)
-  - Uses window markers (motif*2) to scan for telomeric regions
-  - Creates windows (500bp upstream + marker + 500bp downstream)
-  - Calculates TRC for each window and takes the maximum
-  - If max TRC >= 0.7, considers the end as telomeric
+Window-count method (default):
+  - Extracts 100kb from each chromosome end
+  - Counts motif and reverse-complement repeats in 10kb bins
+  - Requires terminal repeat signal and terminal/internal enrichment
+  - Writes uncertain_chr_end.txt for ambiguous ends requiring manual review
+
+Legacy TRC method:
+  python TelSeekerCheck.py --genome genome.fa --motif TTAGGG --out results --method legacy_trc
 
 Output structure:
   results/genome.telomere.check/
     ├── genome.telomere.check.csv          # Summary report with window info
     ├── need_extension_chr_end.txt         # List of ends needing extension
+    ├── uncertain_chr_end.txt              # List of ambiguous ends
     ├── genome.telomere.check.left.2kb.fa  # Left end sequences
     └── genome.telomere.check.right.2kb.fa # Right end sequences
         """
@@ -798,14 +802,14 @@ Output structure:
         '--threshold',
         type=float,
         default=0.7,
-        help='TRC threshold for telomeric classification (default: 0.7)'
+        help='TRC threshold used only by --method legacy_trc (default: 0.7)'
     )
 
     parser.add_argument(
         '--check-length',
         type=int,
-        default=5000,
-        help='Length to extract from chromosome end for window scanning in bp (default: 5000)'
+        default=100000,
+        help='Length to extract from chromosome end for checking in bp (default: 100000)'
     )
 
     parser.add_argument(
@@ -819,7 +823,49 @@ Output structure:
         '--window-flank',
         type=int,
         default=500,
-        help='Flank size for window creation in bp (default: 500)'
+        help='Flank size for legacy TRC marker windows in bp (default: 500)'
+    )
+
+    parser.add_argument(
+        '--method',
+        choices=['window_count', 'legacy_trc'],
+        default='window_count',
+        help='Telomere classification method (default: window_count)'
+    )
+
+    parser.add_argument(
+        '--window-size',
+        type=int,
+        default=10000,
+        help='Fixed repeat-count bin size in bp (default: 10000)'
+    )
+
+    parser.add_argument(
+        '--terminal-windows',
+        type=int,
+        default=1,
+        help='Number of terminal bins used for classification (default: 1)'
+    )
+
+    parser.add_argument(
+        '--min-terminal-repeats',
+        type=int,
+        default=100,
+        help='Minimum motif hits in terminal bins for a telomeric call (default: 100)'
+    )
+
+    parser.add_argument(
+        '--min-terminal-density',
+        type=float,
+        default=10.0,
+        help='Minimum terminal motif density in hits/kb (default: 10.0)'
+    )
+
+    parser.add_argument(
+        '--min-terminal-to-internal-ratio',
+        type=float,
+        default=3.0,
+        help='Minimum terminal/internal density ratio (default: 3.0)'
     )
 
     args = parser.parse_args()
@@ -837,7 +883,13 @@ Output structure:
         trc_threshold=args.threshold,
         check_length=args.check_length,
         extract_length=args.extract_length,
-        window_flank=args.window_flank
+        window_flank=args.window_flank,
+        window_size=args.window_size,
+        terminal_windows=args.terminal_windows,
+        min_terminal_repeats=args.min_terminal_repeats,
+        min_terminal_density=args.min_terminal_density,
+        min_terminal_to_internal_ratio=args.min_terminal_to_internal_ratio,
+        method=args.method
     )
 
     checker.run()
