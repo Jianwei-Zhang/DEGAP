@@ -104,5 +104,19 @@ class TeloReadWorkerStringencyTests(unittest.TestCase):
             self.assertIn(">spaced_forward", right_output.read_text())
 
 
+class TeloReadCliStringencyTests(unittest.TestCase):
+    def test_part1_help_exposes_single_stringency_parameter(self):
+        result = subprocess.run(
+            [sys.executable, str(BIN_DIR / "TelSeekerPart1.py"), "--help"],
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("--telo-read-stringency", result.stdout)
+        self.assertIn("strict", result.stdout)
+        self.assertIn("relaxed", result.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()

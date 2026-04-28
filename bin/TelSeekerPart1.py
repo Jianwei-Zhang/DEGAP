@@ -1312,15 +1312,15 @@ def main():
     parser.add_argument(
         '--threshold',
         type=float,
-        default=0.7,
-        help='TRC threshold for telomeric classification (default: 0.7)'
+        default=None,
+        help='Override TRC threshold for strict mode (default: stringency preset)'
     )
     
     parser.add_argument(
         '--check-length',
         type=int,
-        default=1000,
-        help='Length to check at each end in bp (default: 1000). Window flank = check_length / 2'
+        default=None,
+        help='Override legacy TRC check length in bp (default: stringency preset)'
     )
     
     parser.add_argument(
@@ -1333,8 +1333,7 @@ def main():
     parser.add_argument(
         '--enable-second-filter',
         action='store_true',
-        default=True,
-        help='Enable second-level motif count filtering (default: enabled)'
+        help='Enable second-level motif count filtering (default: stringency preset)'
     )
     
     parser.add_argument(
@@ -1346,8 +1345,15 @@ def main():
     parser.add_argument(
         '--min-motif-count',
         type=int,
-        default=10,
-        help='Minimum motif count for second-level filter (default: 10)'
+        default=None,
+        help='Override minimum motif count for second-level filter (default: stringency preset)'
+    )
+
+    parser.add_argument(
+        '--telo-read-stringency',
+        choices=['strict', 'normal', 'relaxed'],
+        default='normal',
+        help='Single control for telomeric read detection strictness: strict uses legacy marker+TRC; normal/relaxed use window-count search (default: normal)'
     )
     
     parser.add_argument(
@@ -1359,7 +1365,12 @@ def main():
     args = parser.parse_args()
     
     # Handle filter enable/disable logic
-    enable_second_filter = args.enable_second_filter and not args.disable_second_filter
+    if args.disable_second_filter:
+        enable_second_filter = False
+    elif args.enable_second_filter:
+        enable_second_filter = True
+    else:
+        enable_second_filter = None
     
     # Validate output directory
     if not os.path.exists(args.out):
@@ -1376,7 +1387,8 @@ def main():
         batch_size=args.batch_size,
         enable_second_filter=enable_second_filter,
         min_motif_count=args.min_motif_count,
-        overlapping=args.overlapping
+        overlapping=args.overlapping,
+        telo_read_stringency=args.telo_read_stringency
     )
     
     extractor.run()

@@ -132,6 +132,7 @@ python bin/DEGAP.py --mode telseeker \
     --ont ./path/ONTReads.fa \
     --out ./path/Output \
     --work 4 \
+    --telo-read-stringency normal \
     --kmer_filter \
     -t 20
 ```
@@ -169,6 +170,12 @@ Review `genome.telomere.check.csv`, `need_extension_chr_end.txt`, and
 `uncertain_chr_end.txt` before using the generated target list. If you already
 know the target chromosome ends, skip `TelSeekerCheck.py` and pass them directly
 with `-e`.
+
+Telomeric read discovery is controlled by one parameter:
+`--telo-read-stringency strict|normal|relaxed`. `strict` keeps the legacy
+marker+TRC behavior, while `normal` and `relaxed` use a window-count search that
+can recover reads with interrupted telomere repeats. Use `relaxed` when Step 1
+finds too few telo reads.
 
 Example target file:
 

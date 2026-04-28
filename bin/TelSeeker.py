@@ -38,12 +38,13 @@ class TelSeeker:
                 [13] data_type: 'hifi', 'ont', or 'mixed'
                 [14] ont_reads: ONT reads file path (or None)
                 [15] target_ends: Target chromosome ends to extend
-                [16] readsDict: Path to HiFi reads index
-                [17] maxReadsLen: Maximum read length
-                [18] hifiSeedLen: HiFi seed length
-                [19] ontSeedLen: ONT seed length (or None)
-                [20] original_reads_info: Dict with file paths
-                [21] ont_readsdict: Path to ONT reads index (or None)
+                [16] telo_read_stringency: strict|normal|relaxed (optional)
+                [17] readsDict: Path to HiFi reads index
+                [18] maxReadsLen: Maximum read length
+                [19] hifiSeedLen: HiFi seed length
+                [20] ontSeedLen: ONT seed length (or None)
+                [21] original_reads_info: Dict with file paths
+                [22] ont_readsdict: Path to ONT reads index (or None)
 
             kparameters: List of 2-3 k-mer parameters
                 [0] kmer_size: K-mer size (default: 41)
@@ -77,6 +78,7 @@ class TelSeeker:
         self.filterDepthHifi = parameter[9]
         self.filterDepthOnt = parameter[10]
         self.MaximumExtensionLength = parameter[11]
+        self.telo_read_stringency = "normal"
 
         # Handle current target-end format and older internal formats
         if len(parameter) >= 22 and isinstance(parameter[15], list):
@@ -84,12 +86,16 @@ class TelSeeker:
             self.data_type = parameter[13]
             self.ont_reads = parameter[14]
             self.target_ends = parameter[15]
-            self.readsDict = parameter[16]
-            self.maxReadsLen = parameter[17]
-            self.hifiSeedLen = parameter[18]
-            self.ontSeedLen = parameter[19]
-            self.original_reads_info = parameter[20]
-            self.ont_readsdict = parameter[21]
+            offset = 16
+            if len(parameter) > offset and parameter[offset] in ["strict", "normal", "relaxed"]:
+                self.telo_read_stringency = parameter[offset]
+                offset += 1
+            self.readsDict = parameter[offset]
+            self.maxReadsLen = parameter[offset + 1]
+            self.hifiSeedLen = parameter[offset + 2]
+            self.ontSeedLen = parameter[offset + 3]
+            self.original_reads_info = parameter[offset + 4]
+            self.ont_readsdict = parameter[offset + 5]
         elif len(parameter) >= 21:
             # New format with MaximumExtensionRound
             self.MaximumExtensionRound = parameter[12]
@@ -158,6 +164,9 @@ class TelSeeker:
         # Validate data type
         if self.data_type not in ['hifi', 'ont', 'mixed']:
             raise ValueError(f"Invalid data_type: {self.data_type}")
+
+        if self.telo_read_stringency not in ['strict', 'normal', 'relaxed']:
+            raise ValueError(f"Invalid telo_read_stringency: {self.telo_read_stringency}")
         
         # Validate mixed mode requirements
         if self.data_type == 'mixed' and not self.ont_reads:
@@ -236,6 +245,7 @@ class TelSeeker:
         print(f"  Threads:            {self.thread}")
         print(f"  Parallel workers:   {self.work}")
         print(f"  Edge tolerance:     {self.edge} bp")
+        print(f"  Telo read stringency: {self.telo_read_stringency}")
         if self.MaximumExtensionLength:
             print(f"  Max extension:      {self.MaximumExtensionLength} bp")
         
@@ -569,12 +579,9 @@ class TelSeeker:
                 output_dir=str(self.out),           # TelSeeker output directory
                 motif=self.motif,                    # Telomere motif
                 threads=self.thread,                 # Use thread parameter for parallel processing
-                trc_threshold=0.7,                   # TRC threshold (default)
-                check_length=1000,                   # Check length (default 1000bp)
                 batch_size=1000,                     # Batch size (default 1000 reads)
-                enable_second_filter=True,           # Enable second-level motif filter
-                min_motif_count=10,                  # Min motif count (default 10)
-                overlapping=False                    # Non-overlapping count
+                overlapping=False,                   # Non-overlapping count
+                telo_read_stringency=self.telo_read_stringency
             )
             
             # Run extraction

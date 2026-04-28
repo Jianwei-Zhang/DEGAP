@@ -222,6 +222,7 @@ If you install tools manually (without Micromamba), ensure the following program
 | `--genome` | Input genome/chromosomes (TelSeeker) | None |
 | `--motif` | Telomere motif sequence (TelSeeker) | None |
 | `-e, --target_ends` | Target chromosome ends for TelSeeker, e.g. `Chr01.L Chr01.R`, or a text file with one target per line | Required |
+| `--telo-read-stringency` | Telomeric read discovery strictness: `strict`, `normal`, or `relaxed` | `normal` |
 
 **Note**: At least one of `--hifi` or `--ont` must be provided.
 
@@ -395,6 +396,7 @@ python bin/DEGAP.py --mode telseeker \
     --ont ./path/ONTReads.fq.gz \
     --out ./path/Output \
     --work 4 \
+    --telo-read-stringency normal \
     --kmer_filter \
     -t 20
 ```
@@ -801,6 +803,8 @@ output_directory/
 - Review `uncertain_chr_end.txt` as ambiguous evidence, not as an automatic TelSeeker target list
 - Skip `TelSeekerCheck.py` when target ends are already known
 - Pass target ends explicitly with `-e Chr01.L Chr01.R` or `-e target_ends.txt`
+- Use `--telo-read-stringency strict` for legacy marker+TRC read discovery
+- Use `--telo-read-stringency relaxed` when Step 1 finds too few telo reads
 - Use `--kmer_filter` for large genomes to reduce processing time
 
 ## Troubleshooting
@@ -848,6 +852,7 @@ output_directory/
 - Verify `-e/--target_ends` contains the intended chromosome ends
 - If targets came from `TelSeekerCheck.py`, manually confirm the check results before rerunning
 - If using a target file, verify it has one non-empty `Chr.L` or `Chr.R` target per line
+- If Step 1 reports too few telo reads, rerun with `--telo-read-stringency relaxed`
 - Check `--motif` parameter matches your species (e.g., TTAGGG for vertebrates)
 
 **9. TelSeeker Motif Not Found**

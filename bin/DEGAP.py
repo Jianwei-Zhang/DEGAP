@@ -267,6 +267,8 @@ def usage():
 	print ("\t--genome genome.fasta         Genome file with all chromosomes (FASTA)")
 	print ("\t--motif ATCG...               Telomere motif (uppercase A/T/C/G); required in telseeker mode, no default")
 	print ("\t--target_ends|-e END [END ...] Target chromosome ends to extend, e.g. Chr01.L Chr01.R, or one text file")
+	print ("\t--telo-read-stringency strict|normal|relaxed")
+	print ("\t                               Telomeric read detection strictness (default: normal)")
 	print ("\t--work num                    Number of chromosome ends to process in parallel (default: 1)")
 	print ("\tNote: telomere checking is independent; pass target ends with -e/--target_ends")
 
@@ -321,6 +323,10 @@ def getoptions():
 	parser.add_argument('--motif', type=str, help='Telomere motif (uppercase A/T/C/G); required in telseeker mode')
 	parser.add_argument('--target_ends', '-e', nargs='+',
 	                    help='Target chromosome ends for telseeker mode, e.g. Chr01.L Chr01.R, or a text file with one target per line')
+	parser.add_argument('--telo-read-stringency',
+	                    choices=['strict', 'normal', 'relaxed'],
+	                    default='normal',
+	                    help='Telomeric read detection strictness for telseeker mode (default: normal)')
 	parser.add_argument('--work', '-w', type=int, default=1, help='Number of parallel workers (default: 1)')
 
 
@@ -479,7 +485,7 @@ def getoptions():
 		return [args.mode, args.remove, args.thread or '20', reads_file, args.out,
 		        genome_file, motif, work, args.edge, args.filterDepthHifi, args.filterDepthOnt,
 		        args.MaximumExtensionLength, args.MaximumExtensionRound, data_type, ont_reads,
-		        target_ends], kparameters, resume_params
+		        target_ends, args.telo_read_stringency], kparameters, resume_params
 
 	elif args.mode == "ctglinker":
 		# Check files required for ctglinker mode
@@ -1321,7 +1327,7 @@ elif parameter[0] == "ctglinker":
 elif parameter[0] == "telseeker":
     # The parameter list should already contain readsDict, maxReadsLen, hifiSeedLen, ontSeedLen
     # from the processing above
-    # Expected structure: [mode, remove, thread, reads, out, genome_fasta, motif, work, edge, filterDepthHifi, filterDepthOnt, MaximumExtensionLength, MaximumExtensionRound, data_type, ont_reads, target_ends, readsDict, maxReadsLen, hifiSeedLen, ontSeedLen, original_reads_info, ont_readsdict]
+    # Expected structure: [mode, remove, thread, reads, out, genome_fasta, motif, work, edge, filterDepthHifi, filterDepthOnt, MaximumExtensionLength, MaximumExtensionRound, data_type, ont_reads, target_ends, telo_read_stringency, readsDict, maxReadsLen, hifiSeedLen, ontSeedLen, original_reads_info, ont_readsdict]
     print(f"TelSeeker parameter list length: {len(parameter)}")
     print(f"TelSeeker parameters: {[str(p)[:50] + '...' if isinstance(p, str) and len(str(p)) > 50 else p for p in parameter]}")
 
@@ -1370,4 +1376,3 @@ if parameter[1] in [1, 2]:
                 print(f"Warning: Failed to clean up {d}: {e}")
 
 print('welldone')
-
