@@ -19,6 +19,27 @@ from TelSeekerPart2 import finalize_chr_end_result
 
 
 class TelSeekerContractTests(unittest.TestCase):
+    def test_run_stops_after_step0_when_no_chromosome_ends_need_extension(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp)
+            check_dir = out_dir / "genome.telomere.check"
+            check_dir.mkdir()
+            (check_dir / "need_extension_chr_end.txt").write_text("")
+
+            runner = TelSeeker.__new__(TelSeeker)
+            runner.out = out_dir
+            calls = []
+
+            runner._step0_check_telomeres = lambda: calls.append("step0")
+            runner._step1_extract_telomeric_reads = lambda: calls.append("step1")
+            runner._step2_extend_chromosome_ends = lambda: calls.append("step2")
+            runner._step3_integrate_results = lambda: calls.append("step3")
+            runner._step4_generate_visualization = lambda: calls.append("step4")
+
+            runner.run()
+
+            self.assertEqual(calls, ["step0"])
+
     def test_parse_linker_info_reads_extension_metadata(self):
         with tempfile.TemporaryDirectory() as tmp:
             info_file = Path(tmp) / "linker.info"

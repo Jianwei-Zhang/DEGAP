@@ -266,6 +266,13 @@ class TelSeeker:
             # Step 0: Check telomeres (window-based method)
             self._step0_check_telomeres()
 
+            # Stop early when every chromosome end already has telomeric signal.
+            if not self._has_chr_ends_needing_extension():
+                print(f"\n[TelSeeker] No untelomeric chromosome ends detected.")
+                print(f"[TelSeeker] Skipping telomeric read extraction, extension, integration, and visualization.")
+                print(f"Output directory: {self.out}")
+                return
+
             # Step 1: Extract telomeric reads
             self._step1_extract_telomeric_reads()
 
@@ -300,6 +307,24 @@ class TelSeeker:
             import traceback
             traceback.print_exc()
             sys.exit(1)
+
+    def _get_chr_ends_needing_extension(self):
+        """Return chromosome ends listed by Step 0, or None if the list is unavailable."""
+        need_extension_file = self.out / "genome.telomere.check" / "need_extension_chr_end.txt"
+        if not need_extension_file.exists():
+            return None
+
+        try:
+            with open(need_extension_file, 'r') as f:
+                return [line.strip() for line in f if line.strip() and not line.startswith('#')]
+        except Exception as e:
+            print(f"[TelSeeker] Warning: Could not read {need_extension_file}: {e}")
+            return None
+
+    def _has_chr_ends_needing_extension(self) -> bool:
+        """Return False only when Step 0 explicitly produced an empty extension list."""
+        chr_ends = self._get_chr_ends_needing_extension()
+        return chr_ends is None or len(chr_ends) > 0
 
     def _step0_check_telomeres(self):
         """
