@@ -140,6 +140,26 @@ python bin/DEGAP.py --mode telseeker \
 `Chr01.L Chr01.R`, or a text file with one target end per line. Telomere
 quality checking is run separately with `bin/TelSeekerCheck.py` when needed.
 
+To discover target ends first:
+
+```bash
+python bin/TelSeekerCheck.py \
+    --genome ./path/genome.fasta \
+    --motif TTAGGG \
+    --out ./path/telomere_check
+```
+
+Then run TelSeeker with the generated target list:
+
+```bash
+python bin/DEGAP.py --mode telseeker \
+    --genome ./path/genome.fasta \
+    --motif TTAGGG \
+    -e ./path/telomere_check/genome.telomere.check/need_extension_chr_end.txt \
+    --hifi ./path/HiFiReads.fa \
+    --out ./path/Output
+```
+
 Example target file:
 
 ```text
