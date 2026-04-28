@@ -246,6 +246,136 @@ def calculate_trc_window_based(sequence: str, motif: str, kmer_length: int,
     return max_trc, total_windows
 
 
+def _count_overlapping_motif(sequence: str, motif: str) -> int:
+    """Count overlapping motif hits in a sequence."""
+    if not motif:
+        return 0
+    return len(re.findall(f"(?={re.escape(motif)})", sequence, re.IGNORECASE))
+
+
+def count_telomere_repeat_windows(sequence: str, motif: str,
+                                  window_size: int = 10000) -> List[dict]:
+    """
+    Count forward and reverse-complement telomere repeats in fixed windows.
+
+    The window-count view mirrors the TeloExplorer/tidk style signal used for
+    manual telomere review: it preserves where repeat density is concentrated
+    instead of reducing the whole end to one local TRC maximum.
+    """
+    if window_size <= 0:
+        raise ValueError("window_size must be greater than 0")
+
+    seq_str = (sequence or "").upper()
+    motif_forward = (motif or "").upper()
+    motif_reverse = str(Seq(motif_forward).reverse_complement()) if motif_forward else ""
+
+    windows = []
+    for start in range(0, len(seq_str), window_size):
+        end = min(start + window_size, len(seq_str))
+        window_seq = seq_str[start:end]
+        forward_count = _count_overlapping_motif(window_seq, motif_forward)
+        reverse_count = _count_overlapping_motif(window_seq, motif_reverse)
+        total_count = forward_count + reverse_count
+        window_len_kb = max((end - start) / 1000.0, 0.001)
+
+        windows.append({
+            "start": start,
+            "end": end,
+            "forward_count": forward_count,
+            "reverse_count": reverse_count,
+            "total_count": total_count,
+            "density_per_kb": total_count / window_len_kb,
+        })
+
+    return windows
+
+
+def classify_terminal_telomere_signal(windows: List[dict], end: str,
+                                      terminal_window_count: int = 3,
+                                      min_terminal_repeats: int = 100,
+                                      min_terminal_density: float = 10.0,
+                                      min_terminal_to_internal_ratio: float = 3.0) -> dict:
+    """
+    Classify one chromosome end from fixed-window telomere repeat counts.
+
+    A telomeric call requires enough repeats at the physical end and enrichment
+    over internal windows in the checked region. Strong repeat signal away from
+    the end is treated as a warning signal instead of proof of a terminal
+    telomere.
+    """
+    if terminal_window_count <= 0:
+        raise ValueError("terminal_window_count must be greater than 0")
+
+    if not windows:
+        return {
+            "status": "untelomeric",
+            "terminal_repeat_count": 0,
+            "terminal_density": 0.0,
+            "internal_max_density": 0.0,
+            "terminal_to_internal_ratio": 0.0,
+            "confidence": "low",
+            "reason": "no windows were available for terminal telomere review",
+        }
+
+    normalized_end = end.lower()
+    if normalized_end not in {"left", "right"}:
+        raise ValueError("end must be Left or Right")
+
+    terminal_count = min(terminal_window_count, len(windows))
+    if normalized_end == "left":
+        terminal_windows = windows[:terminal_count]
+        internal_windows = windows[terminal_count:]
+    else:
+        terminal_windows = windows[-terminal_count:]
+        internal_windows = windows[:-terminal_count]
+
+    terminal_repeat_count = sum(window["total_count"] for window in terminal_windows)
+    terminal_bases = sum(window["end"] - window["start"] for window in terminal_windows)
+    terminal_density = (
+        terminal_repeat_count / max(terminal_bases / 1000.0, 0.001)
+    )
+    internal_max_density = max(
+        (window["density_per_kb"] for window in internal_windows),
+        default=0.0,
+    )
+    if internal_max_density <= 0:
+        terminal_to_internal_ratio = float("inf") if terminal_density > 0 else 0.0
+    else:
+        terminal_to_internal_ratio = terminal_density / internal_max_density
+
+    has_terminal_signal = (
+        terminal_repeat_count >= min_terminal_repeats
+        and terminal_density >= min_terminal_density
+    )
+    has_terminal_enrichment = (
+        internal_max_density <= 0
+        or terminal_to_internal_ratio >= min_terminal_to_internal_ratio
+    )
+
+    if has_terminal_signal and has_terminal_enrichment:
+        confidence = "high" if internal_max_density <= 0 else "medium"
+        reason = "terminal windows contain enriched telomere repeat signal"
+        status = "telomeric"
+    elif has_terminal_signal:
+        confidence = "low"
+        reason = "telomere repeats are not enriched at the terminal windows"
+        status = "uncertain"
+    else:
+        confidence = "low"
+        reason = "terminal windows do not contain enough telomere repeat signal"
+        status = "untelomeric"
+
+    return {
+        "status": status,
+        "terminal_repeat_count": terminal_repeat_count,
+        "terminal_density": terminal_density,
+        "internal_max_density": internal_max_density,
+        "terminal_to_internal_ratio": terminal_to_internal_ratio,
+        "confidence": confidence,
+        "reason": reason,
+    }
+
+
 # ============================================================================
 # Telomere Checker Main Class
 # ============================================================================
