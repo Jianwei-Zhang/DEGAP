@@ -19,7 +19,20 @@ from TelSeekerPart2 import finalize_chr_end_result
 
 
 class TelSeekerContractTests(unittest.TestCase):
-    def test_run_stops_after_step0_when_no_chromosome_ends_need_extension(self):
+    def test_step0_load_target_ends_writes_part2_input_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp)
+
+            runner = TelSeeker.__new__(TelSeeker)
+            runner.out = out_dir
+            runner.target_ends = ["Chr01.L", "Chr02.R"]
+
+            runner._step0_load_target_ends()
+
+            target_file = out_dir / "genome.telomere.check" / "need_extension_chr_end.txt"
+            self.assertEqual(target_file.read_text(), "Chr01.L\nChr02.R\n")
+
+    def test_run_stops_after_step0_when_no_target_ends_are_available(self):
         with tempfile.TemporaryDirectory() as tmp:
             out_dir = Path(tmp)
             check_dir = out_dir / "genome.telomere.check"
@@ -30,7 +43,7 @@ class TelSeekerContractTests(unittest.TestCase):
             runner.out = out_dir
             calls = []
 
-            runner._step0_check_telomeres = lambda: calls.append("step0")
+            runner._step0_load_target_ends = lambda: calls.append("step0")
             runner._step1_extract_telomeric_reads = lambda: calls.append("step1")
             runner._step2_extend_chromosome_ends = lambda: calls.append("step2")
             runner._step3_integrate_results = lambda: calls.append("step3")
@@ -58,7 +71,7 @@ class TelSeekerContractTests(unittest.TestCase):
                 (part1_dir / "Global.left.telo.reads.fa").write_text("")
                 (part1_dir / "Global.right.telo.reads.fa").write_text("")
 
-            runner._step0_check_telomeres = lambda: calls.append("step0")
+            runner._step0_load_target_ends = lambda: calls.append("step0")
             runner._step1_extract_telomeric_reads = step1
             runner._step2_extend_chromosome_ends = lambda: calls.append("step2")
             runner._step3_integrate_results = lambda: calls.append("step3")

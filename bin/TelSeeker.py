@@ -37,12 +37,13 @@ class TelSeeker:
                 [12] MaximumExtensionRound: Max extension rounds (default: 20)
                 [13] data_type: 'hifi', 'ont', or 'mixed'
                 [14] ont_reads: ONT reads file path (or None)
-                [15] readsDict: Path to HiFi reads index
-                [16] maxReadsLen: Maximum read length
-                [17] hifiSeedLen: HiFi seed length
-                [18] ontSeedLen: ONT seed length (or None)
-                [19] original_reads_info: Dict with file paths
-                [20] ont_readsdict: Path to ONT reads index (or None)
+                [15] target_ends: Target chromosome ends to extend
+                [16] readsDict: Path to HiFi reads index
+                [17] maxReadsLen: Maximum read length
+                [18] hifiSeedLen: HiFi seed length
+                [19] ontSeedLen: ONT seed length (or None)
+                [20] original_reads_info: Dict with file paths
+                [21] ont_readsdict: Path to ONT reads index (or None)
 
             kparameters: List of 2-3 k-mer parameters
                 [0] kmer_size: K-mer size (default: 41)
@@ -77,12 +78,24 @@ class TelSeeker:
         self.filterDepthOnt = parameter[10]
         self.MaximumExtensionLength = parameter[11]
 
-        # Handle both old (20 params) and new (21 params) formats
-        if len(parameter) >= 21:
+        # Handle current target-end format and older internal formats
+        if len(parameter) >= 22 and isinstance(parameter[15], list):
+            self.MaximumExtensionRound = parameter[12]
+            self.data_type = parameter[13]
+            self.ont_reads = parameter[14]
+            self.target_ends = parameter[15]
+            self.readsDict = parameter[16]
+            self.maxReadsLen = parameter[17]
+            self.hifiSeedLen = parameter[18]
+            self.ontSeedLen = parameter[19]
+            self.original_reads_info = parameter[20]
+            self.ont_readsdict = parameter[21]
+        elif len(parameter) >= 21:
             # New format with MaximumExtensionRound
             self.MaximumExtensionRound = parameter[12]
             self.data_type = parameter[13]
             self.ont_reads = parameter[14]
+            self.target_ends = None
             # Parse extended parameters (15-20)
             self.readsDict = parameter[15]
             self.maxReadsLen = parameter[16]
@@ -95,6 +108,7 @@ class TelSeeker:
             self.MaximumExtensionRound = None  # Default value
             self.data_type = parameter[12]
             self.ont_reads = parameter[13]
+            self.target_ends = None
             # Parse extended parameters (14-19)
             self.readsDict = parameter[14]
             self.maxReadsLen = parameter[15]
@@ -148,6 +162,9 @@ class TelSeeker:
         # Validate mixed mode requirements
         if self.data_type == 'mixed' and not self.ont_reads:
             raise ValueError("Mixed mode requires ONT reads")
+
+        if not self.target_ends:
+            raise ValueError("TelSeeker requires target chromosome ends from --target_ends/-e")
         
         # Validate seed lengths
         if not self.hifiSeedLen or self.hifiSeedLen <= 0:
@@ -203,6 +220,11 @@ class TelSeeker:
         print(f"  Genome file:        {self.genome_file}")
         print(f"  Motif:              {self.motif}")
         print(f"  Output directory:   {self.out}")
+        print(f"  Target ends:        {len(self.target_ends)}")
+        for target_end in self.target_ends[:10]:
+            print(f"    - {target_end}")
+        if len(self.target_ends) > 10:
+            print(f"    ... and {len(self.target_ends) - 10} more")
         
         print(f"\nData Type:")
         print(f"  Data type:          {self.data_type}")
@@ -252,7 +274,7 @@ class TelSeeker:
         Execute TelSeeker workflow.
 
         Workflow:
-        0. Check telomeres (window-based method)
+        0. Load target chromosome ends
         1. Extract telomeric reads (TelSeekerPart1)
         2. Extend chromosome ends (TelSeekerPart2)
         3. Integrate and summarize results (TelSeekerPart3)
@@ -263,8 +285,8 @@ class TelSeeker:
         print(f"{'='*80}\n")
 
         try:
-            # Step 0: Check telomeres (window-based method)
-            self._step0_check_telomeres()
+            # Step 0: Load target chromosome ends
+            self._step0_load_target_ends()
 
             # Stop early when every chromosome end already has telomeric signal.
             if not self._has_chr_ends_needing_extension():
@@ -361,6 +383,33 @@ class TelSeeker:
 
         print(f"[TelSeeker] Telomeric reads available: left={left_count}, right={right_count}")
         return (left_count + right_count) > 0
+
+    def _step0_load_target_ends(self):
+        """
+        Step 0: Load user-provided target chromosome ends.
+
+        TelSeeker no longer performs telomere detection internally. The target
+        list comes from DEGAP.py's required --target_ends/-e argument and is
+        written to the internal file consumed by TelSeekerPart2.
+        """
+        print(f"[Step 0/4] Loading target chromosome ends...")
+        print(f"-" * 80)
+
+        check_dir = self.out / "genome.telomere.check"
+        check_dir.mkdir(parents=True, exist_ok=True)
+        need_extension_file = check_dir / "need_extension_chr_end.txt"
+
+        with open(need_extension_file, 'w') as f:
+            for target_end in self.target_ends:
+                f.write(f"{target_end}\n")
+
+        print(f"[Step 0/4] Target chromosome ends: {len(self.target_ends)}")
+        for target_end in self.target_ends[:10]:
+            print(f"  - {target_end}")
+        if len(self.target_ends) > 10:
+            print(f"  ... and {len(self.target_ends) - 10} more")
+        print(f"[Step 0/4] Target list saved to: {need_extension_file}")
+        print()
 
     def _step0_check_telomeres(self):
         """

@@ -266,8 +266,9 @@ def usage():
 	print ("\ntelseeker mode:")
 	print ("\t--genome genome.fasta         Genome file with all chromosomes (FASTA)")
 	print ("\t--motif ATCG...               Telomere motif (uppercase A/T/C/G); required in telseeker mode, no default")
+	print ("\t--target_ends|-e END [END ...] Target chromosome ends to extend, e.g. Chr01.L Chr01.R, or one text file")
 	print ("\t--work num                    Number of chromosome ends to process in parallel (default: 1)")
-	print ("\tNote: telseeker will automatically check all chromosome ends and extend those with TRC < 0.7")
+	print ("\tNote: telomere checking is independent; pass target ends with -e/--target_ends")
 
 	print ("\nctglinker mode:")
 	print ("\t--ctgseq contig_file         Contig set (FASTA format)")
@@ -318,6 +319,8 @@ def getoptions():
 	parser.add_argument('--genome', type=str, help='Genome FASTA file with all chromosomes')
 	parser.add_argument('--chr', type=str, help='[Deprecated] Single chromosome FASTA (use --genome instead)')
 	parser.add_argument('--motif', type=str, help='Telomere motif (uppercase A/T/C/G); required in telseeker mode')
+	parser.add_argument('--target_ends', '-e', nargs='+',
+	                    help='Target chromosome ends for telseeker mode, e.g. Chr01.L Chr01.R, or a text file with one target per line')
 	parser.add_argument('--work', '-w', type=int, default=1, help='Number of parallel workers (default: 1)')
 
 
@@ -457,14 +460,26 @@ def getoptions():
 			print("--motif must be uppercase letters consisting of A/T/C/G only, e.g., TTTAGGG")
 			sys.exit()
 
+		if not args.target_ends:
+			print("--target_ends/-e parameter is required for telseeker mode")
+			sys.exit()
+
+		try:
+			from TelSeekerTargets import parse_target_ends
+			target_ends = parse_target_ends(args.target_ends, genome_file)
+		except ValueError as e:
+			print(f"--target_ends/-e error: {e}")
+			sys.exit()
+
 		# Work parameter for parallel processing
 		work = args.work if args.work else 1
 
-		# Note: flag parameter is not needed for telseeker mode (it processes all chromosome ends automatically)
+		# Note: flag parameter is not needed for telseeker mode
 
 		return [args.mode, args.remove, args.thread or '20', reads_file, args.out,
 		        genome_file, motif, work, args.edge, args.filterDepthHifi, args.filterDepthOnt,
-		        args.MaximumExtensionLength, args.MaximumExtensionRound, data_type, ont_reads], kparameters, resume_params
+		        args.MaximumExtensionLength, args.MaximumExtensionRound, data_type, ont_reads,
+		        target_ends], kparameters, resume_params
 
 	elif args.mode == "ctglinker":
 		# Check files required for ctglinker mode
@@ -1306,7 +1321,7 @@ elif parameter[0] == "ctglinker":
 elif parameter[0] == "telseeker":
     # The parameter list should already contain readsDict, maxReadsLen, hifiSeedLen, ontSeedLen
     # from the processing above
-    # Expected structure: [mode, remove, thread, reads, out, genome_fasta, motif, work, edge, filterDepthHifi, filterDepthOnt, MaximumExtensionLength, MaximumExtensionRound, data_type, ont_reads, readsDict, maxReadsLen, hifiSeedLen, ontSeedLen, original_reads_info, ont_readsdict]
+    # Expected structure: [mode, remove, thread, reads, out, genome_fasta, motif, work, edge, filterDepthHifi, filterDepthOnt, MaximumExtensionLength, MaximumExtensionRound, data_type, ont_reads, target_ends, readsDict, maxReadsLen, hifiSeedLen, ontSeedLen, original_reads_info, ont_readsdict]
     print(f"TelSeeker parameter list length: {len(parameter)}")
     print(f"TelSeeker parameters: {[str(p)[:50] + '...' if isinstance(p, str) and len(str(p)) > 50 else p for p in parameter]}")
 
@@ -1355,5 +1370,4 @@ if parameter[1] in [1, 2]:
                 print(f"Warning: Failed to clean up {d}: {e}")
 
 print('welldone')
-
 
