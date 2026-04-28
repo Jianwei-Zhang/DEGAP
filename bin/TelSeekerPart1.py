@@ -85,6 +85,80 @@ def count_exact_motif_matches(sequence: str, motif: str, include_reverse_complem
     return forward_count
 
 
+def classify_read_by_window_counts(sequence: str, motif: str, window_size: int = 1000,
+                                   min_window_repeats: int = 6,
+                                   min_window_density: float = 5.0) -> dict:
+    """
+    Classify one read by telomere motif repeat counts in fixed windows.
+
+    This read-level detector avoids the legacy hard requirement for a perfect
+    motif*2 marker and instead follows the same signal shape used by windowed
+    telomere scanners: enough exact repeat hits concentrated in a local window.
+    """
+    if window_size <= 0:
+        raise ValueError("window_size must be greater than 0")
+
+    seq_str = (sequence or "").upper()
+    motif_forward = (motif or "").upper()
+    motif_reverse = get_reverse_complement(motif_forward) if motif_forward else ""
+
+    best_forward = {
+        "count": 0,
+        "density": 0.0,
+    }
+    best_reverse = {
+        "count": 0,
+        "density": 0.0,
+    }
+
+    for start in range(0, max(len(seq_str), 1), window_size):
+        end = min(start + window_size, len(seq_str))
+        window_seq = seq_str[start:end]
+        window_len_kb = max((end - start) / 1000.0, 0.001)
+
+        forward_count = window_seq.count(motif_forward) if motif_forward else 0
+        reverse_count = (
+            window_seq.count(motif_reverse)
+            if motif_reverse and motif_reverse != motif_forward
+            else 0
+        )
+        forward_density = forward_count / window_len_kb
+        reverse_density = reverse_count / window_len_kb
+
+        if (forward_count, forward_density) > (best_forward["count"], best_forward["density"]):
+            best_forward = {"count": forward_count, "density": forward_density}
+        if (reverse_count, reverse_density) > (best_reverse["count"], best_reverse["density"]):
+            best_reverse = {"count": reverse_count, "density": reverse_density}
+
+    forward_pass = (
+        best_forward["count"] >= min_window_repeats
+        and best_forward["density"] >= min_window_density
+    )
+    reverse_pass = (
+        best_reverse["count"] >= min_window_repeats
+        and best_reverse["density"] >= min_window_density
+    )
+
+    if forward_pass and (not reverse_pass or best_forward["density"] >= best_reverse["density"]):
+        passed = True
+        side = "right"
+    elif reverse_pass:
+        passed = True
+        side = "left"
+    else:
+        passed = False
+        side = None
+
+    return {
+        "passed": passed,
+        "side": side,
+        "forward_count": best_forward["count"],
+        "reverse_count": best_reverse["count"],
+        "forward_density": best_forward["density"],
+        "reverse_density": best_reverse["density"],
+    }
+
+
 class TeloReadsExtractor:
     """Extract telomeric reads from split read files using window-based scanning"""
     
