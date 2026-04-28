@@ -1,4 +1,6 @@
 import sys
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -68,6 +70,38 @@ class TeloReadWindowCountTests(unittest.TestCase):
 
         self.assertFalse(result["passed"])
         self.assertIsNone(result["side"])
+
+
+class TeloReadWorkerStringencyTests(unittest.TestCase):
+    def test_normal_worker_uses_window_count_without_double_marker_requirement(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            input_file = tmp_path / "reads.fa"
+            input_file.write_text(
+                ">spaced_forward\n"
+                + ("TTAGGGAA" * 6)
+                + ("C" * 200)
+                + "\n"
+            )
+
+            extractor = TelSeekerPart1.TeloReadsExtractor(
+                output_dir=str(tmp_path),
+                motif="TTAGGG",
+                telo_read_stringency="normal",
+            )
+            script_path = extractor._create_processing_script(str(tmp_path))
+
+            result = subprocess.run(
+                [sys.executable, script_path, str(input_file)],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            left_output = tmp_path / f"left_{input_file.name}"
+            self.assertNotIn(">spaced_forward", left_output.read_text())
+            right_output = tmp_path / f"right_{input_file.name}"
+            self.assertIn(">spaced_forward", right_output.read_text())
 
 
 if __name__ == "__main__":

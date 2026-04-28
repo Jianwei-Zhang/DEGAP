@@ -159,13 +159,60 @@ def classify_read_by_window_counts(sequence: str, motif: str, window_size: int =
     }
 
 
+TELO_READ_STRINGENCY_PRESETS = {
+    "strict": {
+        "scan_mode": "legacy_marker_trc",
+        "trc_threshold": 0.7,
+        "check_length": 1000,
+        "enable_second_filter": True,
+        "min_motif_count": 10,
+        "read_window_size": 1000,
+        "min_window_repeats": 10,
+        "min_window_density": 10.0,
+    },
+    "normal": {
+        "scan_mode": "window_count",
+        "trc_threshold": 0.7,
+        "check_length": 1000,
+        "enable_second_filter": True,
+        "min_motif_count": 6,
+        "read_window_size": 1000,
+        "min_window_repeats": 6,
+        "min_window_density": 5.0,
+    },
+    "relaxed": {
+        "scan_mode": "window_count",
+        "trc_threshold": 0.7,
+        "check_length": 1000,
+        "enable_second_filter": True,
+        "min_motif_count": 4,
+        "read_window_size": 1000,
+        "min_window_repeats": 4,
+        "min_window_density": 3.0,
+    },
+}
+
+
+def resolve_telo_read_stringency_preset(stringency: str) -> dict:
+    """Return a copy of the telo-read extraction preset."""
+    normalized = (stringency or "normal").lower()
+    if normalized not in TELO_READ_STRINGENCY_PRESETS:
+        valid = ", ".join(sorted(TELO_READ_STRINGENCY_PRESETS))
+        raise ValueError(f"Invalid telo_read_stringency: {stringency}; expected one of: {valid}")
+    return dict(TELO_READ_STRINGENCY_PRESETS[normalized])
+
+
 class TeloReadsExtractor:
     """Extract telomeric reads from split read files using window-based scanning"""
     
     def __init__(self, output_dir: str, motif: str, threads: int = 20,
-                 trc_threshold: float = 0.7, check_length: int = 1000,
-                 batch_size: int = 1000, enable_second_filter: bool = True,
-                 min_motif_count: int = 10, overlapping: bool = False):
+                 trc_threshold: float = None, check_length: int = None,
+                 batch_size: int = 1000, enable_second_filter: bool = None,
+                 min_motif_count: int = None, overlapping: bool = False,
+                 telo_read_stringency: str = "normal",
+                 read_window_size: int = None,
+                 min_window_repeats: int = None,
+                 min_window_density: float = None):
         """
         Initialize TeloReadsExtractor
 
@@ -177,22 +224,49 @@ class TeloReadsExtractor:
             check_length: Length to check at each end (default: 1000bp)
                          Used as window_flank = check_length // 2 for scanning
             batch_size: Number of reads to read at once (default: 1000)
-            enable_second_filter: Enable second-level motif count filtering (default: True)
-            min_motif_count: Minimum motif count for second filter (default: 10)
+            enable_second_filter: Enable second-level motif count filtering
+            min_motif_count: Minimum motif count for second filter
             overlapping: Use overlapping count in second filter (default: False)
+            telo_read_stringency: strict, normal, or relaxed preset
+            read_window_size: Window size for window_count mode
+            min_window_repeats: Minimum motif hits in one read window
+            min_window_density: Minimum motif hits per kb in one read window
         """
+        preset = resolve_telo_read_stringency_preset(telo_read_stringency)
+
         self.output_dir = output_dir
         self.motif = motif.upper()
         self.threads = threads
-        self.trc_threshold = trc_threshold
-        self.check_length = check_length
+        self.telo_read_stringency = (telo_read_stringency or "normal").lower()
+        self.scan_mode = preset["scan_mode"]
+        self.trc_threshold = preset["trc_threshold"] if trc_threshold is None else trc_threshold
+        self.check_length = preset["check_length"] if check_length is None else check_length
         # Convert check_length to window_flank (half of check_length)
-        self.window_flank = check_length // 2
+        self.window_flank = self.check_length // 2
         self.kmer_length = len(motif) - 2
         self.batch_size = batch_size
-        self.enable_second_filter = enable_second_filter
-        self.min_motif_count = min_motif_count
+        self.enable_second_filter = (
+            preset["enable_second_filter"]
+            if enable_second_filter is None
+            else enable_second_filter
+        )
+        self.min_motif_count = preset["min_motif_count"] if min_motif_count is None else min_motif_count
         self.overlapping = overlapping
+        self.read_window_size = (
+            preset["read_window_size"]
+            if read_window_size is None
+            else read_window_size
+        )
+        self.min_window_repeats = (
+            preset["min_window_repeats"]
+            if min_window_repeats is None
+            else min_window_repeats
+        )
+        self.min_window_density = (
+            preset["min_window_density"]
+            if min_window_density is None
+            else min_window_density
+        )
         
         # Generate window markers (2x motif length)
         self.pat_right = self.motif * 2  # e.g., TTAGGGTTAGGG
@@ -259,10 +333,16 @@ class TeloReadsExtractor:
         print(f"  Window markers:")
         print(f"    Right (forward): {self.pat_right}")
         print(f"    Left (reverse):  {self.pat_left}")
+        print(f"  Telo-read stringency: {self.telo_read_stringency}")
+        print(f"  Scan mode: {self.scan_mode}")
         print(f"  TRC threshold: {self.trc_threshold}")
         print(f"  Check length: {self.check_length} bp")
         print(f"  Window flank: {self.window_flank} bp (= check_length / 2)")
         print(f"  Window size: {self.window_size} bp (target, with compensation)")
+        if self.scan_mode == "window_count":
+            print(f"  Read count window size: {self.read_window_size} bp")
+            print(f"  Min window repeats: {self.min_window_repeats}")
+            print(f"  Min window density: {self.min_window_density:.2f} motifs/kb")
         print(f"  Threads: {self.threads}")
         print(f"  Batch size: {self.batch_size} reads")
         print(f"  Output order: Platform-grouped, reads sorted by ID within each platform")
@@ -432,10 +512,64 @@ def find_all_occurrences(seq, pattern):
         positions.append(pos)
         start = pos + 1  # Allow overlapping search
     return positions
+
+def classify_read_by_window_counts(sequence, motif, window_size=1000,
+                                   min_window_repeats=6,
+                                   min_window_density=5.0):
+    """Classify one read by motif repeat counts in fixed windows."""
+    if window_size <= 0:
+        raise ValueError("window_size must be greater than 0")
+
+    seq_str = (sequence or "").upper()
+    motif_forward = (motif or "").upper()
+    motif_reverse = str(Seq(motif_forward).reverse_complement()) if motif_forward else ""
+
+    best_forward_count = 0
+    best_forward_density = 0.0
+    best_reverse_count = 0
+    best_reverse_density = 0.0
+
+    for start in range(0, max(len(seq_str), 1), window_size):
+        end = min(start + window_size, len(seq_str))
+        window_seq = seq_str[start:end]
+        window_len_kb = max((end - start) / 1000.0, 0.001)
+
+        forward_count = window_seq.count(motif_forward) if motif_forward else 0
+        if motif_reverse and motif_reverse != motif_forward:
+            reverse_count = window_seq.count(motif_reverse)
+        else:
+            reverse_count = 0
+
+        forward_density = forward_count / window_len_kb
+        reverse_density = reverse_count / window_len_kb
+
+        if (forward_count, forward_density) > (best_forward_count, best_forward_density):
+            best_forward_count = forward_count
+            best_forward_density = forward_density
+        if (reverse_count, reverse_density) > (best_reverse_count, best_reverse_density):
+            best_reverse_count = reverse_count
+            best_reverse_density = reverse_density
+
+    forward_pass = (
+        best_forward_count >= min_window_repeats
+        and best_forward_density >= min_window_density
+    )
+    reverse_pass = (
+        best_reverse_count >= min_window_repeats
+        and best_reverse_density >= min_window_density
+    )
+
+    if forward_pass and (not reverse_pass or best_forward_density >= best_reverse_density):
+        return dict(passed=True, side="right")
+    if reverse_pass:
+        return dict(passed=True, side="left")
+    return dict(passed=False, side=None)
 # ===== End of Embedded Functions =====
 
 def process_file(input_file, motif, kmer_length, pat_right, pat_left, 
-                 window_flank, trc_threshold, temp_dir, batch_size=1000):
+                 window_flank, trc_threshold, temp_dir, batch_size=1000,
+                 scan_mode="legacy_marker_trc", read_window_size=1000,
+                 min_window_repeats=6, min_window_density=5.0):
     """Process a single split file to extract telomeric reads using window-based scanning"""
     base_name = os.path.basename(input_file)
     left_output = os.path.join(temp_dir, f"left_{{base_name}}")
@@ -470,6 +604,21 @@ def process_file(input_file, motif, kmer_length, pat_right, pat_left,
                 for record in batch:
                     total += 1
                     seq_str = str(record.seq).upper()
+
+                    if scan_mode == "window_count":
+                        window_result = classify_read_by_window_counts(
+                            seq_str,
+                            motif,
+                            read_window_size,
+                            min_window_repeats,
+                            min_window_density
+                        )
+                        if window_result["passed"]:
+                            if window_result["side"] == "right":
+                                right_reads.append(record)
+                            else:
+                                left_reads.append(record)
+                        continue
                     
                     # Find all window markers
                     right_positions = find_all_occurrences(seq_str, pat_right)
@@ -583,7 +732,11 @@ if __name__ == "__main__":
         window_flank={self.window_flank},
         trc_threshold={self.trc_threshold},
         temp_dir="{temp_dir}",
-        batch_size={self.batch_size}
+        batch_size={self.batch_size},
+        scan_mode="{self.scan_mode}",
+        read_window_size={self.read_window_size},
+        min_window_repeats={self.min_window_repeats},
+        min_window_density={self.min_window_density}
     )
 '''
         
@@ -951,12 +1104,22 @@ if __name__ == "__main__":
             f.write(f"  Right (forward): {self.pat_right}\n")
             f.write(f"  Left (reverse):  {self.pat_left}\n")
             f.write(f"Window configuration:\n")
+            f.write(f"  Telo-read stringency: {self.telo_read_stringency}\n")
+            f.write(f"  Scan mode: {self.scan_mode}\n")
             f.write(f"  Check length: {self.check_length} bp (total)\n")
             f.write(f"  Flank size: {self.window_flank} bp (= check_length / 2, per side)\n")
             f.write(f"  Target window size: {self.window_size} bp (fixed)\n")
+            if self.scan_mode == "window_count":
+                f.write(f"  Read count window size: {self.read_window_size} bp\n")
+                f.write(f"  Min window repeats: {self.min_window_repeats}\n")
+                f.write(f"  Min window density: {self.min_window_density:.2f} motifs/kb\n")
             f.write(f"  Compensation: If one flank is insufficient, extend the other side\n")
-            f.write(f"Scan method: Find all markers anywhere in read, calculate TRC for each window\n")
-            f.write(f"Classification: Based on maximum TRC across all windows\n")
+            if self.scan_mode == "legacy_marker_trc":
+                f.write(f"Scan method: Find all markers anywhere in read, calculate TRC for each window\n")
+                f.write(f"Classification: Based on maximum TRC across all windows\n")
+            else:
+                f.write(f"Scan method: Count motif and reverse-complement repeats in read windows\n")
+                f.write(f"Classification: Based on local repeat count and density\n")
             f.write(f"Output order:\n")
             f.write(f"  - Platform level: HiFi first, ONT second\n")
             f.write(f"  - Within platform: Sorted by read ID (alphabetical)\n")
@@ -967,7 +1130,12 @@ if __name__ == "__main__":
             f.write("-" * 60 + "\n")
             f.write(f"Parameters:\n")
             f.write(f"  Motif: {self.motif}\n")
+            f.write(f"  Telo-read stringency: {self.telo_read_stringency}\n")
+            f.write(f"  Scan mode: {self.scan_mode}\n")
             f.write(f"  TRC threshold: {self.trc_threshold}\n")
+            if self.scan_mode == "window_count":
+                f.write(f"  Min window repeats: {self.min_window_repeats}\n")
+                f.write(f"  Min window density: {self.min_window_density:.2f} motifs/kb\n")
             f.write(f"  Threads: {self.threads}\n")
             f.write(f"\n")
             f.write(f"Statistics:\n")
@@ -1079,7 +1247,7 @@ if __name__ == "__main__":
         print(f"\n{'='*60}")
         print(f"SUMMARY (Window-based Algorithm)")
         print(f"{'='*60}")
-        print(f"\nFirst-level filtering (TRC-based, window scanning):")
+        print(f"\nFirst-level filtering ({self.scan_mode}, stringency={self.telo_read_stringency}):")
         print(f"  Total reads processed:           {total:>10}")
         
         if total > 0:
