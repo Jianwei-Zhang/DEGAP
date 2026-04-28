@@ -160,6 +160,11 @@ python bin/DEGAP.py --mode telseeker \
     --out ./path/Output
 ```
 
+Review the `TelSeekerCheck.py` output before using it as TelSeeker input. The
+TRC-based check is a helper for target discovery and may require manual
+confirmation against your assembly context. If you already know the target
+chromosome ends, skip `TelSeekerCheck.py` and pass them directly with `-e`.
+
 Example target file:
 
 ```text

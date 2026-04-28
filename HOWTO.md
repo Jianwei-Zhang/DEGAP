@@ -238,6 +238,12 @@ Then pass the generated target list:
 -e check_out/genome.telomere.check/need_extension_chr_end.txt
 ```
 
+Manually review the `TelSeekerCheck.py` result before entering TelSeeker. The
+TRC-based check is an auxiliary target-discovery step and can be inaccurate for
+some assemblies or motifs. If you already have clear target ends, skip
+`TelSeekerCheck.py` and pass them directly with `-e Chr01.L Chr01.R` or a target
+file.
+
 ### Filtering Parameters
 
 | Parameter | Description | Default | Recommended |
@@ -786,6 +792,8 @@ output_directory/
 
 **Processing Strategy**:
 - Run `TelSeekerCheck.py` separately if you need TRC-based target discovery
+- Manually confirm the `TelSeekerCheck.py` output before using it as TelSeeker input
+- Skip `TelSeekerCheck.py` when target ends are already known
 - Pass target ends explicitly with `-e Chr01.L Chr01.R` or `-e target_ends.txt`
 - Use `--kmer_filter` for large genomes to reduce processing time
 
@@ -832,6 +840,7 @@ output_directory/
 
 **8. TelSeeker No Chromosome Ends Extended**
 - Verify `-e/--target_ends` contains the intended chromosome ends
+- If targets came from `TelSeekerCheck.py`, manually confirm the check results before rerunning
 - If using a target file, verify it has one non-empty `Chr.L` or `Chr.R` target per line
 - Check `--motif` parameter matches your species (e.g., TTAGGG for vertebrates)
 
