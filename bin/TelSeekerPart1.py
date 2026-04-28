@@ -323,7 +323,7 @@ def _pattern_scramble_telo(pattern, cut_length):
 def patterns_to_search_topsicle(motif, cut_length):
     """Generate regex patterns for Topsicle-based telomere detection"""
     kmers = _pattern_scramble_telo(motif, cut_length)
-    return [f"(?={{re.escape(kmer)}})" for kmer in kmers]
+    return [re.escape(kmer) for kmer in kmers]
 
 def calculate_trc(sequence, motif, kmer_length, check_length=None):
     """Calculate Telomere Repeat Content (TRC) using Topsicle method"""
@@ -341,7 +341,7 @@ def calculate_trc(sequence, motif, kmer_length, check_length=None):
     max_trc = 0.0
     
     for pattern in compiled_patterns:
-        matches = len([m.start() for m in pattern.finditer(seq_to_check)])
+        matches = len(pattern.findall(seq_to_check))
         pattern_trc = matches / ratio_perfect_hit if ratio_perfect_hit > 0 else 0.0
         max_trc = max(max_trc, pattern_trc)
     

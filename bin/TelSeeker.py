@@ -514,18 +514,47 @@ class TelSeeker:
         Returns:
             True if directory exists and contains chromosome end subdirectories, False otherwise
         """
+        need_extension_file = self.out / 'genome.telomere.check' / 'need_extension_chr_end.txt'
+
+        if not need_extension_file.exists():
+            return False
+
+        try:
+            with open(need_extension_file, 'r') as f:
+                expected_ends = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+        except Exception as e:
+            print(f"[Step 2/4] Warning: Error reading expected chromosome ends: {e}")
+            return False
+
+        if not expected_ends:
+            print(f"[Step 2/4] No chromosome ends require extension")
+            return True
+
         # Check if directory exists
         if not part2_dir.exists():
             return False
-        
-        # Check if directory is not empty (has at least one subdirectory)
+
         try:
-            subdirs = [d for d in part2_dir.iterdir() if d.is_dir()]
-            if not subdirs:
-                print(f"[Step 2/4] Warning: Found empty part2.chr.end.job directory, will re-run extension")
+            missing_or_incomplete = []
+            for chr_end in expected_ends:
+                chr_dir = part2_dir / chr_end
+                if not chr_dir.is_dir():
+                    missing_or_incomplete.append(chr_end)
+                    continue
+
+                linker_complete = (chr_dir / 'linker.fa').exists() and (chr_dir / 'linker.info').exists()
+                extension_complete = (chr_dir / 'extension' / 'extension.summary').exists()
+
+                if not (linker_complete or extension_complete):
+                    missing_or_incomplete.append(chr_end)
+
+            if missing_or_incomplete:
+                preview = ', '.join(missing_or_incomplete[:5])
+                if len(missing_or_incomplete) > 5:
+                    preview += f", ... and {len(missing_or_incomplete) - 5} more"
+                print(f"[Step 2/4] Incomplete chromosome end results: {preview}")
                 return False
 
-            # Found existing results
             return True
 
         except Exception as e:
@@ -779,29 +808,32 @@ class TelSeeker:
             with open(linker_info_file, 'r') as f:
                 lines = [line.strip() for line in f.readlines()]
             
-            # Parse line 5 (index 4) for connection type
-            if len(lines) > 4:
-                line5 = lines[4]
-                if 'Status: Direct connection found' in line5:
-                    info['connection_type'] = 'direct'
-                    info['round_num'] = '0'
-                elif 'Extension Rounds:' in line5:
-                    info['connection_type'] = 'extension'
-                    # Extract round number
-                    parts = line5.split(':')
-                    if len(parts) >= 2:
-                        try:
-                            info['round_num'] = parts[1].strip()
-                        except:
-                            pass
-            
-            # Parse last line for connected read
-            if lines:
-                last_line = lines[-1]
-                if 'Connected Read:' in last_line:
-                    parts = last_line.split(':', 1)
-                    if len(parts) >= 2:
-                        info['connected_read'] = parts[1].strip()
+            fields = {}
+            for line in lines:
+                if ':' not in line:
+                    continue
+                key, value = line.split(':', 1)
+                fields[key.strip()] = value.strip()
+
+            method = fields.get('Connection Method')
+            status = fields.get('Status', '')
+
+            if method:
+                info['connection_type'] = method
+            elif 'Direct connection' in status:
+                info['connection_type'] = 'direct'
+            elif 'Extension connection' in status:
+                info['connection_type'] = 'extension'
+
+            if info['connection_type'] == 'direct':
+                info['round_num'] = '0'
+            elif 'Extension Rounds' in fields:
+                info['round_num'] = fields['Extension Rounds']
+            elif 'Extension Rounds Attempted' in fields:
+                info['round_num'] = fields['Extension Rounds Attempted']
+
+            if 'Connected Read' in fields:
+                info['connected_read'] = fields['Connected Read']
         
         except Exception as e:
             print(f"  Warning: Error parsing {linker_info_file}: {e}")

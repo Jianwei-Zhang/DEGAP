@@ -1766,11 +1766,7 @@ def finalize_chr_end_result(chr_end: str, work_path: Path, result: Dict) -> bool
             conn_info = result['connection_info']
             if 'linker_file' in conn_info:
                 source_linker = Path(conn_info['linker_file'])
-                # Determine if it's extension or direct fallback
-                if conn_info.get('method') == 'direct_fallback':
-                    method = 'direct_fallback'
-                else:
-                    method = 'extension'
+                method = conn_info.get('method') or 'extension'
         
         # Validate source exists
         if source_linker is None:
@@ -1795,7 +1791,13 @@ def finalize_chr_end_result(chr_end: str, work_path: Path, result: Dict) -> bool
             f.write(f"Source File: {source_linker}\n")
             f.write(f"Final File: {final_linker}\n")
             
-            if method == 'direct_fallback':
+            if method == 'direct':
+                f.write(f"Status: Direct connection found\n")
+                f.write(f"Extension Rounds: 0\n")
+                f.write(f"Total Extension Length: 0 bp\n")
+                if 'connection_info' in result and 'read_id' in result['connection_info']:
+                    f.write(f"Connected Read: {result['connection_info']['read_id']}\n")
+            elif method == 'direct_fallback':
                 f.write(f"Status: Direct connection used as fallback\n")
                 f.write(f"Note: Extension did not find connection, used direct connection\n")
                 rounds = result.get('rounds', 0)
@@ -1929,11 +1931,22 @@ def extend_single_chr_end(chr_end: str, work_path: Path, out_dir: Path,
             # If extension failed but direct connection is available, use direct connection as fallback
             if not result.get('success') and direct_connection_available and direct_linker_file:
                 logger.info(f"  [{chr_end}] Extension did not find connection, using direct connection as fallback.")
+                direct_read_id = None
+                try:
+                    with open(direct_check_log, 'r') as f:
+                        for line in f:
+                            if line.startswith('Connected Read:'):
+                                direct_read_id = line.split(':', 1)[1].strip()
+                                break
+                except Exception:
+                    direct_read_id = None
+
                 result['success'] = True
                 result['fallback_to_direct'] = True
                 result['final_seq_file'] = str(direct_linker_file)
                 result['connection_info'] = {
                     'method': 'direct_fallback',
+                    'read_id': direct_read_id,
                     'linker_file': str(direct_linker_file),
                     'note': 'Extension failed, used direct connection as fallback'
                 }
