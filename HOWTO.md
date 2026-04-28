@@ -804,7 +804,7 @@ output_directory/
 - Skip `TelSeekerCheck.py` when target ends are already known
 - Pass target ends explicitly with `-e Chr01.L Chr01.R` or `-e target_ends.txt`
 - Use `--telo-read-stringency strict` for legacy marker+TRC read discovery
-- Use `--telo-read-stringency relaxed` when Step 1 finds too few telo reads
+- Use `--telo-read-stringency relaxed` when Step 1 finds too few or no telo reads
 - Use `--kmer_filter` for large genomes to reduce processing time
 
 ## Troubleshooting
@@ -852,8 +852,20 @@ output_directory/
 - Verify `-e/--target_ends` contains the intended chromosome ends
 - If targets came from `TelSeekerCheck.py`, manually confirm the check results before rerunning
 - If using a target file, verify it has one non-empty `Chr.L` or `Chr.R` target per line
-- If Step 1 reports too few telo reads, rerun with `--telo-read-stringency relaxed`
+- If the log reports `No telomeric reads found after Step 1`, or `part1.telo.reads/Global.left.telo.reads.fa` and `Global.right.telo.reads.fa` are empty, rerun with `--telo-read-stringency relaxed`
 - Check `--motif` parameter matches your species (e.g., TTAGGG for vertebrates)
+
+Example rerun with relaxed telo-read discovery:
+
+```bash
+python bin/DEGAP.py --mode telseeker \
+    --genome genome.fasta \
+    --motif TTAGGG \
+    -e target_ends.txt \
+    --hifi reads.fa \
+    --out output_telseeker_relaxed \
+    --telo-read-stringency relaxed
+```
 
 **9. TelSeeker Motif Not Found**
 - Verify motif sequence is correct for your species

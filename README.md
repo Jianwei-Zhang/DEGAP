@@ -174,8 +174,20 @@ with `-e`.
 Telomeric read discovery is controlled by one parameter:
 `--telo-read-stringency strict|normal|relaxed`. `strict` keeps the legacy
 marker+TRC behavior, while `normal` and `relaxed` use a window-count search that
-can recover reads with interrupted telomere repeats. Use `relaxed` when Step 1
-finds too few telo reads.
+can recover reads with interrupted telomere repeats. If TelSeeker reports
+`No telomeric reads found after Step 1`, or `part1.telo.reads/Global.*.telo.reads.fa`
+is empty, rerun with `--telo-read-stringency relaxed` to lower the telo-read
+discovery stringency:
+
+```bash
+python bin/DEGAP.py --mode telseeker \
+    --genome ./path/genome.fasta \
+    --motif TTAGGG \
+    -e Chr01.L Chr01.R \
+    --hifi ./path/HiFiReads.fa \
+    --out ./path/Output \
+    --telo-read-stringency relaxed
+```
 
 Example target file:
 
