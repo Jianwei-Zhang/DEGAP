@@ -226,7 +226,7 @@ If you install tools manually (without Micromamba), ensure the following program
 **Note**: At least one of `--hifi` or `--ont` must be provided.
 
 For TelSeeker, each target end must use the format `<chromosome_id>.L` or
-`<chromosome_id>.R`. To discover target ends by TRC first, run:
+`<chromosome_id>.R`. To discover candidate target ends first, run:
 
 ```bash
 python bin/TelSeekerCheck.py --genome genome.fasta --motif TTAGGG --out check_out
@@ -239,10 +239,14 @@ Then pass the generated target list:
 ```
 
 Manually review the `TelSeekerCheck.py` result before entering TelSeeker. The
-TRC-based check is an auxiliary target-discovery step and can be inaccurate for
-some assemblies or motifs. If you already have clear target ends, skip
-`TelSeekerCheck.py` and pass them directly with `-e Chr01.L Chr01.R` or a target
-file.
+window-count check is an auxiliary target-discovery step and can be inaccurate
+for some assemblies or motifs. It scans up to 100 kb from each chromosome end in
+10 kb bins, counts both the telomere motif and its reverse complement, and
+reports terminal repeat density plus terminal/internal enrichment in
+`genome.telomere.check.csv`. Review `need_extension_chr_end.txt` and
+`uncertain_chr_end.txt` manually before choosing TelSeeker targets. If you
+already have clear target ends, skip `TelSeekerCheck.py` and pass them directly
+with `-e Chr01.L Chr01.R` or a target file.
 
 ### Filtering Parameters
 
@@ -685,6 +689,7 @@ output_directory/
 **Key Output Files:**
 - `part3.integration.results/final.genome.fa`: Final genome with extended telomeres
 - `genome.telomere.check/need_extension_chr_end.txt`: Target chromosome ends used by TelSeeker
+- `part3.integration.results/final.genome.telomere.check/uncertain_chr_end.txt`: Final-genome ends needing manual telomere review, if any
 - `part2.chr.end.job/<Chr>.<End>/linker.fa`: Extended sequence for each chromosome end
 - `visual.report/Global.report.html`: Interactive visualization of all results
 
@@ -791,8 +796,9 @@ output_directory/
 - Example: 4 workers ≈ 8-16GB RAM
 
 **Processing Strategy**:
-- Run `TelSeekerCheck.py` separately if you need TRC-based target discovery
+- Run `TelSeekerCheck.py` separately if you need target discovery from telomere motif windows
 - Manually confirm the `TelSeekerCheck.py` output before using it as TelSeeker input
+- Review `uncertain_chr_end.txt` as ambiguous evidence, not as an automatic TelSeeker target list
 - Skip `TelSeekerCheck.py` when target ends are already known
 - Pass target ends explicitly with `-e Chr01.L Chr01.R` or `-e target_ends.txt`
 - Use `--kmer_filter` for large genomes to reduce processing time
@@ -864,6 +870,7 @@ Check the following log files for debugging:
 
 **TelSeeker mode:**
 - `genome.telomere.check/need_extension_chr_end.txt`: Target ends loaded from `-e/--target_ends`
+- `part3.integration.results/final.genome.telomere.check/uncertain_chr_end.txt`: Ambiguous final telomere-check calls
 - `part1.telo.reads/part1.log`: Telomeric reads extraction log
 - `part2.chr.end.job/<Chr>.<End>/extension/process.log`: Extension log for each chromosome end
 - `part3.integration.results/check_part2_jobs.csv`: Summary of all chromosome ends

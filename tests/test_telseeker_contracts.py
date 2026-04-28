@@ -172,6 +172,25 @@ class TelSeekerContractTests(unittest.TestCase):
 
             self.assertFalse(checker._check_step2_complete(part2_dir))
 
+    def test_final_genome_analysis_writes_uncertain_review_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            part3_dir = Path(tmp) / "part3.integration.results"
+            part3_dir.mkdir()
+            final_genome = part3_dir / "final.genome.fa"
+            final_genome.write_text(">Chr01\n" + "A" * 200 + "\n")
+
+            runner = TelSeeker.__new__(TelSeeker)
+            runner.motif = "TTAGGG"
+
+            runner._analyze_final_genome(final_genome, part3_dir)
+
+            uncertain_file = (
+                part3_dir
+                / "final.genome.telomere.check"
+                / "uncertain_chr_end.txt"
+            )
+            self.assertTrue(uncertain_file.exists())
+
     def test_part1_trc_matches_telseeker_check_trc(self):
         sequence = "TTAGGGTTAGGGTTAGGG"
         motif = "TTAGGG"

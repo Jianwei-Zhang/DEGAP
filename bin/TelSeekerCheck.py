@@ -165,7 +165,7 @@ def calculate_trc_window_based(sequence: str, motif: str, kmer_length: int,
     5. Returns the maximum TRC found
 
     Args:
-        sequence: DNA sequence to check (e.g., 5kb from chromosome end)
+        sequence: DNA sequence to check (e.g., chromosome-end segment)
         motif: Telomeric motif (e.g., 'TTAGGG')
         kmer_length: Length of k-mers for TRC calculation
         window_flank: Flank size on each side of marker (default: 500bp)
@@ -525,7 +525,7 @@ class TelomereChecker:
             
     def _check_end(self, chr_name: str, seq_str: str, end: str) -> dict:
         """
-        Check one chromosome end for telomeric content using window-based scanning.
+        Check one chromosome end for telomeric content using terminal windows.
 
         Args:
             chr_name: Chromosome name
@@ -535,7 +535,7 @@ class TelomereChecker:
         Returns:
             dict with check results including max_trc and num_windows
         """
-        # Extract sequence to check (5kb by default)
+        # Extract sequence to check from the chromosome end.
         if end == 'Left':
             check_seq = seq_str[:min(self.check_length, len(seq_str))]
         else:  # Right

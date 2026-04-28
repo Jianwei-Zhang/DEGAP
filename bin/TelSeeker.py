@@ -1133,7 +1133,7 @@ class TelSeeker:
     
     def _analyze_final_genome(self, final_genome_file: Path, part3_dir: Path):
         """
-        Analyze final integrated genome using TelomereChecker (window-based method).
+        Analyze final integrated genome using TelomereChecker (window_count method).
 
         Args:
             final_genome_file: Path to final.genome.fa
@@ -1190,6 +1190,7 @@ class TelSeeker:
                 checker._process_genome()
                 checker._write_csv_report()
                 checker._write_extension_list()
+                checker._write_uncertain_list()
                 checker._write_left_sequences()
                 checker._write_right_sequences()
             finally:
@@ -1199,7 +1200,7 @@ class TelSeeker:
             telomeric_count = sum(1 for r in checker.results if r['status'] == 'telomeric')
             total_count = len(checker.results)
 
-            print(f"  ✓ Analysis complete (window-based method)")
+            print(f"  ✓ Analysis complete (window_count method)")
             print(f"    Total ends checked: {total_count}")
             if total_count > 0:
                 print(f"    Telomeric ends:     {telomeric_count} ({telomeric_count/total_count*100:.1f}%)")

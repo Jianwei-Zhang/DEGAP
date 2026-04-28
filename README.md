@@ -161,9 +161,14 @@ python bin/DEGAP.py --mode telseeker \
 ```
 
 Review the `TelSeekerCheck.py` output before using it as TelSeeker input. The
-TRC-based check is a helper for target discovery and may require manual
-confirmation against your assembly context. If you already know the target
-chromosome ends, skip `TelSeekerCheck.py` and pass them directly with `-e`.
+window-count check is a helper for target discovery and may require manual
+confirmation against your assembly context. It scans up to 100 kb from each
+chromosome end in 10 kb bins, counts both the telomere motif and its reverse
+complement, and reports terminal repeat density plus internal-repeat enrichment.
+Review `genome.telomere.check.csv`, `need_extension_chr_end.txt`, and
+`uncertain_chr_end.txt` before using the generated target list. If you already
+know the target chromosome ends, skip `TelSeekerCheck.py` and pass them directly
+with `-e`.
 
 Example target file:
 
