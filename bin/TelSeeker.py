@@ -276,6 +276,13 @@ class TelSeeker:
             # Step 1: Extract telomeric reads
             self._step1_extract_telomeric_reads()
 
+            # Stop early when no telomeric reads are available for extension.
+            if not self._has_telomeric_reads():
+                print(f"\n[TelSeeker] No telomeric reads found after Step 1.")
+                print(f"[TelSeeker] Skipping chromosome end extension, integration, and visualization.")
+                print(f"Output directory: {self.out}")
+                return
+
             # Step 2: Extend chromosome ends
             self._step2_extend_chromosome_ends()
 
@@ -325,6 +332,35 @@ class TelSeeker:
         """Return False only when Step 0 explicitly produced an empty extension list."""
         chr_ends = self._get_chr_ends_needing_extension()
         return chr_ends is None or len(chr_ends) > 0
+
+    def _count_fasta_records(self, fasta_file: Path) -> int:
+        """Count FASTA records by header lines without loading sequences into memory."""
+        if not fasta_file.exists():
+            return 0
+
+        count = 0
+        try:
+            with open(fasta_file, 'r') as f:
+                for line in f:
+                    if line.startswith('>'):
+                        count += 1
+        except Exception as e:
+            print(f"[TelSeeker] Warning: Could not count FASTA records in {fasta_file}: {e}")
+            return 0
+
+        return count
+
+    def _has_telomeric_reads(self) -> bool:
+        """Return True when Step 1 produced at least one global telomeric read."""
+        part1_dir = self.out / "part1.telo.reads"
+        global_left = part1_dir / "Global.left.telo.reads.fa"
+        global_right = part1_dir / "Global.right.telo.reads.fa"
+
+        left_count = self._count_fasta_records(global_left)
+        right_count = self._count_fasta_records(global_right)
+
+        print(f"[TelSeeker] Telomeric reads available: left={left_count}, right={right_count}")
+        return (left_count + right_count) > 0
 
     def _step0_check_telomeres(self):
         """

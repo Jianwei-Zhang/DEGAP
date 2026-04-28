@@ -40,6 +40,34 @@ class TelSeekerContractTests(unittest.TestCase):
 
             self.assertEqual(calls, ["step0"])
 
+    def test_run_stops_after_step1_when_no_telomeric_reads_found(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp)
+            check_dir = out_dir / "genome.telomere.check"
+            part1_dir = out_dir / "part1.telo.reads"
+            check_dir.mkdir()
+            part1_dir.mkdir()
+            (check_dir / "need_extension_chr_end.txt").write_text("Chr01.L\n")
+
+            runner = TelSeeker.__new__(TelSeeker)
+            runner.out = out_dir
+            calls = []
+
+            def step1():
+                calls.append("step1")
+                (part1_dir / "Global.left.telo.reads.fa").write_text("")
+                (part1_dir / "Global.right.telo.reads.fa").write_text("")
+
+            runner._step0_check_telomeres = lambda: calls.append("step0")
+            runner._step1_extract_telomeric_reads = step1
+            runner._step2_extend_chromosome_ends = lambda: calls.append("step2")
+            runner._step3_integrate_results = lambda: calls.append("step3")
+            runner._step4_generate_visualization = lambda: calls.append("step4")
+
+            runner.run()
+
+            self.assertEqual(calls, ["step0", "step1"])
+
     def test_parse_linker_info_reads_extension_metadata(self):
         with tempfile.TemporaryDirectory() as tmp:
             info_file = Path(tmp) / "linker.info"
