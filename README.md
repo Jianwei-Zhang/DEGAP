@@ -127,12 +127,24 @@ Designed for telomere extension and chromosome-level assembly.
 python bin/DEGAP.py --mode telseeker \
     --genome ./path/genome.fasta \
     --motif TTAGGG \
+    -e Chr01.L Chr01.R \
     --hifi ./path/HiFiReads.fa \
     --ont ./path/ONTReads.fa \
     --out ./path/Output \
     --work 4 \
     --kmer_filter \
     -t 20
+```
+
+`-e/--target_ends` is required. It accepts one or more chromosome ends such as
+`Chr01.L Chr01.R`, or a text file with one target end per line. Telomere
+quality checking is run separately with `bin/TelSeekerCheck.py` when needed.
+
+Example target file:
+
+```text
+Chr01.L
+Chr01.R
 ```
 
 ### AutoGapfiller Mode

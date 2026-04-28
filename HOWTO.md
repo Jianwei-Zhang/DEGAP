@@ -127,12 +127,14 @@ If you install tools manually (without Micromamba), ensure the following program
 - Complete genome assembly
 
 **Key Features**:
-- Automatic telomere quality check (TRC-based)
+- Explicit target chromosome ends via `-e/--target_ends`
+- Independent telomere quality check with `TelSeekerCheck.py`
 - Parallel processing of chromosome ends
 - Four-step automated pipeline:
-  1. Telomeric reads extraction (motif-based filtering)
-  2. Chromosome end extension (parallel DEGAP execution)
-  3. Result integration and genome assembly
+  1. Target chromosome end loading
+  2. Telomeric reads extraction (motif-based filtering)
+  3. Chromosome end extension (parallel DEGAP execution)
+  4. Result integration and genome assembly
   4. Visualization (HTML reports and statistics)
 
 **Key Parameters**:
@@ -219,8 +221,22 @@ If you install tools manually (without Micromamba), ensure the following program
 | `--ctgseq` | Input contigs (CtgLinker) | None |
 | `--genome` | Input genome/chromosomes (TelSeeker) | None |
 | `--motif` | Telomere motif sequence (TelSeeker) | None |
+| `-e, --target_ends` | Target chromosome ends for TelSeeker, e.g. `Chr01.L Chr01.R`, or a text file with one target per line | Required |
 
 **Note**: At least one of `--hifi` or `--ont` must be provided.
+
+For TelSeeker, each target end must use the format `<chromosome_id>.L` or
+`<chromosome_id>.R`. To discover target ends by TRC first, run:
+
+```bash
+python bin/TelSeekerCheck.py --genome genome.fasta --motif TTAGGG --out check_out
+```
+
+Then pass the generated target list:
+
+```bash
+-e check_out/genome.telomere.check/need_extension_chr_end.txt
+```
 
 ### Filtering Parameters
 
@@ -364,6 +380,7 @@ python bin/DEGAP.py --mode ctglinker \
 python bin/DEGAP.py --mode telseeker \
     --genome ./path/genome.fasta \
     --motif TTAGGG \
+    -e ./path/target_ends.txt \
     --hifi ./path/HiFiReads.fq.gz \
     --ont ./path/ONTReads.fq.gz \
     --out ./path/Output \
@@ -450,6 +467,7 @@ python bin/DEGAP.py --mode ctglinker \
 python bin/DEGAP.py --mode telseeker \
     --genome genome.fasta \
     --motif TTAGGG \
+    -e Chr01.L Chr01.R \
     --hifi hifi_reads.fq \
     -o ./output_telseeker \
     -t 20
@@ -460,6 +478,7 @@ python bin/DEGAP.py --mode telseeker \
 python bin/DEGAP.py --mode telseeker \
     --genome genome.fasta \
     --motif TTAGGG \
+    -e target_ends.txt \
     --hifi hifi_reads.fq \
     --ont ont_reads.fq \
     -o ./output_telseeker \
@@ -625,11 +644,8 @@ output_directory/
 
 ```
 output_directory/
-├── genome.telomere.check/          # Initial telomere quality check
-│   ├── genome.telomere.check.csv  # TRC scores for all chromosome ends
-│   ├── need_extension_chr_end.txt # List of ends needing extension (TRC < 0.7)
-│   ├── left_sequences.fa          # Left end sequences
-│   └── right_sequences.fa         # Right end sequences
+├── genome.telomere.check/          # Target end list for TelSeekerPart2
+│   └── need_extension_chr_end.txt # Target ends provided by -e/--target_ends
 ├── part1.telo.reads/               # Telomeric reads extraction
 │   ├── Global.left.telo.reads.fa  # All left telomeric reads
 │   ├── Global.right.telo.reads.fa # All right telomeric reads
@@ -662,7 +678,7 @@ output_directory/
 
 **Key Output Files:**
 - `part3.integration.results/final.genome.fa`: Final genome with extended telomeres
-- `genome.telomere.check/need_extension_chr_end.txt`: List of chromosome ends to extend
+- `genome.telomere.check/need_extension_chr_end.txt`: Target chromosome ends used by TelSeeker
 - `part2.chr.end.job/<Chr>.<End>/linker.fa`: Extended sequence for each chromosome end
 - `visual.report/Global.report.html`: Interactive visualization of all results
 
@@ -769,8 +785,8 @@ output_directory/
 - Example: 4 workers ≈ 8-16GB RAM
 
 **Processing Strategy**:
-- TelSeeker automatically checks all chromosome ends
-- Only extends ends with TRC < 0.7 (low telomere quality)
+- Run `TelSeekerCheck.py` separately if you need TRC-based target discovery
+- Pass target ends explicitly with `-e Chr01.L Chr01.R` or `-e target_ends.txt`
 - Use `--kmer_filter` for large genomes to reduce processing time
 
 ## Troubleshooting
@@ -815,9 +831,8 @@ output_directory/
 - Verify FASTA format is correct
 
 **8. TelSeeker No Chromosome Ends Extended**
-- Check `genome.telomere.check/genome.telomere.check.csv` for TRC scores
-- Verify `need_extension_chr_end.txt` contains chromosome ends (TRC < 0.7)
-- If all TRC > 0.7, no extension is needed (genome already has good telomeres)
+- Verify `-e/--target_ends` contains the intended chromosome ends
+- If using a target file, verify it has one non-empty `Chr.L` or `Chr.R` target per line
 - Check `--motif` parameter matches your species (e.g., TTAGGG for vertebrates)
 
 **9. TelSeeker Motif Not Found**
@@ -839,7 +854,7 @@ Check the following log files for debugging:
 - `DG.scaffold.log`: Final scaffold statistics
 
 **TelSeeker mode:**
-- `genome.telomere.check/genome.telomere.check.csv`: Initial telomere quality check
+- `genome.telomere.check/need_extension_chr_end.txt`: Target ends loaded from `-e/--target_ends`
 - `part1.telo.reads/part1.log`: Telomeric reads extraction log
 - `part2.chr.end.job/<Chr>.<End>/extension/process.log`: Extension log for each chromosome end
 - `part3.integration.results/check_part2_jobs.csv`: Summary of all chromosome ends
@@ -863,4 +878,3 @@ For questions, bug reports, or feature requests:
 ## License
 
 Please refer to the LICENSE file for licensing information.
-
