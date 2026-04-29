@@ -92,6 +92,10 @@ The `--kmer_filter` parameter is a switch to enable k-mer based read filtering:
 
 **Note:** K-mer filtering provides a good balance between speed and accuracy for most applications.
 
+For all modes, we recommend adding `--MaximumExtensionRound 25`. In our tests,
+successful extension jobs usually finished within 25 rounds, so this parameter
+helps avoid long-running jobs that are unlikely to converge.
+
 ### GapFiller Mode
 Designed for filling a specific gap when the exact left and right sequences are known.
 
@@ -103,6 +107,7 @@ python bin/DEGAP.py --mode gapfiller \
     --ont ./path/ONTReads.fa \
     --out ./path/Output \
     --flag left \
+    --MaximumExtensionRound 25 \
     --kmer_filter \
     -t 20
 ```
@@ -116,6 +121,7 @@ python bin/DEGAP.py --mode ctglinker \
     --hifi ./path/HiFiReads.fa \
     --ont ./path/ONTReads.fa \
     --out ./path/Output \
+    --MaximumExtensionRound 25 \
     --kmer_filter \
     -t 20
 ```
@@ -133,6 +139,7 @@ python bin/DEGAP.py --mode telseeker \
     --out ./path/Output \
     --work 4 \
     --telo-read-stringency normal \
+    --MaximumExtensionRound 25 \
     --kmer_filter \
     -t 20
 ```
@@ -158,7 +165,8 @@ python bin/DEGAP.py --mode telseeker \
     --motif TTAGGG \
     -e ./path/telomere_check/genome.telomere.check/need_extension_chr_end.txt \
     --hifi ./path/HiFiReads.fa \
-    --out ./path/Output
+    --out ./path/Output \
+    --MaximumExtensionRound 25
 ```
 
 Review the `TelSeekerCheck.py` output before using it as TelSeeker input. The
@@ -186,7 +194,8 @@ python bin/DEGAP.py --mode telseeker \
     -e Chr01.L Chr01.R \
     --hifi ./path/HiFiReads.fa \
     --out ./path/Output \
-    --telo-read-stringency relaxed
+    --telo-read-stringency relaxed \
+    --MaximumExtensionRound 25
 ```
 
 Example target file:
@@ -206,6 +215,7 @@ python bin/AutoGapfiller.py \
     --ont ./path/ONTReads.fa \
     --out ./path/Output \
     --work 4 \
+    --MaximumExtensionRound 25 \
     --kmer_filter \
     -t 20
 ```
