@@ -1,7 +1,48 @@
-
 .DS_Store
 .gitattributes
 DEGAP.pptx
+
+# Python bytecode and caches
 __pycache__/
 *.py[cod]
 *.pyo
+*.pyd
+*.pyc.*
+
+# Python packaging, test, and coverage artifacts
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Local virtual environments
+.venv/
+venv/
+env/
+
+# Local DEGAP run outputs
+output*/
+results*/
+check_out/
+processed_reads/
+hifi_reads_part/
+ont_reads_part/
+part1.telo.reads/
+part2.chr.end.job/
+part3.integration.results/
+genome.telomere.check/
+visual.report/
+
+# DEGAP generated indexes, stats, and final products
+*.idx
+*.fai
+*.stat
+DG.scaffold.fa
+DG.scaffold.log
+DG.scaffold.agp
+final.genome.fa
