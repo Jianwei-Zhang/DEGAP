@@ -2,15 +2,12 @@
 """
 TelSeekerCheck.py - Check if chromosome ends have reached telomeres
 
-This script analyzes a genome assembly and identifies which chromosome ends
-have successfully reached telomeric sequences and which need telomere extension.
+This script extracts chromosome-end sequences and telomere motif plots for
+manual review before TelSeeker extension.
 
 Default method:
 - Extract 100kb from each chromosome end
 - Count the motif and reverse-complement motif in fixed 10kb bins
-- Classify an end as telomeric only when the terminal bin has enough repeat
-  signal and is enriched over internal bins in the checked region
-- Keep the historical TRC field in the report for review and compatibility
 - Generate whole-genome motif distribution plots for visual review using the
   same 1kb plotting window as the final TelSeeker report
 
@@ -19,11 +16,8 @@ Usage:
 
 Output:
     output_dir/genome.telomere.check/
-        ├── genome.telomere.check.csv          # Summary report
         ├── genome.telomere.check.left.2kb.fa  # Left end sequences (2kb)
         ├── genome.telomere.check.right.2kb.fa # Right end sequences (2kb)
-        ├── need_extension_chr_end.txt         # Untelomeric ends
-        ├── uncertain_chr_end.txt              # Ends requiring manual review
         ├── all_chromosomes_combined.png       # Whole-genome motif plot
         └── <chromosome>_telomere_motif.png    # Per-chromosome motif plots
 """
@@ -393,7 +387,7 @@ def classify_terminal_telomere_signal(windows: List[dict], end: str,
 
 
 class TelomereChecker:
-    """Check chromosome ends for telomeric content using terminal window counts"""
+    """Prepare chromosome-end sequences and motif plots for manual telomere review."""
 
     def __init__(self, genome_file: str, motif: str, output_dir: str,
                  trc_threshold: float = 0.7, check_length: int = 100000,
@@ -453,20 +447,12 @@ class TelomereChecker:
         
     def run(self):
         """Run the complete telomere checking workflow"""
-        print(f"[TelomereChecker] Starting telomere check ({self.method} method)...")
+        print("[TelomereChecker] Starting manual telomere review preparation...")
         print(f"  Genome: {self.genome_file}")
         print(f"  Motif: {self.motif}")
-        print(f"  Window markers:")
+        print("  Window markers:")
         print(f"    Right (forward): {self.pat_right}")
         print(f"    Left (reverse):  {self.pat_left}")
-        print(f"  Legacy TRC threshold: {self.trc_threshold}")
-        print(f"  Check length: {self.check_length} bp (extract from each end)")
-        print(f"  Count window size: {self.window_size} bp")
-        print(f"  Terminal windows: {self.terminal_windows}")
-        print(f"  Min terminal repeats: {self.min_terminal_repeats}")
-        print(f"  Min terminal density: {self.min_terminal_density:.2f} repeats/kb")
-        print(f"  Min terminal/internal ratio: {self.min_terminal_to_internal_ratio:.2f}")
-        print(f"  Window flank: {self.window_flank} bp")
         print(f"  Extract length: {self.extract_length} bp (for output)")
         print(f"  Motif plot window size: {self.plot_window_size} bp")
         print()
@@ -474,13 +460,12 @@ class TelomereChecker:
         # Step 1: Create output directory
         self._create_output_directory()
 
-        # Step 2: Process genome
-        self._process_genome()
+        # Step 2: Extract manual review sequences. The automatic classification
+        # path is retained for TelSeeker final-genome reports, but standalone
+        # check mode is intentionally manual-only.
+        self._process_genome_for_review()
 
-        # Step 3: Write results
-        self._write_csv_report()
-        self._write_extension_list()
-        self._write_uncertain_list()
+        # Step 3: Write manual review outputs only.
         self._write_left_sequences()
         self._write_right_sequences()
         self._write_motif_plots()
@@ -488,7 +473,7 @@ class TelomereChecker:
         # Step 4: Print summary
         self._print_summary()
 
-        print(f"\n[TelomereChecker] Complete! Results saved to: {self.check_dir}")
+        print(f"\n[TelomereChecker] Complete! Manual review files saved to: {self.check_dir}")
         
     def _create_output_directory(self):
         """Create output directory structure"""
@@ -530,6 +515,34 @@ class TelomereChecker:
                     if right_seq:
                         self.right_sequences.append(right_seq)
                         
+        except FileNotFoundError:
+            print(f"[TelomereChecker] Error: Genome file not found: {self.genome_file}")
+            sys.exit(1)
+        except Exception as e:
+            print(f"[TelomereChecker] Error processing genome: {e}")
+            sys.exit(1)
+
+    def _process_genome_for_review(self):
+        """Extract chromosome-end sequences without automatic end classification."""
+        print("[TelomereChecker] Extracting chromosome-end sequences...")
+
+        try:
+            with open(self.genome_file, 'r') as f:
+                for record in SeqIO.parse(f, 'fasta'):
+                    chr_name = record.id
+                    seq_str = str(record.seq)
+                    chr_length = len(seq_str)
+
+                    print(f"  Processing {chr_name} ({chr_length} bp)...")
+
+                    left_seq = self._extract_left_sequence(chr_name, seq_str)
+                    if left_seq:
+                        self.left_sequences.append(left_seq)
+
+                    right_seq = self._extract_right_sequence(chr_name, seq_str)
+                    if right_seq:
+                        self.right_sequences.append(right_seq)
+
         except FileNotFoundError:
             print(f"[TelomereChecker] Error: Genome file not found: {self.genome_file}")
             sys.exit(1)
@@ -753,61 +766,37 @@ class TelomereChecker:
     
     def _print_summary(self):
         """Print summary statistics with window information"""
-        total_ends = len(self.results)
-        telomeric_count = sum(1 for r in self.results if r['status'] == 'telomeric')
-        untelomeric_count = sum(1 for r in self.results if r['status'] == 'untelomeric')
-        uncertain_count = sum(1 for r in self.results if r['status'] == 'uncertain')
+        total_ends = len(self.left_sequences) + len(self.right_sequences)
 
         print(f"\n{'='*60}")
-        print(f"SUMMARY ({self.method} Method)")
+        print("SUMMARY (Manual Review Outputs)")
         print(f"{'='*60}")
-        print(f"Total chromosome ends checked: {total_ends}")
-        print(f"  Telomeric ends:   {telomeric_count} ({telomeric_count/total_ends*100:.1f}%)")
-        print(f"  Untelomeric ends: {untelomeric_count} ({untelomeric_count/total_ends*100:.1f}%)")
-        print(f"  Uncertain ends:   {uncertain_count} ({uncertain_count/total_ends*100:.1f}%)")
+        print(f"Total chromosome ends prepared: {total_ends}")
+        print(f"  Left end sequences:  {len(self.left_sequences)}")
+        print(f"  Right end sequences: {len(self.right_sequences)}")
+        print("  Automatic telomeric/untelomeric files are not written.")
+        print("  Choose target ends manually from the end sequences and motif plots.")
         print(f"{'='*60}")
-
-        if untelomeric_count > 0:
-            print(f"\nChromosome ends requiring telomere extension:")
-            for result in self.results:
-                if result['status'] == 'untelomeric':
-                    print(f"  - {result['chr']} ({result['end']}): "
-                          f"TRC={result['trc']:.2f}, "
-                          f"TerminalRepeats={result['terminal_repeat_count']}")
-
-        if uncertain_count > 0:
-            print(f"\nChromosome ends requiring manual telomere review:")
-            for result in self.results:
-                if result['status'] == 'uncertain':
-                    print(f"  - {result['chr']} ({result['end']}): "
-                          f"TerminalDensity={result['terminal_density']:.2f}, "
-                          f"InternalMaxDensity={result['internal_max_density']:.2f}")
 
 
 def main():
     """Main function"""
     parser = argparse.ArgumentParser(
-        description="Check if chromosome ends have reached telomeres",
+        description="Prepare chromosome-end sequences and telomere motif plots for manual review",
         formatter_class=argparse.RawTextHelpFormatter,
         epilog="""
 Example usage:
   python TelSeekerCheck.py --genome genome.fa --motif TTAGGG --out results
 
-Window-count method (default):
+Manual review output:
   - Extracts 100kb from each chromosome end
   - Counts motif and reverse-complement repeats in 10kb bins
-  - Requires terminal repeat signal and terminal/internal enrichment
-  - Writes uncertain_chr_end.txt for ambiguous ends requiring manual review
-  - Also writes whole-genome motif plots in 1kb bins for visual review
-
-Legacy TRC method:
-  python TelSeekerCheck.py --genome genome.fa --motif TTAGGG --out results --method legacy_trc
+  - Writes left/right end FASTA files for sequence review
+  - Writes whole-genome and per-chromosome motif plots in 1kb bins
+  - Does not write automatic target-end files; choose targets manually
 
 Output structure:
   results/genome.telomere.check/
-    ├── genome.telomere.check.csv          # Summary report with window info
-    ├── need_extension_chr_end.txt         # List of ends needing extension
-    ├── uncertain_chr_end.txt              # List of ambiguous ends
     ├── genome.telomere.check.left.2kb.fa  # Left end sequences
     ├── genome.telomere.check.right.2kb.fa # Right end sequences
     ├── all_chromosomes_combined.png       # Whole-genome motif plot
@@ -837,7 +826,7 @@ Output structure:
         '--threshold',
         type=float,
         default=0.7,
-        help='TRC threshold used only by --method legacy_trc (default: 0.7)'
+        help=argparse.SUPPRESS
     )
 
     parser.add_argument(
@@ -858,21 +847,21 @@ Output structure:
         '--window-flank',
         type=int,
         default=500,
-        help='Flank size for legacy TRC marker windows in bp (default: 500)'
+        help=argparse.SUPPRESS
     )
 
     parser.add_argument(
         '--method',
         choices=['window_count', 'legacy_trc'],
         default='window_count',
-        help='Telomere classification method (default: window_count)'
+        help=argparse.SUPPRESS
     )
 
     parser.add_argument(
         '--window-size',
         type=int,
         default=10000,
-        help='Fixed repeat-count bin size in bp (default: 10000)'
+        help=argparse.SUPPRESS
     )
 
     parser.add_argument(
@@ -886,28 +875,28 @@ Output structure:
         '--terminal-windows',
         type=int,
         default=1,
-        help='Number of terminal bins used for classification (default: 1)'
+        help=argparse.SUPPRESS
     )
 
     parser.add_argument(
         '--min-terminal-repeats',
         type=int,
         default=100,
-        help='Minimum motif hits in terminal bins for a telomeric call (default: 100)'
+        help=argparse.SUPPRESS
     )
 
     parser.add_argument(
         '--min-terminal-density',
         type=float,
         default=10.0,
-        help='Minimum terminal motif density in hits/kb (default: 10.0)'
+        help=argparse.SUPPRESS
     )
 
     parser.add_argument(
         '--min-terminal-to-internal-ratio',
         type=float,
         default=3.0,
-        help='Minimum terminal/internal density ratio (default: 3.0)'
+        help=argparse.SUPPRESS
     )
 
     args = parser.parse_args()

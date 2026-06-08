@@ -221,7 +221,7 @@ If you install tools manually (without Micromamba), ensure the following program
 | `--ctgseq` | Input contigs (CtgLinker) | None |
 | `--genome` | Input genome/chromosomes (TelSeeker) | None |
 | `--motif` | Telomere motif sequence (TelSeeker) | None |
-| `-e, --target_ends` | Target chromosome ends for TelSeeker, e.g. `Chr01.L Chr01.R`, or a text file with one target per line | Required |
+| `-e, --target_ends` | Target chromosome ends for TelSeeker. Supports direct values such as `-e Chr01.L Chr01.R`, or one file such as `-e target_ends.txt` with one target per line | Required |
 | `--tel-n` | Motif-length units checked at each read end for tel_reads | `100` |
 | `--tel-r` | Minimum terminal hit ratio, computed as hits / tel-n | `0.6` |
 | `--tel-mm` | Allowed mismatches per motif-length unit, `0` or `1` | `0` |
@@ -235,21 +235,35 @@ For TelSeeker, each target end must use the format `<chromosome_id>.L` or
 python bin/TelSeekerCheck.py --genome genome.fasta --motif TTAGGG --out check_out
 ```
 
-Then pass the generated target list:
+Review the generated plots and end sequences, then create `target_ends.txt`
+manually. The file must contain one target end per line, using
+`<chromosome_id>.L` for the left end and `<chromosome_id>.R` for the right end:
 
-```bash
--e check_out/genome.telomere.check/need_extension_chr_end.txt
+```text
+Chr01.L
+Chr03.R
 ```
+
+Blank lines and comment lines starting with `#` are allowed:
+
+```text
+# target chromosome ends selected from TelSeekerCheck plots
+Chr01.L
+Chr03.R
+```
+
+Then pass that reviewed list with `-e target_ends.txt`.
 
 Manually review the `TelSeekerCheck.py` result before entering TelSeeker. The
 check step generates whole-genome motif distribution plots with the same 1 kb
 plotting window used by the final TelSeeker report:
 `all_chromosomes_combined.png` and one `<chromosome>_telomere_motif.png` image
 per chromosome. Use these plots to decide which ends should be passed to
-TelSeeker. The legacy helper files `genome.telomere.check.csv`,
-`need_extension_chr_end.txt`, and `uncertain_chr_end.txt` are still written for
-compatibility, but should be manually reviewed before choosing targets. If you
-already have clear target ends, skip `TelSeekerCheck.py` and pass them directly
+TelSeeker. It also writes `genome.telomere.check.left.2kb.fa` and
+`genome.telomere.check.right.2kb.fa` for sequence-level review. Standalone check
+does not write automatic `genome.telomere.check.csv`, `need_extension_chr_end.txt`,
+or `uncertain_chr_end.txt` files. If you already have clear target ends, skip
+`TelSeekerCheck.py` and pass them directly
 with `-e Chr01.L Chr01.R` or a target file.
 
 ### Filtering Parameters
@@ -803,9 +817,8 @@ output_directory/
 - Example: 4 workers ≈ 8-16GB RAM
 
 **Processing Strategy**:
-- Run `TelSeekerCheck.py` separately if you need target discovery from telomere motif windows
-- Manually confirm the `TelSeekerCheck.py` output before using it as TelSeeker input
-- Review `uncertain_chr_end.txt` as ambiguous evidence, not as an automatic TelSeeker target list
+- Run `TelSeekerCheck.py` separately if you need plots and end sequences for target discovery
+- Choose TelSeeker targets manually from the `TelSeekerCheck.py` plots and end FASTA files
 - Skip `TelSeekerCheck.py` when target ends are already known
 - Pass target ends explicitly with `-e Chr01.L Chr01.R` or `-e target_ends.txt`
 - `--tel-n 100` checks `100 * len(motif)` bases at each read end for terminal telo reads
@@ -856,7 +869,7 @@ output_directory/
 
 **8. TelSeeker No Chromosome Ends Extended**
 - Verify `-e/--target_ends` contains the intended chromosome ends
-- If targets came from `TelSeekerCheck.py`, manually confirm the check results before rerunning
+- If targets came from `TelSeekerCheck.py`, verify they were manually chosen from the plots/end sequences
 - If using a target file, verify it has one non-empty `Chr.L` or `Chr.R` target per line
 - If the log reports `No telomeric reads found after Step 1`, or `part1.telo.reads/Global.left.telo.reads.fa` and `Global.right.telo.reads.fa` are empty, rerun with a lower `--tel-r`, `--tel-mm 1`, or a smaller `--tel-n`
 - Check `--motif` parameter matches your species (e.g., TTAGGG for vertebrates)

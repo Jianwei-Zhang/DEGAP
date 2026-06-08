@@ -98,8 +98,8 @@ class TelomereCheckerIntegrationTests(unittest.TestCase):
         self.assertGreaterEqual(result["internal_max_density"], 50.0)
         self.assertEqual(result["method"], "window_count")
 
-    def test_checker_report_keeps_trc_and_adds_review_fields(self):
-        with self.subTest("full checker run writes richer review output"):
+    def test_checker_run_writes_only_manual_review_outputs(self):
+        with self.subTest("full checker run writes manual review files"):
             import tempfile
 
             with tempfile.TemporaryDirectory() as tmp:
@@ -123,21 +123,12 @@ class TelomereCheckerIntegrationTests(unittest.TestCase):
                 checker.run()
 
                 check_dir = tmp_path / "out" / "genome.telomere.check"
-                csv_text = (check_dir / "genome.telomere.check.csv").read_text()
-                self.assertIn("Chr01,Left,telomeric,TRC=", csv_text)
-                self.assertIn("Method=window_count", csv_text)
-                self.assertIn("Motif=TTAGGG", csv_text)
-                self.assertIn("ForwardCount=10", csv_text)
-                self.assertIn("ReverseCount=0", csv_text)
-                self.assertIn("TerminalRepeatCount=10", csv_text)
-                self.assertIn("InternalMaxDensity=0.00", csv_text)
-                self.assertIn("TerminalToInternalRatio=Inf", csv_text)
-                self.assertIn("Confidence=high", csv_text)
-
-                need_extension = (
-                    check_dir / "need_extension_chr_end.txt"
-                ).read_text().splitlines()
-                self.assertEqual(need_extension, ["Chr01.R"])
+                self.assertEqual(checker.results, [])
+                self.assertFalse((check_dir / "genome.telomere.check.csv").exists())
+                self.assertFalse((check_dir / "need_extension_chr_end.txt").exists())
+                self.assertFalse((check_dir / "uncertain_chr_end.txt").exists())
+                self.assertTrue((check_dir / "genome.telomere.check.left.2kb.fa").exists())
+                self.assertTrue((check_dir / "genome.telomere.check.right.2kb.fa").exists())
 
                 if TelSeekerMotifPlot.HAS_MATPLOTLIB:
                     self.assertTrue((check_dir / "all_chromosomes_combined.png").exists())
@@ -182,13 +173,11 @@ class TelSeekerCheckCliTests(unittest.TestCase):
             )
 
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            csv_text = (
-                out_dir
-                / "genome.telomere.check"
-                / "genome.telomere.check.csv"
-            ).read_text()
-            self.assertIn("Method=window_count", csv_text)
-            self.assertIn("TerminalRepeatCount=10", csv_text)
+            check_dir = out_dir / "genome.telomere.check"
+            self.assertIn("Manual review files saved", result.stdout)
+            self.assertFalse((check_dir / "genome.telomere.check.csv").exists())
+            self.assertFalse((check_dir / "need_extension_chr_end.txt").exists())
+            self.assertTrue((check_dir / "genome.telomere.check.left.2kb.fa").exists())
 
 
 if __name__ == "__main__":

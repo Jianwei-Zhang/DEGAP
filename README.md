@@ -146,8 +146,9 @@ python bin/DEGAP.py --mode telseeker \
     -t 20
 ```
 
-`-e/--target_ends` is required. It accepts one or more chromosome ends such as
-`Chr01.L Chr01.R`, or a text file with one target end per line. Telomere
+`-e/--target_ends` is required and supports two input forms:
+direct chromosome-end values, for example `-e Chr01.L Chr01.R`, or one text file
+containing one target end per line, for example `-e target_ends.txt`. Telomere
 quality checking is run separately with `bin/TelSeekerCheck.py` when needed.
 
 To discover target ends first:
@@ -159,29 +160,45 @@ python bin/TelSeekerCheck.py \
     --out ./path/telomere_check
 ```
 
-Then run TelSeeker with the generated target list:
+Review the generated plots and end sequences, then create `target_ends.txt`
+manually. The file must contain one target end per line, using
+`<chromosome_id>.L` for the left end and `<chromosome_id>.R` for the right end:
+
+```text
+Chr01.L
+Chr03.R
+```
+
+Blank lines and comment lines starting with `#` are allowed:
+
+```text
+# target chromosome ends selected from TelSeekerCheck plots
+Chr01.L
+Chr03.R
+```
+
+Then run TelSeeker with that reviewed target list:
 
 ```bash
 python bin/DEGAP.py --mode telseeker \
     --genome ./path/genome.fasta \
     --motif TTAGGG \
-    -e ./path/telomere_check/genome.telomere.check/need_extension_chr_end.txt \
+    -e ./path/target_ends.txt \
     --hifi ./path/HiFiReads.fa \
     --out ./path/Output \
     --MaximumExtensionRound 25
 ```
 
-Review the `TelSeekerCheck.py` output before using it as TelSeeker input. The
-check step now also generates whole-genome motif distribution plots using the
-same 1 kb plotting window as the final TelSeeker report:
+Review the `TelSeekerCheck.py` output before choosing TelSeeker input. The check
+step generates whole-genome motif distribution plots using the same 1 kb plotting
+window as the final TelSeeker report:
 `all_chromosomes_combined.png` plus one `<chromosome>_telomere_motif.png` image
-per chromosome. Use these plots to confirm which chromosome ends should be
-entered as TelSeeker targets. The legacy helper files
+per chromosome. It also writes `genome.telomere.check.left.2kb.fa` and
+`genome.telomere.check.right.2kb.fa` for sequence-level review. Automatic
 `genome.telomere.check.csv`, `need_extension_chr_end.txt`, and
-`uncertain_chr_end.txt` are still written for compatibility, but manual review
-of the plots is recommended before using any generated target list. If you
+`uncertain_chr_end.txt` files are no longer written by standalone check. If you
 already know the target chromosome ends, skip `TelSeekerCheck.py` and pass them
-directly with `-e`.
+directly with `-e Chr01.L Chr01.R` or with `-e target_ends.txt`.
 
 Telomeric read discovery checks both physical read ends. At each end, TelSeeker
 scans `--tel-n * len(--motif)` bases with motif rotations and reverse-complement
