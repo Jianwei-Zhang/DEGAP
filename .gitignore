@@ -10,6 +10,7 @@ __pycache__/
 *.pyc.*
 
 # Python packaging, test, and coverage artifacts
+tests/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/

@@ -1797,16 +1797,6 @@ def finalize_chr_end_result(chr_end: str, work_path: Path, result: Dict) -> bool
                 f.write(f"Total Extension Length: 0 bp\n")
                 if 'connection_info' in result and 'read_id' in result['connection_info']:
                     f.write(f"Connected Read: {result['connection_info']['read_id']}\n")
-            elif method == 'direct_fallback':
-                f.write(f"Status: Direct connection used as fallback\n")
-                f.write(f"Note: Extension did not find connection, used direct connection\n")
-                rounds = result.get('rounds', 0)
-                ext_len = result.get('total_extension_length', 0)
-                f.write(f"Extension Rounds Attempted: {rounds}\n")
-                f.write(f"Total Extension Length: {ext_len} bp\n")
-                # Record connected read for direct connection
-                if 'connection_info' in result and 'read_id' in result['connection_info']:
-                    f.write(f"Connected Read: {result['connection_info']['read_id']}\n")
             elif method == 'extension':
                 f.write(f"Status: Extension connection found\n")
                 rounds = result.get('rounds', 0)
@@ -1893,18 +1883,41 @@ def extend_single_chr_end(chr_end: str, work_path: Path, out_dir: Path,
             result['error'] = error_msg
             return result
         
-        # Check if direct connection exists (but don't skip extension)
-        direct_connection_available = False
-        direct_linker_file = None
+        # Round0: if direct connection already links this target end to a
+        # telomeric read, use it immediately and skip GapFiller extension.
         direct_check_log = work_path / 'direct.check' / 'direct.check.log'
         if direct_check_log.exists():
             try:
                 with open(direct_check_log, 'r') as f:
                     content = f.read()
                     if 'Status: SUCCESS' in content:
-                        direct_connection_available = True
                         direct_linker_file = work_path / 'direct.check' / 'direct.linker.fa'
-                        logger.info(f"  [{chr_end}] Direct connection found, but will still run extension (prefer extension result).")
+                        if direct_linker_file.exists():
+                            direct_read_id = None
+                            for line in content.splitlines():
+                                if line.startswith('Connected Read:'):
+                                    direct_read_id = line.split(':', 1)[1].strip()
+                                    break
+
+                            logger.info(f"  [{chr_end}] Direct connection found in Round0; skipping extension.")
+                            result.update({
+                                'success': True,
+                                'skipped': True,
+                                'skip_reason': 'direct_connection_found',
+                                'rounds': 0,
+                                'total_extension_length': 0,
+                                'final_seq_file': str(direct_linker_file),
+                                'connection_info': {
+                                    'method': 'direct',
+                                    'read_id': direct_read_id,
+                                    'linker_file': str(direct_linker_file),
+                                    'note': 'Round0 direct connection found; extension skipped'
+                                },
+                                'stop_reason': 'direct_connection_found'
+                            })
+                            return result
+
+                        logger.warning(f"  [{chr_end}] Direct check succeeded but linker file is missing: {direct_linker_file}")
             except Exception as e:
                 logger.warning(f"  [{chr_end}] Error reading direct check log: {e}")
         
@@ -1927,30 +1940,7 @@ def extend_single_chr_end(chr_end: str, work_path: Path, out_dir: Path,
             
             ext_result = extender.run_extension()
             result.update(ext_result)
-            
-            # If extension failed but direct connection is available, use direct connection as fallback
-            if not result.get('success') and direct_connection_available and direct_linker_file:
-                logger.info(f"  [{chr_end}] Extension did not find connection, using direct connection as fallback.")
-                direct_read_id = None
-                try:
-                    with open(direct_check_log, 'r') as f:
-                        for line in f:
-                            if line.startswith('Connected Read:'):
-                                direct_read_id = line.split(':', 1)[1].strip()
-                                break
-                except Exception:
-                    direct_read_id = None
 
-                result['success'] = True
-                result['fallback_to_direct'] = True
-                result['final_seq_file'] = str(direct_linker_file)
-                result['connection_info'] = {
-                    'method': 'direct_fallback',
-                    'read_id': direct_read_id,
-                    'linker_file': str(direct_linker_file),
-                    'note': 'Extension failed, used direct connection as fallback'
-                }
-            
         except ValueError as e:
             # Parameter validation errors
             logger.error(f"  [{chr_end}] Parameter error: {e}")
@@ -2094,14 +2084,12 @@ class ParallelExtensionManager:
         logger.info("=" * 80)
         
         total = len(self.results)
-        extension_success = sum(1 for r in self.results.values() if r.get('success') and not r.get('fallback_to_direct'))
-        direct_fallback = sum(1 for r in self.results.values() if r.get('success') and r.get('fallback_to_direct'))
+        extension_success = sum(1 for r in self.results.values() if r.get('success'))
         extended_no_connection = sum(1 for r in self.results.values() if not r.get('success') and not r.get('error'))
         failed = sum(1 for r in self.results.values() if r.get('error'))
         
         logger.info(f"Total: {total}")
         logger.info(f"  Extension with connection: {extension_success}")
-        logger.info(f"  Direct connection fallback: {direct_fallback}")
         logger.info(f"  Extended without connection: {extended_no_connection}")
         logger.info(f"  Failed: {failed}")
         logger.info("")
@@ -2109,20 +2097,11 @@ class ParallelExtensionManager:
         if extension_success > 0:
             logger.info("Extension connections found:")
             for chr_end, result in self.results.items():
-                if result.get('success') and not result.get('fallback_to_direct'):
+                if result.get('success'):
                     conn_info = result.get('connection_info', {})
                     logger.info(f"  • {chr_end}: {conn_info.get('read_id', 'N/A')} "
                               f"(rounds: {result.get('rounds', 0)})")
-        
-        if direct_fallback > 0:
-            logger.info("")
-            logger.info("Direct connection fallbacks:")
-            for chr_end, result in self.results.items():
-                if result.get('success') and result.get('fallback_to_direct'):
-                    conn_info = result.get('connection_info', {})
-                    logger.info(f"  • {chr_end}: {conn_info.get('read_id', 'N/A')} "
-                              f"(extension rounds: {result.get('rounds', 0)})")
-        
+
         logger.info("")
         logger.info("=" * 80)
     
@@ -2142,6 +2121,15 @@ class ParallelExtensionManager:
         
         logger.info(f"Created {success_count} unified linker.fa files")
         logger.info("=" * 80)
+
+
+def select_chr_ends_for_extension(chr_ends: List[str], direct_results: Dict[str, Dict]) -> List[str]:
+    """Return chromosome ends that did not connect in Round0 direct checking."""
+    return [
+        chr_end
+        for chr_end in chr_ends
+        if not direct_results.get(chr_end, {}).get('success')
+    ]
 
 
 def prepare_chromosome_end_workspaces(out_dir: str, genome_file: str) -> WorkspaceBuilder:
@@ -2214,11 +2202,19 @@ def main():
     )
     results = checker.run_checks()
     
-    # Stage 3: Parallel extension (skips ends with direct connection)
+    # Stage 3: Parallel extension. Round0 direct successes are complete and do
+    # not enter GapFiller extension.
+    extension_chr_ends = select_chr_ends_for_extension(builder.chr_ends, results)
     logger.info("")
-    logger.info("Stage 3: Running parallel extension...")
+    logger.info("Stage 3: Running parallel extension for ends without Round0 direct connection...")
+    logger.info(f"  Ends entering extension: {len(extension_chr_ends)} / {len(builder.chr_ends)}")
+
+    if not extension_chr_ends:
+        logger.info("  All chromosome ends connected in Round0; skipping GapFiller extension.")
+        return
+
     ext_manager = ParallelExtensionManager(
-        chr_ends=builder.chr_ends,
+        chr_ends=extension_chr_ends,
         work_paths=builder.work_paths,
         out_dir=Path(args.out),
         kmer_num=args.kmer_num,
