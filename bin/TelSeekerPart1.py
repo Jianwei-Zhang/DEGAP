@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-TelSeekerPart1_new.py - Extract telomeric reads using window-based scanning
+TelSeekerPart1.py - Extract terminal telomeric reads
 
-Modified algorithm:
-- Instead of checking fixed left/right ends, scan for telomere markers anywhere in the read
-- For each marker found, create a window (500bp upstream + marker + 500bp downstream)
-  - If upstream < 500bp, compensate by extending downstream
-  - If downstream < 500bp, compensate by extending upstream
-  - Target window size: 1000 + 2*len(motif) bp (e.g., 1012bp for TTAGGG)
-- Calculate TRC for each window and take the maximum
-- Classify based on which marker type (forward/reverse) gave the highest TRC
+Algorithm:
+- Check both physical read ends.
+- The checked length at each end is --tel-n * len(motif).
+- Greedily scan motif-length units against motif rotations and reverse
+  complement rotations.
+- On a hit, jump by motif length; on a miss, slide one base.
+- Classify a read as telomeric when hits / tel_n >= --tel-r.
+- --tel-mm controls whether each motif-length unit allows 0 or 1 mismatch.
 
 Input:
     - Reads split into fragments in: --out/hifi_reads_part/ and/or --out/ont_reads_part/
@@ -20,7 +20,7 @@ Output:
     - --out/part1.telo.reads/part1.log            # Processing log
 
 Usage:
-    python TelSeekerPart1_new.py --motif TTAGGG --out output_dir -t 100
+    python TelSeekerPart1.py --motif TTAGGG --out output_dir -t 100
 """
 
 import os
@@ -30,7 +30,9 @@ import glob
 import subprocess
 import tempfile
 import shutil
+import math
 from pathlib import Path
+from typing import List
 from Bio import SeqIO
 from Bio.SeqRecord import SeqRecord
 from Bio.Seq import Seq
@@ -85,64 +87,111 @@ def count_exact_motif_matches(sequence: str, motif: str, include_reverse_complem
     return forward_count
 
 
-def classify_read_by_window_counts(sequence: str, motif: str, window_size: int = 1000,
-                                   min_window_repeats: int = 6,
-                                   min_window_density: float = 5.0) -> dict:
-    """
-    Classify one read by telomere motif repeat counts in fixed windows.
+def motif_rotations(motif: str) -> List[str]:
+    """Return all cyclic rotations of a motif."""
+    motif = (motif or "").upper()
+    if not motif:
+        return []
+    doubled = motif + motif
+    return sorted({doubled[i:i + len(motif)] for i in range(len(motif))})
 
-    This read-level detector avoids the legacy hard requirement for a perfect
-    motif*2 marker and instead follows the same signal shape used by windowed
-    telomere scanners: enough exact repeat hits concentrated in a local window.
+
+def _hamming_distance(seq1: str, seq2: str) -> int:
+    return sum(base1 != base2 for base1, base2 in zip(seq1, seq2))
+
+
+def _matches_any_motif_unit(kmer: str, patterns: set, mismatch: int) -> bool:
+    if mismatch == 0:
+        return kmer in patterns
+    return any(_hamming_distance(kmer, pattern) <= mismatch for pattern in patterns)
+
+
+def count_terminal_telomere_hits(sequence: str, patterns: set,
+                                 motif_length: int, mismatch: int = 0) -> int:
     """
-    if window_size <= 0:
-        raise ValueError("window_size must be greater than 0")
+    Count motif units in one terminal sequence with greedy non-overlapping hits.
+
+    On a hit, the scanner jumps by motif_length. On a miss, it slides one base
+    and tests the next motif_length-bp window.
+    """
+    if motif_length <= 0:
+        return 0
+
+    seq_str = (sequence or "").upper()
+    hits = 0
+    pos = 0
+    while pos + motif_length <= len(seq_str):
+        kmer = seq_str[pos:pos + motif_length]
+        if _matches_any_motif_unit(kmer, patterns, mismatch):
+            hits += 1
+            pos += motif_length
+        else:
+            pos += 1
+    return hits
+
+
+def classify_read_by_terminal_telomere(sequence: str, motif: str,
+                                       tel_n: int = 100,
+                                       tel_r: float = 0.6,
+                                       tel_mm: int = 0) -> dict:
+    """
+    Classify one read from motif-rotation content at the two physical read ends.
+
+    A read side passes when hits / tel_n >= tel_r in either terminal sequence,
+    where each terminal sequence has length tel_n * len(motif).
+    """
+    if tel_n <= 0:
+        raise ValueError("tel_n must be greater than 0")
+    if not (0 < tel_r <= 1):
+        raise ValueError("tel_r must be in the interval (0, 1]")
+    if tel_mm not in {0, 1}:
+        raise ValueError("tel_mm must be 0 or 1")
 
     seq_str = (sequence or "").upper()
     motif_forward = (motif or "").upper()
-    motif_reverse = get_reverse_complement(motif_forward) if motif_forward else ""
+    motif_length = len(motif_forward)
+    if motif_length == 0:
+        return {
+            "passed": False,
+            "side": None,
+            "right_pass": False,
+            "left_pass": False,
+            "forward_hits": 0,
+            "reverse_hits": 0,
+            "required_hits": 0,
+            "terminal_len": 0,
+            "forward_ratio": 0.0,
+            "reverse_ratio": 0.0,
+        }
 
-    best_forward = {
-        "count": 0,
-        "density": 0.0,
-    }
-    best_reverse = {
-        "count": 0,
-        "density": 0.0,
-    }
+    terminal_len = min(len(seq_str), tel_n * motif_length)
+    left_terminal = seq_str[:terminal_len]
+    right_terminal = seq_str[-terminal_len:] if terminal_len > 0 else ""
 
-    for start in range(0, max(len(seq_str), 1), window_size):
-        end = min(start + window_size, len(seq_str))
-        window_seq = seq_str[start:end]
-        window_len_kb = max((end - start) / 1000.0, 0.001)
+    forward_patterns = set(motif_rotations(motif_forward))
+    reverse_patterns = set(motif_rotations(get_reverse_complement(motif_forward)))
+    required_hits = math.ceil(tel_n * tel_r)
 
-        forward_count = window_seq.count(motif_forward) if motif_forward else 0
-        reverse_count = (
-            window_seq.count(motif_reverse)
-            if motif_reverse and motif_reverse != motif_forward
-            else 0
-        )
-        forward_density = forward_count / window_len_kb
-        reverse_density = reverse_count / window_len_kb
+    terminal_sequences = [left_terminal]
+    if right_terminal != left_terminal:
+        terminal_sequences.append(right_terminal)
 
-        if (forward_count, forward_density) > (best_forward["count"], best_forward["density"]):
-            best_forward = {"count": forward_count, "density": forward_density}
-        if (reverse_count, reverse_density) > (best_reverse["count"], best_reverse["density"]):
-            best_reverse = {"count": reverse_count, "density": reverse_density}
-
-    forward_pass = (
-        best_forward["count"] >= min_window_repeats
-        and best_forward["density"] >= min_window_density
+    best_forward_hits = max(
+        count_terminal_telomere_hits(term, forward_patterns, motif_length, tel_mm)
+        for term in terminal_sequences
     )
-    reverse_pass = (
-        best_reverse["count"] >= min_window_repeats
-        and best_reverse["density"] >= min_window_density
+    best_reverse_hits = max(
+        count_terminal_telomere_hits(term, reverse_patterns, motif_length, tel_mm)
+        for term in terminal_sequences
     )
 
-    if forward_pass and (not reverse_pass or best_forward["density"] >= best_reverse["density"]):
+    right_pass = best_forward_hits >= required_hits
+    left_pass = best_reverse_hits >= required_hits
+
+    if right_pass and (not left_pass or best_forward_hits >= best_reverse_hits):
         passed = True
         side = "right"
-    elif reverse_pass:
+    elif left_pass:
         passed = True
         side = "left"
     else:
@@ -152,44 +201,21 @@ def classify_read_by_window_counts(sequence: str, motif: str, window_size: int =
     return {
         "passed": passed,
         "side": side,
-        "forward_count": best_forward["count"],
-        "reverse_count": best_reverse["count"],
-        "forward_density": best_forward["density"],
-        "reverse_density": best_reverse["density"],
+        "right_pass": right_pass,
+        "left_pass": left_pass,
+        "forward_hits": best_forward_hits,
+        "reverse_hits": best_reverse_hits,
+        "required_hits": required_hits,
+        "terminal_len": terminal_len,
+        "forward_ratio": best_forward_hits / tel_n,
+        "reverse_ratio": best_reverse_hits / tel_n,
     }
 
 
 TELO_READ_STRINGENCY_PRESETS = {
-    "strict": {
-        "scan_mode": "legacy_marker_trc",
-        "trc_threshold": 0.7,
-        "check_length": 1000,
-        "enable_second_filter": True,
-        "min_motif_count": 10,
-        "read_window_size": 1000,
-        "min_window_repeats": 10,
-        "min_window_density": 10.0,
-    },
-    "normal": {
-        "scan_mode": "window_count",
-        "trc_threshold": 0.7,
-        "check_length": 1000,
-        "enable_second_filter": True,
-        "min_motif_count": 6,
-        "read_window_size": 1000,
-        "min_window_repeats": 6,
-        "min_window_density": 5.0,
-    },
-    "relaxed": {
-        "scan_mode": "window_count",
-        "trc_threshold": 0.7,
-        "check_length": 1000,
-        "enable_second_filter": True,
-        "min_motif_count": 4,
-        "read_window_size": 1000,
-        "min_window_repeats": 4,
-        "min_window_density": 3.0,
-    },
+    "strict": {"enable_second_filter": True},
+    "normal": {"enable_second_filter": True},
+    "relaxed": {"enable_second_filter": True},
 }
 
 
@@ -203,7 +229,7 @@ def resolve_telo_read_stringency_preset(stringency: str) -> dict:
 
 
 class TeloReadsExtractor:
-    """Extract telomeric reads from split read files using window-based scanning"""
+    """Extract telomeric reads from split read files using terminal read-end ratios."""
     
     def __init__(self, output_dir: str, motif: str, threads: int = 20,
                  trc_threshold: float = None, check_length: int = None,
@@ -212,7 +238,10 @@ class TeloReadsExtractor:
                  telo_read_stringency: str = "normal",
                  read_window_size: int = None,
                  min_window_repeats: int = None,
-                 min_window_density: float = None):
+                 min_window_density: float = None,
+                 tel_n: int = 100,
+                 tel_r: float = 0.6,
+                 tel_mm: int = 0):
         """
         Initialize TeloReadsExtractor
 
@@ -220,17 +249,19 @@ class TeloReadsExtractor:
             output_dir: Output directory (where DEGAP placed reads_part/)
             motif: Telomere repeat motif (e.g., TTAGGG)
             threads: Number of threads for parallel processing (-t parameter)
-            trc_threshold: TRC threshold for telomeric classification
-            check_length: Length to check at each end (default: 1000bp)
-                         Used as window_flank = check_length // 2 for scanning
+            trc_threshold: Compatibility option; terminal-ratio mode ignores it
+            check_length: Compatibility option; terminal-ratio mode ignores it
             batch_size: Number of reads to read at once (default: 1000)
-            enable_second_filter: Enable second-level motif count filtering
-            min_motif_count: Minimum motif count for second filter
-            overlapping: Use overlapping count in second filter (default: False)
-            telo_read_stringency: strict, normal, or relaxed preset
-            read_window_size: Window size for window_count mode
-            min_window_repeats: Minimum motif hits in one read window
-            min_window_density: Minimum motif hits per kb in one read window
+            enable_second_filter: Enable second-level terminal-ratio filtering
+            min_motif_count: Compatibility option; terminal-ratio mode ignores it
+            overlapping: Compatibility option; terminal-ratio mode ignores it
+            telo_read_stringency: Compatibility preset name
+            read_window_size: Compatibility option; terminal-ratio mode ignores it
+            min_window_repeats: Compatibility option; terminal-ratio mode ignores it
+            min_window_density: Compatibility option; terminal-ratio mode ignores it
+            tel_n: Number of motif units checked at each read end
+            tel_r: Minimum terminal hit ratio (hits / tel_n)
+            tel_mm: Allowed mismatches per motif-length unit, either 0 or 1
         """
         preset = resolve_telo_read_stringency_preset(telo_read_stringency)
 
@@ -238,11 +269,6 @@ class TeloReadsExtractor:
         self.motif = motif.upper()
         self.threads = threads
         self.telo_read_stringency = (telo_read_stringency or "normal").lower()
-        self.scan_mode = preset["scan_mode"]
-        self.trc_threshold = preset["trc_threshold"] if trc_threshold is None else trc_threshold
-        self.check_length = preset["check_length"] if check_length is None else check_length
-        # Convert check_length to window_flank (half of check_length)
-        self.window_flank = self.check_length // 2
         self.kmer_length = len(motif) - 2
         self.batch_size = batch_size
         self.enable_second_filter = (
@@ -250,31 +276,20 @@ class TeloReadsExtractor:
             if enable_second_filter is None
             else enable_second_filter
         )
-        self.min_motif_count = preset["min_motif_count"] if min_motif_count is None else min_motif_count
-        self.overlapping = overlapping
-        self.read_window_size = (
-            preset["read_window_size"]
-            if read_window_size is None
-            else read_window_size
-        )
-        self.min_window_repeats = (
-            preset["min_window_repeats"]
-            if min_window_repeats is None
-            else min_window_repeats
-        )
-        self.min_window_density = (
-            preset["min_window_density"]
-            if min_window_density is None
-            else min_window_density
-        )
-        
-        # Generate window markers (2x motif length)
+        if tel_n <= 0:
+            raise ValueError("tel_n must be greater than 0")
+        if not (0 < tel_r <= 1):
+            raise ValueError("tel_r must be in the interval (0, 1]")
+        if tel_mm not in {0, 1}:
+            raise ValueError("tel_mm must be 0 or 1")
+        self.tel_n = tel_n
+        self.tel_r = tel_r
+        self.tel_mm = tel_mm
+
+        # Direction marker labels retained for logs and output naming.
         self.pat_right = self.motif * 2  # e.g., TTAGGGTTAGGG
         self.pat_left = get_reverse_complement(self.pat_right)  # e.g., CCCTAACCCTAA
-        
-        # Window size = 2 * flank + 2 * motif_length
-        self.window_size = 2 * self.window_flank + len(self.pat_right)
-        
+
         # Locate reads_part directories
         self.hifi_reads_part_dir = os.path.join(output_dir, "hifi_reads_part")
         self.ont_reads_part_dir = os.path.join(output_dir, "ont_reads_part")
@@ -334,15 +349,11 @@ class TeloReadsExtractor:
         print(f"    Right (forward): {self.pat_right}")
         print(f"    Left (reverse):  {self.pat_left}")
         print(f"  Telo-read stringency: {self.telo_read_stringency}")
-        print(f"  Scan mode: {self.scan_mode}")
-        print(f"  TRC threshold: {self.trc_threshold}")
-        print(f"  Check length: {self.check_length} bp")
-        print(f"  Window flank: {self.window_flank} bp (= check_length / 2)")
-        print(f"  Window size: {self.window_size} bp (target, with compensation)")
-        if self.scan_mode == "window_count":
-            print(f"  Read count window size: {self.read_window_size} bp")
-            print(f"  Min window repeats: {self.min_window_repeats}")
-            print(f"  Min window density: {self.min_window_density:.2f} motifs/kb")
+        print(f"  Scan mode: terminal_ratio")
+        print(f"  Terminal units (--tel-n): {self.tel_n}")
+        print(f"  Terminal ratio (--tel-r): {self.tel_r}")
+        print(f"  Terminal mismatch (--tel-mm): {self.tel_mm}")
+        print(f"  Terminal length per end: {self.tel_n * len(self.motif)} bp")
         print(f"  Threads: {self.threads}")
         print(f"  Batch size: {self.batch_size} reads")
         print(f"  Output order: Platform-grouped, reads sorted by ID within each platform")
@@ -447,144 +458,122 @@ class TeloReadsExtractor:
         """Create Python script for processing single split file with window-based algorithm"""
         script_path = os.path.join(temp_dir, "process_single_file.py")
         
-        # Embed TRC calculation functions directly to avoid import issues
+        # Embed terminal-ratio functions directly to avoid import issues.
         script_content = f'''#!/usr/bin/env python3
 import sys
 import os
+import math
 import re
 from Bio import SeqIO
 from Bio.Seq import Seq
 
-# ===== Embedded TRC Calculation Functions =====
+# ===== Embedded terminal-ratio functions =====
 def _pattern_scramble_telo(pattern, cut_length):
-    """Generate all k-mer permutations of telomere motif"""
     pattern = (pattern or "").upper()
     if not pattern:
         return []
-    
     cut_length = max(1, cut_length)
     extended = pattern * 2
     kmers = set()
-    
     for i in range(len(pattern)):
-        fragment = extended[i : i + cut_length]
+        fragment = extended[i:i + cut_length]
         if len(fragment) == cut_length:
             kmers.add(fragment)
-    
     kmers.update(str(Seq(kmer).reverse_complement()) for kmer in list(kmers))
     return sorted(kmers)
 
 def patterns_to_search_topsicle(motif, cut_length):
-    """Generate regex patterns for Topsicle-based telomere detection"""
     kmers = _pattern_scramble_telo(motif, cut_length)
     return [re.escape(kmer) for kmer in kmers]
 
-def calculate_trc(sequence, motif, kmer_length, check_length=None):
-    """Calculate Telomere Repeat Content (TRC) using Topsicle method"""
-    seq_to_check = sequence.upper()
-    if check_length:
-        seq_to_check = seq_to_check[:min(len(seq_to_check), check_length)]
-    
-    if len(seq_to_check) < kmer_length:
-        return 0.0
-    
-    pattern_all = patterns_to_search_topsicle(motif, kmer_length)
-    compiled_patterns = [re.compile(pattern) for pattern in pattern_all]
-    
-    ratio_perfect_hit = max(1.0, len(seq_to_check) / len(motif))
-    max_trc = 0.0
-    
-    for pattern in compiled_patterns:
-        matches = len(pattern.findall(seq_to_check))
-        pattern_trc = matches / ratio_perfect_hit if ratio_perfect_hit > 0 else 0.0
-        max_trc = max(max_trc, pattern_trc)
-    
-    return max_trc
+def motif_rotations(motif):
+    motif = (motif or "").upper()
+    if not motif:
+        return []
+    doubled = motif + motif
+    return sorted(set(doubled[i:i + len(motif)] for i in range(len(motif))))
 
-def find_all_occurrences(seq, pattern):
-    """Find all occurrences of pattern in sequence (overlapping allowed for finding positions)"""
-    positions = []
-    start = 0
-    while True:
-        pos = seq.find(pattern, start)
-        if pos == -1:
-            break
-        positions.append(pos)
-        start = pos + 1  # Allow overlapping search
-    return positions
+def _hamming_distance(seq1, seq2):
+    return sum(base1 != base2 for base1, base2 in zip(seq1, seq2))
 
-def classify_read_by_window_counts(sequence, motif, window_size=1000,
-                                   min_window_repeats=6,
-                                   min_window_density=5.0):
-    """Classify one read by motif repeat counts in fixed windows."""
-    if window_size <= 0:
-        raise ValueError("window_size must be greater than 0")
+def _matches_any_motif_unit(kmer, patterns, mismatch):
+    if mismatch == 0:
+        return kmer in patterns
+    return any(_hamming_distance(kmer, pattern) <= mismatch for pattern in patterns)
 
+def count_terminal_telomere_hits(sequence, patterns, motif_length, mismatch=0):
+    if motif_length <= 0:
+        return 0
+    seq_str = (sequence or "").upper()
+    hits = 0
+    pos = 0
+    while pos + motif_length <= len(seq_str):
+        kmer = seq_str[pos:pos + motif_length]
+        if _matches_any_motif_unit(kmer, patterns, mismatch):
+            hits += 1
+            pos += motif_length
+        else:
+            pos += 1
+    return hits
+
+def classify_read_by_terminal_telomere(sequence, motif, tel_n=100, tel_r=0.6, tel_mm=0):
     seq_str = (sequence or "").upper()
     motif_forward = (motif or "").upper()
-    motif_reverse = str(Seq(motif_forward).reverse_complement()) if motif_forward else ""
+    motif_length = len(motif_forward)
+    if motif_length == 0:
+        return dict(passed=False, side=None, right_pass=False, left_pass=False)
 
-    best_forward_count = 0
-    best_forward_density = 0.0
-    best_reverse_count = 0
-    best_reverse_density = 0.0
+    terminal_len = min(len(seq_str), tel_n * motif_length)
+    left_terminal = seq_str[:terminal_len]
+    right_terminal = seq_str[-terminal_len:] if terminal_len > 0 else ""
+    terminal_sequences = [left_terminal]
+    if right_terminal != left_terminal:
+        terminal_sequences.append(right_terminal)
 
-    for start in range(0, max(len(seq_str), 1), window_size):
-        end = min(start + window_size, len(seq_str))
-        window_seq = seq_str[start:end]
-        window_len_kb = max((end - start) / 1000.0, 0.001)
+    forward_patterns = set(motif_rotations(motif_forward))
+    reverse_patterns = set(motif_rotations(str(Seq(motif_forward).reverse_complement())))
+    required_hits = math.ceil(tel_n * tel_r)
 
-        forward_count = window_seq.count(motif_forward) if motif_forward else 0
-        if motif_reverse and motif_reverse != motif_forward:
-            reverse_count = window_seq.count(motif_reverse)
-        else:
-            reverse_count = 0
-
-        forward_density = forward_count / window_len_kb
-        reverse_density = reverse_count / window_len_kb
-
-        if (forward_count, forward_density) > (best_forward_count, best_forward_density):
-            best_forward_count = forward_count
-            best_forward_density = forward_density
-        if (reverse_count, reverse_density) > (best_reverse_count, best_reverse_density):
-            best_reverse_count = reverse_count
-            best_reverse_density = reverse_density
-
-    forward_pass = (
-        best_forward_count >= min_window_repeats
-        and best_forward_density >= min_window_density
+    best_forward_hits = max(
+        count_terminal_telomere_hits(term, forward_patterns, motif_length, tel_mm)
+        for term in terminal_sequences
     )
-    reverse_pass = (
-        best_reverse_count >= min_window_repeats
-        and best_reverse_density >= min_window_density
+    best_reverse_hits = max(
+        count_terminal_telomere_hits(term, reverse_patterns, motif_length, tel_mm)
+        for term in terminal_sequences
     )
 
-    if forward_pass and (not reverse_pass or best_forward_density >= best_reverse_density):
-        return dict(passed=True, side="right")
-    if reverse_pass:
-        return dict(passed=True, side="left")
-    return dict(passed=False, side=None)
-# ===== End of Embedded Functions =====
+    right_pass = best_forward_hits >= required_hits
+    left_pass = best_reverse_hits >= required_hits
 
-def process_file(input_file, motif, kmer_length, pat_right, pat_left, 
-                 window_flank, trc_threshold, temp_dir, batch_size=1000,
-                 scan_mode="legacy_marker_trc", read_window_size=1000,
-                 min_window_repeats=6, min_window_density=5.0):
-    """Process a single split file to extract telomeric reads using window-based scanning"""
+    if right_pass and (not left_pass or best_forward_hits >= best_reverse_hits):
+        side = "right"
+    elif left_pass:
+        side = "left"
+    else:
+        side = None
+
+    return dict(
+        passed=right_pass or left_pass,
+        side=side,
+        right_pass=right_pass,
+        left_pass=left_pass,
+    )
+
+def process_file(input_file, motif, temp_dir, batch_size=1000,
+                 tel_n=100, tel_r=0.6, tel_mm=0):
+    """Process a single split file to extract terminal telomeric reads."""
     base_name = os.path.basename(input_file)
-    left_output = os.path.join(temp_dir, f"left_{{base_name}}")
-    right_output = os.path.join(temp_dir, f"right_{{base_name}}")
-    stats_output = os.path.join(temp_dir, f"stats_{{base_name}}.txt")
+    left_output = os.path.join(temp_dir, "left_" + base_name)
+    right_output = os.path.join(temp_dir, "right_" + base_name)
+    stats_output = os.path.join(temp_dir, "stats_" + base_name + ".txt")
     
     left_reads = []
     right_reads = []
     total = 0
     both_telo = 0
-    
-    marker_len = len(pat_right)
-    
+
     try:
-        # Batch reading: read batch_size reads at a time
         with open(input_file, 'r') as handle:
             record_iter = SeqIO.parse(handle, 'fasta')
             
@@ -605,98 +594,19 @@ def process_file(input_file, motif, kmer_length, pat_right, pat_left,
                     total += 1
                     seq_str = str(record.seq).upper()
 
-                    if scan_mode == "window_count":
-                        window_result = classify_read_by_window_counts(
-                            seq_str,
-                            motif,
-                            read_window_size,
-                            min_window_repeats,
-                            min_window_density
-                        )
-                        if window_result["passed"]:
-                            if window_result["side"] == "right":
-                                right_reads.append(record)
-                            else:
-                                left_reads.append(record)
-                        continue
-                    
-                    # Find all window markers
-                    right_positions = find_all_occurrences(seq_str, pat_right)
-                    left_positions = find_all_occurrences(seq_str, pat_left)
-                    
-                    # Calculate TRC for each window
-                    max_right_trc = 0.0
-                    max_left_trc = 0.0
-                    
-                    # Target window size: 1000 + 2*len(motif)
-                    target_window_size = 2 * window_flank + marker_len
-                    
-                    # Process right marker windows (forward)
-                    for pos in right_positions:
-                        # Extract window with fixed size, compensating for insufficient flanks
-                        ideal_start = pos - window_flank
-                        ideal_end = pos + marker_len + window_flank
-                        
-                        if ideal_start < 0:
-                            # Upstream insufficient, start from 0 and extend downstream
-                            window_start = 0
-                            window_end = min(len(seq_str), target_window_size)
-                        elif ideal_end > len(seq_str):
-                            # Downstream insufficient, end at sequence end and extend upstream
-                            window_end = len(seq_str)
-                            window_start = max(0, len(seq_str) - target_window_size)
-                        else:
-                            # Both flanks sufficient
-                            window_start = ideal_start
-                            window_end = ideal_end
-                        
-                        window_seq = seq_str[window_start:window_end]
-                        
-                        if len(window_seq) >= marker_len:
-                            window_trc = calculate_trc(window_seq, motif, kmer_length)
-                            max_right_trc = max(max_right_trc, window_trc)
-                    
-                    # Process left marker windows (reverse)
-                    for pos in left_positions:
-                        # Extract window with fixed size, compensating for insufficient flanks
-                        ideal_start = pos - window_flank
-                        ideal_end = pos + marker_len + window_flank
-                        
-                        if ideal_start < 0:
-                            # Upstream insufficient, start from 0 and extend downstream
-                            window_start = 0
-                            window_end = min(len(seq_str), target_window_size)
-                        elif ideal_end > len(seq_str):
-                            # Downstream insufficient, end at sequence end and extend upstream
-                            window_end = len(seq_str)
-                            window_start = max(0, len(seq_str) - target_window_size)
-                        else:
-                            # Both flanks sufficient
-                            window_start = ideal_start
-                            window_end = ideal_end
-                        
-                        window_seq = seq_str[window_start:window_end]
-                        
-                        if len(window_seq) >= marker_len:
-                            window_trc = calculate_trc(window_seq, motif, kmer_length)
-                            max_left_trc = max(max_left_trc, window_trc)
-                    
-                    # Determine the maximum TRC and its source
-                    max_trc = max(max_right_trc, max_left_trc)
-                    
-                    if max_trc >= trc_threshold:
-                        # Determine which type contributed the max TRC
-                        if max_right_trc >= trc_threshold and max_left_trc >= trc_threshold:
-                            # Both pass threshold, check which is higher
-                            if max_right_trc >= max_left_trc:
-                                right_reads.append(record)
-                            else:
-                                left_reads.append(record)
-                            # Note: We don't count as "both_telo" anymore since we pick the dominant one
-                        elif max_right_trc >= trc_threshold:
-                            right_reads.append(record)
-                        else:  # max_left_trc >= trc_threshold
-                            left_reads.append(record)
+                    terminal_result = classify_read_by_terminal_telomere(
+                        seq_str,
+                        motif,
+                        tel_n,
+                        tel_r,
+                        tel_mm
+                    )
+                    if terminal_result["right_pass"]:
+                        right_reads.append(record)
+                    if terminal_result["left_pass"]:
+                        left_reads.append(record)
+                    if terminal_result["right_pass"] and terminal_result["left_pass"]:
+                        both_telo += 1
         
         # Write results
         with open(left_output, 'w') as f:
@@ -707,15 +617,15 @@ def process_file(input_file, motif, kmer_length, pat_right, pat_left,
         
         # Write statistics
         with open(stats_output, 'w') as f:
-            f.write(f"total={{total}}\\n")
-            f.write(f"left={{len(left_reads)}}\\n")
-            f.write(f"right={{len(right_reads)}}\\n")
-            f.write(f"both={{both_telo}}\\n")
+            f.write("total=" + str(total) + "\\n")
+            f.write("left=" + str(len(left_reads)) + "\\n")
+            f.write("right=" + str(len(right_reads)) + "\\n")
+            f.write("both=" + str(both_telo) + "\\n")
         
-        print(f"Processed {{input_file}}: L={{len(left_reads)}}, R={{len(right_reads)}}")
+        print("Processed " + input_file + ": L=" + str(len(left_reads)) + ", R=" + str(len(right_reads)))
         
     except Exception as e:
-        print(f"Error processing {{input_file}}: {{e}}")
+        print("Error processing " + input_file + ": " + str(e))
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
@@ -726,17 +636,11 @@ if __name__ == "__main__":
     process_file(
         input_file,
         motif="{self.motif}",
-        kmer_length={self.kmer_length},
-        pat_right="{self.pat_right}",
-        pat_left="{self.pat_left}",
-        window_flank={self.window_flank},
-        trc_threshold={self.trc_threshold},
         temp_dir="{temp_dir}",
         batch_size={self.batch_size},
-        scan_mode="{self.scan_mode}",
-        read_window_size={self.read_window_size},
-        min_window_repeats={self.min_window_repeats},
-        min_window_density={self.min_window_density}
+        tel_n={self.tel_n},
+        tel_r={self.tel_r},
+        tel_mm={self.tel_mm}
     )
 '''
         
@@ -771,10 +675,12 @@ if __name__ == "__main__":
                 print(f"Warning: Error reading stats from {stats_file}: {e}")
         
         # Calculate non-telomeric
-        self.stats['non_telo'] = (self.stats['total_reads'] - 
-                                   self.stats['left_telo'] - 
-                                   self.stats['right_telo'] - 
-                                   self.stats['both_telo'])
+        self.stats['non_telo'] = (
+            self.stats['total_reads']
+            - self.stats['left_telo']
+            - self.stats['right_telo']
+            + self.stats['both_telo']
+        )
         
         # Merge left telomeric reads to temp1 file (platform-ordered)
         print(f"[Part1-NEW] Merging left telomeric reads (HiFi first, ONT second)...")
@@ -842,12 +748,13 @@ if __name__ == "__main__":
             print(f"[Part1-NEW] Warning: Could not remove temp directory: {e}")
     
     def _apply_second_filter(self):
-        """Apply second-level motif count filter to telomeric reads"""
-        print(f"\n[Part1-NEW] Applying second-level motif count filter...")
+        """Apply second-level terminal telomere ratio filter to telomeric reads"""
+        print(f"\n[Part1-NEW] Applying second-level terminal telomere ratio filter...")
         print(f"  Motif: {self.motif}")
         print(f"  Reverse complement: {get_reverse_complement(self.motif)}")
-        print(f"  Min motif count: {self.min_motif_count}")
-        print(f"  Strategy: max(forward_count, RC_count)")
+        print(f"  Terminal units (--tel-n): {self.tel_n}")
+        print(f"  Terminal ratio (--tel-r): {self.tel_r}")
+        print(f"  Terminal mismatch (--tel-mm): {self.tel_mm}")
         print()
         
         # Filter left telomeric reads - check anywhere in sequence
@@ -907,7 +814,7 @@ if __name__ == "__main__":
     def _filter_reads_by_motif_count(self, input_file: str, output_file: str, 
                                       failed_file: str, side: str) -> dict:
         """
-        Filter reads based on motif count (anywhere in the full sequence)
+        Filter reads based on terminal motif-rotation ratio
         
         Args:
             input_file: Input FASTA file (temp1 files)
@@ -936,26 +843,42 @@ if __name__ == "__main__":
                 total_reads += 1
                 seq_str = str(record.seq)
                 
-                # Count motif matches in the ENTIRE sequence (not just ends)
-                # This is more consistent with the window-based approach
-                motif_count = count_exact_motif_matches(seq_str, self.motif)
-                
-                # Filter based on threshold
-                if motif_count >= self.min_motif_count:
+                terminal_result = classify_read_by_terminal_telomere(
+                    seq_str,
+                    self.motif,
+                    self.tel_n,
+                    self.tel_r,
+                    self.tel_mm,
+                )
+                tel_hits = max(
+                    terminal_result["forward_hits"],
+                    terminal_result["reverse_hits"],
+                )
+                tel_ratio = max(
+                    terminal_result["forward_ratio"],
+                    terminal_result["reverse_ratio"],
+                )
+
+                if side.startswith("left"):
+                    side_passed = terminal_result["left_pass"]
+                elif side.startswith("right"):
+                    side_passed = terminal_result["right_pass"]
+                else:
+                    side_passed = terminal_result["passed"]
+
+                if side_passed:
                     passed_reads += 1
-                    # Add motif count to description
                     new_record = SeqRecord(
                         seq=record.seq,
                         id=record.id,
-                        description=f"{record.description} motif_count={motif_count}"
+                        description=f"{record.description} tel_hits={tel_hits} tel_ratio={tel_ratio:.3f}"
                     )
                     passed_records.append(new_record)
                 else:
-                    # Record failed reads
                     failed_record = SeqRecord(
                         seq=record.seq,
                         id=record.id,
-                        description=f"{record.description} motif_count={motif_count} FAILED"
+                        description=f"{record.description} tel_hits={tel_hits} tel_ratio={tel_ratio:.3f} FAILED"
                     )
                     failed_records.append(failed_record)
         
@@ -976,8 +899,8 @@ if __name__ == "__main__":
         print(f"[Filter] {side.upper()} results:")
         print(f"  Total reads: {total_reads}")
         if total_reads > 0:
-            print(f"  Passed (>={self.min_motif_count} motifs): {passed_reads} ({passed_reads/total_reads*100:.1f}%)")
-            print(f"  Failed (<{self.min_motif_count} motifs): {filtered_reads} ({filtered_reads/total_reads*100:.1f}%)")
+            print(f"  Passed (terminal ratio >= {self.tel_r}): {passed_reads} ({passed_reads/total_reads*100:.1f}%)")
+            print(f"  Failed (terminal ratio < {self.tel_r}): {filtered_reads} ({filtered_reads/total_reads*100:.1f}%)")
             print(f"  Note: Output sorted by read ID")
         print()
         
@@ -1094,48 +1017,37 @@ if __name__ == "__main__":
     def _write_log(self):
         """Write processing log"""
         with open(self.log_file, 'w') as f:
-            f.write("TelSeekerPart1_new - Telomeric Reads Extraction Log (Window-based)\n")
+            f.write("TelSeekerPart1 - Telomeric Reads Extraction Log (Terminal-ratio)\n")
             f.write("=" * 60 + "\n\n")
             
             # Algorithm description
-            f.write("ALGORITHM: Window-based scanning\n")
+            f.write("ALGORITHM: Terminal read-end motif ratio\n")
             f.write("-" * 60 + "\n")
             f.write(f"Window markers:\n")
             f.write(f"  Right (forward): {self.pat_right}\n")
             f.write(f"  Left (reverse):  {self.pat_left}\n")
-            f.write(f"Window configuration:\n")
+            f.write(f"Terminal-ratio configuration:\n")
             f.write(f"  Telo-read stringency: {self.telo_read_stringency}\n")
-            f.write(f"  Scan mode: {self.scan_mode}\n")
-            f.write(f"  Check length: {self.check_length} bp (total)\n")
-            f.write(f"  Flank size: {self.window_flank} bp (= check_length / 2, per side)\n")
-            f.write(f"  Target window size: {self.window_size} bp (fixed)\n")
-            if self.scan_mode == "window_count":
-                f.write(f"  Read count window size: {self.read_window_size} bp\n")
-                f.write(f"  Min window repeats: {self.min_window_repeats}\n")
-                f.write(f"  Min window density: {self.min_window_density:.2f} motifs/kb\n")
-            f.write(f"  Compensation: If one flank is insufficient, extend the other side\n")
-            if self.scan_mode == "legacy_marker_trc":
-                f.write(f"Scan method: Find all markers anywhere in read, calculate TRC for each window\n")
-                f.write(f"Classification: Based on maximum TRC across all windows\n")
-            else:
-                f.write(f"Scan method: Count motif and reverse-complement repeats in read windows\n")
-                f.write(f"Classification: Based on local repeat count and density\n")
+            f.write(f"  Terminal units (--tel-n): {self.tel_n}\n")
+            f.write(f"  Terminal ratio (--tel-r): {self.tel_r}\n")
+            f.write(f"  Terminal mismatch (--tel-mm): {self.tel_mm}\n")
+            f.write(f"  Terminal length per read end: {self.tel_n * len(self.motif)} bp\n")
+            f.write(f"Scan method: Greedy motif-rotation scan at both physical read ends\n")
+            f.write(f"Classification: Based on hits / tel_n at read ends\n")
             f.write(f"Output order:\n")
             f.write(f"  - Platform level: HiFi first, ONT second\n")
             f.write(f"  - Within platform: Sorted by read ID (alphabetical)\n")
             f.write(f"\n")
             
-            # First-level TRC filtering parameters and statistics
-            f.write("FIRST-LEVEL FILTERING (TRC-based, window scanning)\n")
+            # First-level terminal-ratio filtering parameters and statistics
+            f.write("FIRST-LEVEL FILTERING (terminal-ratio)\n")
             f.write("-" * 60 + "\n")
             f.write(f"Parameters:\n")
             f.write(f"  Motif: {self.motif}\n")
             f.write(f"  Telo-read stringency: {self.telo_read_stringency}\n")
-            f.write(f"  Scan mode: {self.scan_mode}\n")
-            f.write(f"  TRC threshold: {self.trc_threshold}\n")
-            if self.scan_mode == "window_count":
-                f.write(f"  Min window repeats: {self.min_window_repeats}\n")
-                f.write(f"  Min window density: {self.min_window_density:.2f} motifs/kb\n")
+            f.write(f"  Terminal units: {self.tel_n}\n")
+            f.write(f"  Terminal ratio: {self.tel_r}\n")
+            f.write(f"  Terminal mismatch: {self.tel_mm}\n")
             f.write(f"  Threads: {self.threads}\n")
             f.write(f"\n")
             f.write(f"Statistics:\n")
@@ -1152,15 +1064,15 @@ if __name__ == "__main__":
             
             # Second-level motif count filtering (if enabled)
             if self.enable_second_filter:
-                f.write("SECOND-LEVEL FILTERING (Motif count-based)\n")
+                f.write("SECOND-LEVEL FILTERING (terminal-ratio)\n")
                 f.write("-" * 60 + "\n")
                 f.write(f"Parameters:\n")
                 f.write(f"  Motif: {self.motif}\n")
                 f.write(f"  Reverse complement: {get_reverse_complement(self.motif)}\n")
-                f.write(f"  Min motif count: {self.min_motif_count}\n")
-                f.write(f"  Counting method: {'overlapping' if self.overlapping else 'non-overlapping'}\n")
-                f.write(f"  Strategy: max(forward_count, RC_count)\n")
-                f.write(f"  Scan region: Entire read sequence\n")
+                f.write(f"  Terminal units: {self.tel_n}\n")
+                f.write(f"  Terminal ratio: {self.tel_r}\n")
+                f.write(f"  Terminal mismatch: {self.tel_mm}\n")
+                f.write(f"  Scan region: Read ends\n")
                 f.write(f"\n")
                 
                 # Left reads statistics
@@ -1171,8 +1083,8 @@ if __name__ == "__main__":
                 f.write(f"Left telomeric reads:\n")
                 f.write(f"  Input reads: {left_total}\n")
                 if left_total > 0:
-                    f.write(f"  Passed (>={self.min_motif_count} motifs): {left_passed} ({left_passed/left_total*100:.2f}%)\n")
-                    f.write(f"  Failed (<{self.min_motif_count} motifs): {left_failed} ({left_failed/left_total*100:.2f}%)\n")
+                    f.write(f"  Passed (ratio >= {self.tel_r}): {left_passed} ({left_passed/left_total*100:.2f}%)\n")
+                    f.write(f"  Failed (ratio < {self.tel_r}): {left_failed} ({left_failed/left_total*100:.2f}%)\n")
                 else:
                     f.write(f"  Passed: 0\n")
                     f.write(f"  Failed: 0\n")
@@ -1189,8 +1101,8 @@ if __name__ == "__main__":
                 f.write(f"Right telomeric reads:\n")
                 f.write(f"  Input reads: {right_total}\n")
                 if right_total > 0:
-                    f.write(f"  Passed (>={self.min_motif_count} motifs): {right_passed} ({right_passed/right_total*100:.2f}%)\n")
-                    f.write(f"  Failed (<{self.min_motif_count} motifs): {right_failed} ({right_failed/right_total*100:.2f}%)\n")
+                    f.write(f"  Passed (ratio >= {self.tel_r}): {right_passed} ({right_passed/right_total*100:.2f}%)\n")
+                    f.write(f"  Failed (ratio < {self.tel_r}): {right_failed} ({right_failed/right_total*100:.2f}%)\n")
                 else:
                     f.write(f"  Passed: 0\n")
                     f.write(f"  Failed: 0\n")
@@ -1245,20 +1157,20 @@ if __name__ == "__main__":
         non = self.stats['non_telo']
         
         print(f"\n{'='*60}")
-        print(f"SUMMARY (Window-based Algorithm)")
+        print(f"SUMMARY (Terminal-ratio Algorithm)")
         print(f"{'='*60}")
-        print(f"\nFirst-level filtering ({self.scan_mode}, stringency={self.telo_read_stringency}):")
+        print(f"\nFirst-level filtering (terminal_ratio, stringency={self.telo_read_stringency}):")
         print(f"  Total reads processed:           {total:>10}")
         
         if total > 0:
             print(f"  Left telomeric reads:            {left:>10} ({left/total*100:>5.1f}%)")
             print(f"  Right telomeric reads:           {right:>10} ({right/total*100:>5.1f}%)")
-            print(f"  Both ends telomeric (excluded):  {both:>10} ({both/total*100:>5.1f}%)")
+            print(f"  Both directions telomeric:       {both:>10} ({both/total*100:>5.1f}%)")
             print(f"  Non-telomeric reads:             {non:>10} ({non/total*100:>5.1f}%)")
         else:
             print(f"  Left telomeric reads:            {left:>10}")
             print(f"  Right telomeric reads:           {right:>10}")
-            print(f"  Both ends telomeric (excluded):  {both:>10}")
+            print(f"  Both directions telomeric:       {both:>10}")
             print(f"  Non-telomeric reads:             {non:>10}")
             print(f"\n  WARNING: No reads were processed. Check for errors above.")
         
@@ -1271,12 +1183,14 @@ if __name__ == "__main__":
             total_filter_input = left_total + right_total
             total_filter_passed = left_passed + right_passed
             
-            print(f"\nSecond-level filtering (Motif count >= {self.min_motif_count}):")
+            print(f"\nSecond-level filtering (terminal ratio >= {self.tel_r}):")
             print(f"  Total input reads:               {total_filter_input:>10}")
             if total_filter_input > 0:
                 print(f"  Total passed reads:              {total_filter_passed:>10} ({total_filter_passed/total_filter_input*100:>5.1f}%)")
-                print(f"    Left passed:                   {left_passed:>10} ({left_passed/left_total*100:>5.1f}%)")
-                print(f"    Right passed:                  {right_passed:>10} ({right_passed/right_total*100:>5.1f}%)")
+                left_pct = left_passed / left_total * 100 if left_total else 0.0
+                right_pct = right_passed / right_total * 100 if right_total else 0.0
+                print(f"    Left passed:                   {left_passed:>10} ({left_pct:>5.1f}%)")
+                print(f"    Right passed:                  {right_passed:>10} ({right_pct:>5.1f}%)")
             else:
                 print(f"  Total passed reads:              {total_filter_passed:>10}")
         
@@ -1286,7 +1200,7 @@ if __name__ == "__main__":
 def main():
     """Main function"""
     parser = argparse.ArgumentParser(
-        description="TelSeekerPart1_new: Extract telomeric reads using window-based scanning",
+        description="TelSeekerPart1: Extract telomeric reads using terminal read-end ratios",
         formatter_class=argparse.RawTextHelpFormatter
     )
     
@@ -1313,14 +1227,14 @@ def main():
         '--threshold',
         type=float,
         default=None,
-        help='Override TRC threshold for strict mode (default: stringency preset)'
+        help='Compatibility option; ignored by terminal-ratio mode'
     )
     
     parser.add_argument(
         '--check-length',
         type=int,
         default=None,
-        help='Override legacy TRC check length in bp (default: stringency preset)'
+        help='Compatibility option; ignored by terminal-ratio mode'
     )
     
     parser.add_argument(
@@ -1333,7 +1247,7 @@ def main():
     parser.add_argument(
         '--enable-second-filter',
         action='store_true',
-        help='Enable second-level motif count filtering (default: stringency preset)'
+        help='Enable second-level terminal-ratio filtering (default: enabled)'
     )
     
     parser.add_argument(
@@ -1346,14 +1260,36 @@ def main():
         '--min-motif-count',
         type=int,
         default=None,
-        help='Override minimum motif count for second-level filter (default: stringency preset)'
+        help='Compatibility option; ignored by terminal-ratio mode'
     )
 
     parser.add_argument(
         '--telo-read-stringency',
         choices=['strict', 'normal', 'relaxed'],
         default='normal',
-        help='Single control for telomeric read detection strictness: strict uses legacy marker+TRC; normal/relaxed use window-count search (default: normal)'
+        help='Compatibility preset name; terminal telomere reads are controlled by --tel-n/--tel-r/--tel-mm (default: normal)'
+    )
+
+    parser.add_argument(
+        '--tel-n',
+        type=int,
+        default=100,
+        help='Number of motif-length units checked at each read end (default: 100)'
+    )
+
+    parser.add_argument(
+        '--tel-r',
+        type=float,
+        default=0.6,
+        help='Minimum terminal motif-unit hit ratio, computed as hits / tel-n (default: 0.6)'
+    )
+
+    parser.add_argument(
+        '--tel-mm',
+        type=int,
+        choices=[0, 1],
+        default=0,
+        help='Allowed mismatches per motif-length unit, 0 or 1 (default: 0)'
     )
     
     parser.add_argument(
@@ -1388,7 +1324,10 @@ def main():
         enable_second_filter=enable_second_filter,
         min_motif_count=args.min_motif_count,
         overlapping=args.overlapping,
-        telo_read_stringency=args.telo_read_stringency
+        telo_read_stringency=args.telo_read_stringency,
+        tel_n=args.tel_n,
+        tel_r=args.tel_r,
+        tel_mm=args.tel_mm,
     )
     
     extractor.run()

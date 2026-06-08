@@ -268,7 +268,10 @@ def usage():
 	print ("\t--motif ATCG...               Telomere motif (uppercase A/T/C/G); required in telseeker mode, no default")
 	print ("\t--target_ends|-e END [END ...] Target chromosome ends to extend, e.g. Chr01.L Chr01.R, or one text file")
 	print ("\t--telo-read-stringency strict|normal|relaxed")
-	print ("\t                               Telomeric read detection strictness (default: normal)")
+	print ("\t                               Compatibility preset name (default: normal)")
+	print ("\t--tel-n num                   Motif-length units checked at each read end for tel_reads (default: 100)")
+	print ("\t--tel-r num                   Minimum terminal hit ratio, hits/tel-n (default: 0.6)")
+	print ("\t--tel-mm 0|1                  Allowed mismatches per motif-length unit (default: 0)")
 	print ("\t--work num                    Number of chromosome ends to process in parallel (default: 1)")
 	print ("\tNote: telomere checking is independent; pass target ends with -e/--target_ends")
 
@@ -326,7 +329,13 @@ def getoptions():
 	parser.add_argument('--telo-read-stringency',
 	                    choices=['strict', 'normal', 'relaxed'],
 	                    default='normal',
-	                    help='Telomeric read detection strictness for telseeker mode (default: normal)')
+	                    help='Compatibility preset name for telseeker mode (default: normal)')
+	parser.add_argument('--tel-n', type=int, default=100,
+	                    help='Number of motif-length units checked at each read end for tel_reads (default: 100)')
+	parser.add_argument('--tel-r', type=float, default=0.6,
+	                    help='Minimum terminal motif-unit hit ratio for tel_reads, computed as hits/tel-n (default: 0.6)')
+	parser.add_argument('--tel-mm', type=int, choices=[0, 1], default=0,
+	                    help='Allowed mismatches per motif-length unit for tel_reads, 0 or 1 (default: 0)')
 	parser.add_argument('--work', '-w', type=int, default=1, help='Number of parallel workers (default: 1)')
 
 
@@ -479,13 +488,20 @@ def getoptions():
 
 		# Work parameter for parallel processing
 		work = args.work if args.work else 1
+		if args.tel_n <= 0:
+			print("--tel-n must be greater than 0")
+			sys.exit()
+		if args.tel_r <= 0 or args.tel_r > 1:
+			print("--tel-r must be in the interval (0, 1]")
+			sys.exit()
 
 		# Note: flag parameter is not needed for telseeker mode
 
 		return [args.mode, args.remove, args.thread or '20', reads_file, args.out,
 		        genome_file, motif, work, args.edge, args.filterDepthHifi, args.filterDepthOnt,
 		        args.MaximumExtensionLength, args.MaximumExtensionRound, data_type, ont_reads,
-		        target_ends, args.telo_read_stringency], kparameters, resume_params
+		        target_ends, args.telo_read_stringency,
+		        {'tel_n': args.tel_n, 'tel_r': args.tel_r, 'tel_mm': args.tel_mm}], kparameters, resume_params
 
 	elif args.mode == "ctglinker":
 		# Check files required for ctglinker mode
@@ -1327,7 +1343,7 @@ elif parameter[0] == "ctglinker":
 elif parameter[0] == "telseeker":
     # The parameter list should already contain readsDict, maxReadsLen, hifiSeedLen, ontSeedLen
     # from the processing above
-    # Expected structure: [mode, remove, thread, reads, out, genome_fasta, motif, work, edge, filterDepthHifi, filterDepthOnt, MaximumExtensionLength, MaximumExtensionRound, data_type, ont_reads, target_ends, telo_read_stringency, readsDict, maxReadsLen, hifiSeedLen, ontSeedLen, original_reads_info, ont_readsdict]
+    # Expected structure: [mode, remove, thread, reads, out, genome_fasta, motif, work, edge, filterDepthHifi, filterDepthOnt, MaximumExtensionLength, MaximumExtensionRound, data_type, ont_reads, target_ends, telo_read_stringency, tel_read_params, readsDict, maxReadsLen, hifiSeedLen, ontSeedLen, original_reads_info, ont_readsdict]
     print(f"TelSeeker parameter list length: {len(parameter)}")
     print(f"TelSeeker parameters: {[str(p)[:50] + '...' if isinstance(p, str) and len(str(p)) > 50 else p for p in parameter]}")
 

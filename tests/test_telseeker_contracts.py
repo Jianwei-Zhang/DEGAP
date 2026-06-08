@@ -19,7 +19,7 @@ from TelSeekerPart2 import finalize_chr_end_result
 
 
 class TelSeekerContractTests(unittest.TestCase):
-    def make_telseeker_parameter(self, tmp_path: Path, telo_read_stringency=None):
+    def make_telseeker_parameter(self, tmp_path: Path, telo_read_stringency=None, tel_read_params=None):
         genome = tmp_path / "genome.fa"
         genome.write_text(">Chr01\nACGT\n")
         original_reads_info = {
@@ -48,6 +48,8 @@ class TelSeekerContractTests(unittest.TestCase):
         ]
         if telo_read_stringency is not None:
             parameter.append(telo_read_stringency)
+        if tel_read_params is not None:
+            parameter.append(tel_read_params)
         parameter.extend([
             "hifi_reads.idx",
             1000,
@@ -68,6 +70,23 @@ class TelSeekerContractTests(unittest.TestCase):
             )
 
             self.assertEqual(runner.telo_read_stringency, "relaxed")
+
+    def test_init_reads_terminal_tel_read_parameters(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+
+            runner = TelSeeker(
+                self.make_telseeker_parameter(
+                    tmp_path,
+                    "normal",
+                    {"tel_n": 80, "tel_r": 0.7, "tel_mm": 1},
+                ),
+                [41, 20, False],
+            )
+
+            self.assertEqual(runner.tel_n, 80)
+            self.assertEqual(runner.tel_r, 0.7)
+            self.assertEqual(runner.tel_mm, 1)
 
     def test_step0_load_target_ends_writes_part2_input_file(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -153,12 +172,18 @@ class TelSeekerContractTests(unittest.TestCase):
                 runner.motif = "TTAGGG"
                 runner.thread = 20
                 runner.telo_read_stringency = "relaxed"
+                runner.tel_n = 80
+                runner.tel_r = 0.7
+                runner.tel_mm = 1
 
                 runner._step1_extract_telomeric_reads()
             finally:
                 TelSeekerPart1.TeloReadsExtractor = original_extractor
 
             self.assertEqual(captured["telo_read_stringency"], "relaxed")
+            self.assertEqual(captured["tel_n"], 80)
+            self.assertEqual(captured["tel_r"], 0.7)
+            self.assertEqual(captured["tel_mm"], 1)
 
     def test_parse_linker_info_reads_extension_metadata(self):
         with tempfile.TemporaryDirectory() as tmp:

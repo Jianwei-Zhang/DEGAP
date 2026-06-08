@@ -19,57 +19,84 @@ def require_part1_api(name):
     return getattr(TelSeekerPart1, name)
 
 
-class TeloReadWindowCountTests(unittest.TestCase):
-    def test_window_count_detects_spaced_telomere_repeats_without_double_marker(self):
-        classify = require_part1_api("classify_read_by_window_counts")
-
-        sequence = ("TTAGGGAA" * 6) + ("C" * 200)
-        self.assertNotIn("TTAGGGTTAGGG", sequence)
+class TeloReadTerminalRatioTests(unittest.TestCase):
+    def test_terminal_ratio_detects_forward_telomere_end(self):
+        classify = require_part1_api("classify_read_by_terminal_telomere")
 
         result = classify(
-            sequence,
+            ("TTAGGG" * 60) + ("C" * 300),
             motif="TTAGGG",
-            window_size=1000,
-            min_window_repeats=5,
-            min_window_density=5.0,
+            tel_n=100,
+            tel_r=0.6,
+            tel_mm=0,
         )
 
         self.assertTrue(result["passed"])
         self.assertEqual(result["side"], "right")
-        self.assertEqual(result["forward_count"], 6)
-        self.assertEqual(result["reverse_count"], 0)
+        self.assertEqual(result["forward_hits"], 60)
+        self.assertEqual(result["reverse_hits"], 0)
 
-    def test_window_count_keeps_reverse_complement_direction(self):
-        classify = require_part1_api("classify_read_by_window_counts")
-
-        sequence = ("CCCTAAAA" * 6) + ("G" * 200)
+    def test_terminal_ratio_detects_reverse_complement_telomere_end(self):
+        classify = require_part1_api("classify_read_by_terminal_telomere")
 
         result = classify(
-            sequence,
+            ("CCCTAA" * 60) + ("G" * 300),
             motif="TTAGGG",
-            window_size=1000,
-            min_window_repeats=5,
-            min_window_density=5.0,
+            tel_n=100,
+            tel_r=0.6,
+            tel_mm=0,
         )
 
         self.assertTrue(result["passed"])
         self.assertEqual(result["side"], "left")
-        self.assertEqual(result["forward_count"], 0)
-        self.assertEqual(result["reverse_count"], 6)
+        self.assertEqual(result["forward_hits"], 0)
+        self.assertEqual(result["reverse_hits"], 60)
 
-    def test_window_count_rejects_low_density_noise(self):
-        classify = require_part1_api("classify_read_by_window_counts")
+    def test_terminal_ratio_rejects_internal_telomere_signal(self):
+        classify = require_part1_api("classify_read_by_terminal_telomere")
 
         result = classify(
-            "A" * 500 + "TTAGGG" + "C" * 500,
+            ("A" * 600) + ("TTAGGG" * 80) + ("C" * 600),
             motif="TTAGGG",
-            window_size=1000,
-            min_window_repeats=5,
-            min_window_density=5.0,
+            tel_n=100,
+            tel_r=0.6,
+            tel_mm=0,
         )
 
         self.assertFalse(result["passed"])
         self.assertIsNone(result["side"])
+
+    def test_terminal_scan_slides_one_base_after_a_missed_window(self):
+        rotations = set(TelSeekerPart1.motif_rotations("TTAGGG"))
+        count_hits = require_part1_api("count_terminal_telomere_hits")
+
+        self.assertEqual(
+            count_hits("TTAGGGATAGGGT", rotations, motif_length=6, mismatch=0),
+            2,
+        )
+
+    def test_terminal_ratio_can_allow_one_mismatch_per_motif_unit(self):
+        classify = require_part1_api("classify_read_by_terminal_telomere")
+
+        strict_result = classify("TTAGGA", "TTAGGG", tel_n=1, tel_r=1.0, tel_mm=0)
+        tolerant_result = classify("TTAGGA", "TTAGGG", tel_n=1, tel_r=1.0, tel_mm=1)
+
+        self.assertFalse(strict_result["passed"])
+        self.assertTrue(tolerant_result["passed"])
+
+    def test_terminal_ratio_reports_both_direction_passes(self):
+        classify = require_part1_api("classify_read_by_terminal_telomere")
+
+        result = classify(
+            ("CCCTAA" * 3) + ("A" * 20) + ("TTAGGG" * 3),
+            "TTAGGG",
+            tel_n=3,
+            tel_r=1.0,
+            tel_mm=0,
+        )
+
+        self.assertTrue(result["left_pass"])
+        self.assertTrue(result["right_pass"])
 
 
 class TeloReadWorkerStringencyTests(unittest.TestCase):
@@ -79,7 +106,7 @@ class TeloReadWorkerStringencyTests(unittest.TestCase):
             input_file = tmp_path / "reads.fa"
             input_file.write_text(
                 ">spaced_forward\n"
-                + ("TTAGGGAA" * 6)
+                + ("TTAGGG" * 3)
                 + ("C" * 200)
                 + "\n"
             )
@@ -88,6 +115,9 @@ class TeloReadWorkerStringencyTests(unittest.TestCase):
                 output_dir=str(tmp_path),
                 motif="TTAGGG",
                 telo_read_stringency="normal",
+                tel_n=4,
+                tel_r=0.5,
+                tel_mm=0,
             )
             script_path = extractor._create_processing_script(str(tmp_path))
 
@@ -114,6 +144,9 @@ class TeloReadCliStringencyTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("--telo-read-stringency", result.stdout)
+        self.assertIn("--tel-n", result.stdout)
+        self.assertIn("--tel-r", result.stdout)
+        self.assertIn("--tel-mm", result.stdout)
         self.assertIn("strict", result.stdout)
         self.assertIn("relaxed", result.stdout)
 

@@ -37,14 +37,15 @@ class TelSeeker:
                 [12] MaximumExtensionRound: Max extension rounds (default: 20)
                 [13] data_type: 'hifi', 'ont', or 'mixed'
                 [14] ont_reads: ONT reads file path (or None)
-                [15] target_ends: Target chromosome ends to extend
-                [16] telo_read_stringency: strict|normal|relaxed (optional)
-                [17] readsDict: Path to HiFi reads index
-                [18] maxReadsLen: Maximum read length
-                [19] hifiSeedLen: HiFi seed length
-                [20] ontSeedLen: ONT seed length (or None)
-                [21] original_reads_info: Dict with file paths
-                [22] ont_readsdict: Path to ONT reads index (or None)
+	                [15] target_ends: Target chromosome ends to extend
+	                [16] telo_read_stringency: strict|normal|relaxed (optional)
+	                [17] tel_read_params: Dict with tel_n/tel_r/tel_mm (optional)
+	                [18] readsDict: Path to HiFi reads index
+	                [19] maxReadsLen: Maximum read length
+	                [20] hifiSeedLen: HiFi seed length
+	                [21] ontSeedLen: ONT seed length (or None)
+	                [22] original_reads_info: Dict with file paths
+	                [23] ont_readsdict: Path to ONT reads index (or None)
 
             kparameters: List of 2-3 k-mer parameters
                 [0] kmer_size: K-mer size (default: 41)
@@ -79,6 +80,9 @@ class TelSeeker:
         self.filterDepthOnt = parameter[10]
         self.MaximumExtensionLength = parameter[11]
         self.telo_read_stringency = "normal"
+        self.tel_n = 100
+        self.tel_r = 0.6
+        self.tel_mm = 0
 
         # Handle current target-end format and older internal formats
         if len(parameter) >= 22 and isinstance(parameter[15], list):
@@ -89,6 +93,12 @@ class TelSeeker:
             offset = 16
             if len(parameter) > offset and parameter[offset] in ["strict", "normal", "relaxed"]:
                 self.telo_read_stringency = parameter[offset]
+                offset += 1
+            if len(parameter) > offset and isinstance(parameter[offset], dict):
+                tel_params = parameter[offset]
+                self.tel_n = tel_params.get("tel_n", self.tel_n)
+                self.tel_r = tel_params.get("tel_r", self.tel_r)
+                self.tel_mm = tel_params.get("tel_mm", self.tel_mm)
                 offset += 1
             self.readsDict = parameter[offset]
             self.maxReadsLen = parameter[offset + 1]
@@ -167,6 +177,12 @@ class TelSeeker:
 
         if self.telo_read_stringency not in ['strict', 'normal', 'relaxed']:
             raise ValueError(f"Invalid telo_read_stringency: {self.telo_read_stringency}")
+        if self.tel_n <= 0:
+            raise ValueError(f"Invalid tel_n: {self.tel_n}")
+        if not (0 < self.tel_r <= 1):
+            raise ValueError(f"Invalid tel_r: {self.tel_r}")
+        if self.tel_mm not in [0, 1]:
+            raise ValueError(f"Invalid tel_mm: {self.tel_mm}")
         
         # Validate mixed mode requirements
         if self.data_type == 'mixed' and not self.ont_reads:
@@ -246,6 +262,9 @@ class TelSeeker:
         print(f"  Parallel workers:   {self.work}")
         print(f"  Edge tolerance:     {self.edge} bp")
         print(f"  Telo read stringency: {self.telo_read_stringency}")
+        print(f"  Tel read units:     {self.tel_n}")
+        print(f"  Tel read ratio:     {self.tel_r}")
+        print(f"  Tel read mismatch:  {self.tel_mm}")
         if self.MaximumExtensionLength:
             print(f"  Max extension:      {self.MaximumExtensionLength} bp")
         
@@ -464,7 +483,10 @@ class TelSeeker:
                 threads=self.thread,                 # Use thread parameter for parallel processing
                 batch_size=1000,                     # Batch size (default 1000 reads)
                 overlapping=False,                   # Non-overlapping count
-                telo_read_stringency=self.telo_read_stringency
+                telo_read_stringency=self.telo_read_stringency,
+                tel_n=self.tel_n,
+                tel_r=self.tel_r,
+                tel_mm=self.tel_mm
             )
             
             # Run extraction

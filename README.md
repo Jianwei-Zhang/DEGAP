@@ -138,7 +138,9 @@ python bin/DEGAP.py --mode telseeker \
     --ont ./path/ONTReads.fa \
     --out ./path/Output \
     --work 4 \
-    --telo-read-stringency normal \
+    --tel-n 100 \
+    --tel-r 0.6 \
+    --tel-mm 0 \
     --MaximumExtensionRound 25 \
     --kmer_filter \
     -t 20
@@ -181,13 +183,13 @@ of the plots is recommended before using any generated target list. If you
 already know the target chromosome ends, skip `TelSeekerCheck.py` and pass them
 directly with `-e`.
 
-Telomeric read discovery is controlled by one parameter:
-`--telo-read-stringency strict|normal|relaxed`. `strict` keeps the legacy
-marker+TRC behavior, while `normal` and `relaxed` use a window-count search that
-can recover reads with interrupted telomere repeats. If TelSeeker reports
-`No telomeric reads found after Step 1`, or `part1.telo.reads/Global.*.telo.reads.fa`
-is empty, rerun with `--telo-read-stringency relaxed` to lower the telo-read
-discovery stringency:
+Telomeric read discovery checks both physical read ends. At each end, TelSeeker
+scans `--tel-n * len(--motif)` bases with motif rotations and reverse-complement
+rotations. A read end passes when `hits / --tel-n >= --tel-r`; `--tel-mm` allows
+0 or 1 mismatch per motif-length unit. With the default motif `TTAGGG`, the
+default `--tel-n 100` checks 600 bp at each read end and `--tel-r 0.6` requires
+at least 60 motif-unit hits. If Step 1 finds too few telo reads, lower `--tel-r`,
+allow `--tel-mm 1`, or reduce `--tel-n`:
 
 ```bash
 python bin/DEGAP.py --mode telseeker \
@@ -196,7 +198,8 @@ python bin/DEGAP.py --mode telseeker \
     -e Chr01.L Chr01.R \
     --hifi ./path/HiFiReads.fa \
     --out ./path/Output \
-    --telo-read-stringency relaxed \
+    --tel-r 0.5 \
+    --tel-mm 1 \
     --MaximumExtensionRound 25
 ```
 
