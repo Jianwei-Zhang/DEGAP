@@ -10,6 +10,7 @@ if str(BIN_DIR) not in sys.path:
     sys.path.insert(0, str(BIN_DIR))
 
 import TelSeekerCheck
+import TelSeekerMotifPlot
 
 
 def require_checker_api(name):
@@ -137,6 +138,10 @@ class TelomereCheckerIntegrationTests(unittest.TestCase):
                     check_dir / "need_extension_chr_end.txt"
                 ).read_text().splitlines()
                 self.assertEqual(need_extension, ["Chr01.R"])
+
+                if TelSeekerMotifPlot.HAS_MATPLOTLIB:
+                    self.assertTrue((check_dir / "all_chromosomes_combined.png").exists())
+                    self.assertTrue((check_dir / "Chr01_telomere_motif.png").exists())
 
 
 class TelSeekerCheckCliTests(unittest.TestCase):

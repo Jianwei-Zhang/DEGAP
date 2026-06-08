@@ -27,219 +27,16 @@ from datetime import datetime
 
 try:
     from Bio import SeqIO
-    from Bio.Seq import Seq
     HAS_BIOPYTHON = True
 except ImportError:
     HAS_BIOPYTHON = False
     print("Warning: BioPython not found. Some features may be limited.")
 
-try:
-    import matplotlib
-    matplotlib.use('Agg')  # Non-interactive backend
-    import matplotlib.pyplot as plt
-    from matplotlib.ticker import FuncFormatter
-    HAS_MATPLOTLIB = True
-except ImportError:
-    HAS_MATPLOTLIB = False
-    print("Warning: Matplotlib not found. Motif distribution plots will be skipped.")
-
-
-# ============================================================================
-# Telomere Motif Distribution Visualization (从 visual_telo_motif.py 移植)
-# ============================================================================
-
-def reverse_complement(seq: str) -> str:
-    """Get reverse complement of a DNA sequence."""
-    if HAS_BIOPYTHON:
-        return str(Seq(seq).reverse_complement())
-    else:
-        # Fallback without BioPython
-        complement = {'A': 'T', 'T': 'A', 'G': 'C', 'C': 'G',
-                      'a': 't', 't': 'a', 'g': 'c', 'c': 'g'}
-        return ''.join(complement.get(b, b) for b in reversed(seq))
-
-
-def count_motif_in_window(sequence: str, motif: str, motif_rc: str) -> Tuple[int, int]:
-    """
-    Count occurrences of motif and its reverse complement in a sequence window.
-    
-    Args:
-        sequence: DNA sequence string
-        motif: Forward motif pattern
-        motif_rc: Reverse complement motif pattern
-    
-    Returns:
-        Tuple of (forward_count, rc_count)
-    """
-    forward_count = len(re.findall(f'(?={motif})', sequence, re.IGNORECASE))
-    rc_count = len(re.findall(f'(?={motif_rc})', sequence, re.IGNORECASE))
-    return forward_count, rc_count
-
-
-def process_chromosome_motif(seq_record: Any, motif: str, motif_rc: str, window_size: int = 1000) -> Tuple[List[int], List[int], List[int]]:
-    """
-    Process a chromosome and count motifs in non-overlapping windows.
-    
-    Args:
-        seq_record: BioPython SeqRecord object
-        motif: Forward motif pattern
-        motif_rc: Reverse complement motif pattern
-        window_size: Size of non-overlapping windows (default: 1000)
-    
-    Returns:
-        Tuple of (positions, forward_counts, rc_counts)
-    """
-    sequence = str(seq_record.seq).upper()
-    seq_length = len(sequence)
-    
-    positions = []
-    forward_counts = []
-    rc_counts = []
-    
-    for start in range(0, seq_length, window_size):
-        end = min(start + window_size, seq_length)
-        window_seq = sequence[start:end]
-        
-        # Middle position of the window
-        mid_pos = start + (end - start) // 2
-        
-        forward_count, rc_count = count_motif_in_window(window_seq, motif, motif_rc)
-        
-        positions.append(mid_pos)
-        forward_counts.append(forward_count)
-        rc_counts.append(rc_count)
-    
-    return positions, forward_counts, rc_counts
-
-
-def plot_single_chromosome_motif(chrom_name: str, positions: List[int], forward_counts: List[int], 
-                                  rc_counts: List[int], motif: str, motif_rc: str, output_dir: Path) -> Optional[Path]:
-    """
-    Create and save a line plot for a single chromosome.
-    
-    Returns:
-        Path to saved image file, or None if failed
-    """
-    if not HAS_MATPLOTLIB:
-        return None
-    
-    try:
-        fig, ax = plt.subplots(figsize=(12, 6))
-        
-        # Plot lines
-        ax.plot(positions, forward_counts, color='blue', linewidth=1, alpha=0.7, label=f'{motif}')
-        ax.plot(positions, rc_counts, color='purple', linewidth=1, alpha=0.7, label=f'{motif_rc}')
-        
-        # Format x-axis to show Mb
-        def format_mb(x, pos):
-            return f'{x/1e6:.1f}'
-        ax.xaxis.set_major_formatter(FuncFormatter(format_mb))
-        
-        # Labels and title
-        ax.set_xlabel('Position (Mb)', fontsize=12)
-        ax.set_ylabel('Motif Count', fontsize=12)
-        ax.set_title(f'Telomere Motif Distribution - {chrom_name}', fontsize=14, fontweight='bold')
-        
-        # Legend in upper right
-        ax.legend(loc='upper right', framealpha=0.9)
-        
-        # Grid for better readability
-        ax.grid(True, alpha=0.3, linestyle='--')
-        
-        # Tight layout
-        plt.tight_layout()
-        
-        # Save figure
-        output_file = output_dir / f'{chrom_name}_telomere_motif.png'
-        plt.savefig(output_file, dpi=300, bbox_inches='tight')
-        plt.close()
-        
-        return output_file
-    except Exception as e:
-        print(f"  Warning: Failed to plot {chrom_name}: {e}")
-        return None
-
-
-def plot_combined_chromosomes_motif(chrom_data: List[Tuple], motif: str, motif_rc: str, output_dir: Path) -> Optional[Path]:
-    """
-    Create a combined plot with all chromosomes in subplots with aligned x-axis.
-    
-    Args:
-        chrom_data: List of tuples (chrom_name, positions, forward_counts, rc_counts, max_pos)
-        motif: Forward motif sequence
-        motif_rc: Reverse complement motif sequence
-        output_dir: Output directory path
-    
-    Returns:
-        Path to saved image file, or None if failed
-    """
-    if not HAS_MATPLOTLIB:
-        return None
-    
-    n_chroms = len(chrom_data)
-    if n_chroms == 0:
-        return None
-    
-    try:
-        # Find global max position for x-axis alignment
-        global_max_pos = max(data[4] for data in chrom_data)
-        
-        # Calculate figure size based on number of chromosomes
-        fig_height = max(3 * n_chroms, 8)
-        fig, axes = plt.subplots(n_chroms, 1, figsize=(14, fig_height), sharex=True)
-        
-        # Handle single chromosome case
-        if n_chroms == 1:
-            axes = [axes]
-        
-        # Format x-axis to show Mb
-        def format_mb(x, pos):
-            return f'{x/1e6:.1f}'
-        
-        # Plot each chromosome
-        for idx, (chrom_name, positions, forward_counts, rc_counts, max_pos) in enumerate(chrom_data):
-            ax = axes[idx]
-            
-            # Plot lines
-            ax.plot(positions, forward_counts, color='blue', linewidth=1, alpha=0.7, label=f'{motif}')
-            ax.plot(positions, rc_counts, color='purple', linewidth=1, alpha=0.7, label=f'{motif_rc}')
-            
-            # Set y-label and title
-            ax.set_ylabel('Motif Count', fontsize=10)
-            ax.set_title(chrom_name, fontsize=11, fontweight='bold', loc='left')
-            
-            # Add grid
-            ax.grid(True, alpha=0.3, linestyle='--')
-            
-            # Add legend only to the first subplot
-            if idx == 0:
-                ax.legend(loc='upper right', framealpha=0.9, fontsize=9)
-            
-            # Set x-axis limit: start from negative value to shift 0 away from y-axis, end with padding
-            ax.set_xlim(-global_max_pos * 0.02, global_max_pos * 1.02)
-            
-            # Format x-axis
-            ax.xaxis.set_major_formatter(FuncFormatter(format_mb))
-        
-        # Set x-label only for the bottom subplot
-        axes[-1].set_xlabel('Position (Mb)', fontsize=12)
-        
-        # Overall title
-        fig.suptitle('Telomere Motif Distribution - All Chromosomes', 
-                     fontsize=14, fontweight='bold', y=0.995)
-        
-        # Adjust layout
-        plt.tight_layout(rect=[0, 0, 1, 0.995])
-        
-        # Save figure
-        output_file = output_dir / 'all_chromosomes_combined.png'
-        plt.savefig(output_file, dpi=300, bbox_inches='tight')
-        plt.close()
-        
-        return output_file
-    except Exception as e:
-        print(f"  Warning: Failed to create combined plot: {e}")
-        return None
+from TelSeekerMotifPlot import (
+    DEFAULT_MOTIF_PLOT_WINDOW_SIZE,
+    HAS_MATPLOTLIB,
+    generate_motif_distribution_plots,
+)
 
 
 # ============================================================================
@@ -1612,53 +1409,14 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
     chrom_names_list = []
     if HAS_BIOPYTHON and HAS_MATPLOTLIB and final_genome_file.exists():
         try:
-            motif_rc = reverse_complement(motif)
-            window_size = 1000
-            
-            print(f"  Motif: {motif} / {motif_rc}")
-            print(f"  Window size: {window_size} bp")
-            print(f"  Genome: {final_genome_file.name}")
-            
-            # Process all chromosomes
-            all_chrom_data = []
-            for record in SeqIO.parse(final_genome_file, 'fasta'):
-                chrom_name = record.id
-                chrom_length = len(record.seq)
-                
-                print(f"    Processing {chrom_name} ({chrom_length:,} bp)...", end=" ")
-                
-                # Process chromosome
-                positions, forward_counts, rc_counts = process_chromosome_motif(
-                    record, motif, motif_rc, window_size
-                )
-                
-                # Store data for combined plot
-                max_pos = max(positions) if positions else 0
-                all_chrom_data.append((chrom_name, positions, forward_counts, rc_counts, max_pos))
-                chrom_names_list.append(chrom_name)
-                
-                # Create individual plot
-                img_path = plot_single_chromosome_motif(
-                    chrom_name, positions, forward_counts, rc_counts,
-                    motif, motif_rc, output_path.parent
-                )
-                if img_path:
-                    motif_images.append(img_path.name)
-                    print("✓")
-                else:
-                    print("✗")
-            
-            # Generate combined plot (include all chromosomes)
-            if all_chrom_data:
-                print("    Generating combined plot...", end=" ")
-                combined_img = plot_combined_chromosomes_motif(
-                    all_chrom_data, motif, motif_rc, output_path.parent
-                )
-                if combined_img:
-                    print("✓")
-                    print(f"  ✓ Generated {len(motif_images)} individual plots + 1 combined plot (showing {len(all_chrom_data)} chromosomes)")
-                else:
-                    print("✗")
+            motif_images, chrom_names_list, combined_img = generate_motif_distribution_plots(
+                final_genome_file,
+                motif,
+                output_path.parent,
+                window_size=DEFAULT_MOTIF_PLOT_WINDOW_SIZE,
+            )
+            if combined_img:
+                print(f"  ✓ Generated {len(motif_images)} individual plots + 1 combined plot (showing {len(chrom_names_list)} chromosomes)")
         except Exception as e:
             print(f"  ⚠ Error generating motif plots: {e}")
     else:

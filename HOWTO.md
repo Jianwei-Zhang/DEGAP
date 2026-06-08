@@ -240,12 +240,13 @@ Then pass the generated target list:
 ```
 
 Manually review the `TelSeekerCheck.py` result before entering TelSeeker. The
-window-count check is an auxiliary target-discovery step and can be inaccurate
-for some assemblies or motifs. It scans up to 100 kb from each chromosome end in
-10 kb bins, counts both the telomere motif and its reverse complement, and
-reports terminal repeat density plus terminal/internal enrichment in
-`genome.telomere.check.csv`. Review `need_extension_chr_end.txt` and
-`uncertain_chr_end.txt` manually before choosing TelSeeker targets. If you
+check step generates whole-genome motif distribution plots with the same 1 kb
+plotting window used by the final TelSeeker report:
+`all_chromosomes_combined.png` and one `<chromosome>_telomere_motif.png` image
+per chromosome. Use these plots to decide which ends should be passed to
+TelSeeker. The legacy helper files `genome.telomere.check.csv`,
+`need_extension_chr_end.txt`, and `uncertain_chr_end.txt` are still written for
+compatibility, but should be manually reviewed before choosing targets. If you
 already have clear target ends, skip `TelSeekerCheck.py` and pass them directly
 with `-e Chr01.L Chr01.R` or a target file.
 

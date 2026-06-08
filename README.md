@@ -170,14 +170,16 @@ python bin/DEGAP.py --mode telseeker \
 ```
 
 Review the `TelSeekerCheck.py` output before using it as TelSeeker input. The
-window-count check is a helper for target discovery and may require manual
-confirmation against your assembly context. It scans up to 100 kb from each
-chromosome end in 10 kb bins, counts both the telomere motif and its reverse
-complement, and reports terminal repeat density plus internal-repeat enrichment.
-Review `genome.telomere.check.csv`, `need_extension_chr_end.txt`, and
-`uncertain_chr_end.txt` before using the generated target list. If you already
-know the target chromosome ends, skip `TelSeekerCheck.py` and pass them directly
-with `-e`.
+check step now also generates whole-genome motif distribution plots using the
+same 1 kb plotting window as the final TelSeeker report:
+`all_chromosomes_combined.png` plus one `<chromosome>_telomere_motif.png` image
+per chromosome. Use these plots to confirm which chromosome ends should be
+entered as TelSeeker targets. The legacy helper files
+`genome.telomere.check.csv`, `need_extension_chr_end.txt`, and
+`uncertain_chr_end.txt` are still written for compatibility, but manual review
+of the plots is recommended before using any generated target list. If you
+already know the target chromosome ends, skip `TelSeekerCheck.py` and pass them
+directly with `-e`.
 
 Telomeric read discovery is controlled by one parameter:
 `--telo-read-stringency strict|normal|relaxed`. `strict` keeps the legacy

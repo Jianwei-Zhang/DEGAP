@@ -11,6 +11,8 @@ Default method:
 - Classify an end as telomeric only when the terminal bin has enough repeat
   signal and is enriched over internal bins in the checked region
 - Keep the historical TRC field in the report for review and compatibility
+- Generate whole-genome motif distribution plots for visual review using the
+  same 1kb plotting window as the final TelSeeker report
 
 Usage:
     python TelSeekerCheck.py --genome genome.fa --motif TTAGGG --out output_dir
@@ -21,7 +23,9 @@ Output:
         ├── genome.telomere.check.left.2kb.fa  # Left end sequences (2kb)
         ├── genome.telomere.check.right.2kb.fa # Right end sequences (2kb)
         ├── need_extension_chr_end.txt         # Untelomeric ends
-        └── uncertain_chr_end.txt              # Ends requiring manual review
+        ├── uncertain_chr_end.txt              # Ends requiring manual review
+        ├── all_chromosomes_combined.png       # Whole-genome motif plot
+        └── <chromosome>_telomere_motif.png    # Per-chromosome motif plots
 """
 
 import os
@@ -34,6 +38,11 @@ from typing import List, Tuple
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
+
+from TelSeekerMotifPlot import (
+    DEFAULT_MOTIF_PLOT_WINDOW_SIZE,
+    generate_motif_distribution_plots,
+)
 
 
 # ============================================================================
@@ -393,7 +402,8 @@ class TelomereChecker:
                  min_terminal_repeats: int = 100,
                  min_terminal_density: float = 10.0,
                  min_terminal_to_internal_ratio: float = 3.0,
-                 method: str = "window_count"):
+                 method: str = "window_count",
+                 plot_window_size: int = DEFAULT_MOTIF_PLOT_WINDOW_SIZE):
         """
         Initialize TelomereChecker
 
@@ -411,6 +421,7 @@ class TelomereChecker:
             min_terminal_density: Minimum terminal motif hits per kb for telomeric call
             min_terminal_to_internal_ratio: Required terminal/internal density enrichment
             method: Detection method, either 'window_count' or 'legacy_trc'
+            plot_window_size: Whole-genome motif plot window size (default: 1000bp)
         """
         if method not in {"window_count", "legacy_trc"}:
             raise ValueError("method must be 'window_count' or 'legacy_trc'")
@@ -428,6 +439,7 @@ class TelomereChecker:
         self.min_terminal_density = min_terminal_density
         self.min_terminal_to_internal_ratio = min_terminal_to_internal_ratio
         self.method = method
+        self.plot_window_size = plot_window_size
         self.kmer_length = len(motif) - 2
 
         # Window markers (motif*2)
@@ -456,6 +468,7 @@ class TelomereChecker:
         print(f"  Min terminal/internal ratio: {self.min_terminal_to_internal_ratio:.2f}")
         print(f"  Window flank: {self.window_flank} bp")
         print(f"  Extract length: {self.extract_length} bp (for output)")
+        print(f"  Motif plot window size: {self.plot_window_size} bp")
         print()
 
         # Step 1: Create output directory
@@ -470,6 +483,7 @@ class TelomereChecker:
         self._write_uncertain_list()
         self._write_left_sequences()
         self._write_right_sequences()
+        self._write_motif_plots()
 
         # Step 4: Print summary
         self._print_summary()
@@ -718,6 +732,24 @@ class TelomereChecker:
             SeqIO.write(self.right_sequences, f, 'fasta')
         
         print(f"  Written {len(self.right_sequences)} sequences")
+
+    def _write_motif_plots(self):
+        """Generate whole-genome motif plots for visual telomere review."""
+        print(f"[TelomereChecker] Generating whole-genome motif plots in: {self.check_dir}")
+
+        motif_images, chrom_names, combined_img = generate_motif_distribution_plots(
+            Path(self.genome_file),
+            self.motif,
+            Path(self.check_dir),
+            window_size=self.plot_window_size,
+        )
+
+        if combined_img:
+            print(f"  Written {len(motif_images)} individual plots + 1 combined plot")
+        elif chrom_names:
+            print(f"  Written {len(motif_images)} individual plots; combined plot was skipped")
+        else:
+            print("  Motif plots skipped")
     
     def _print_summary(self):
         """Print summary statistics with window information"""
@@ -766,6 +798,7 @@ Window-count method (default):
   - Counts motif and reverse-complement repeats in 10kb bins
   - Requires terminal repeat signal and terminal/internal enrichment
   - Writes uncertain_chr_end.txt for ambiguous ends requiring manual review
+  - Also writes whole-genome motif plots in 1kb bins for visual review
 
 Legacy TRC method:
   python TelSeekerCheck.py --genome genome.fa --motif TTAGGG --out results --method legacy_trc
@@ -776,7 +809,9 @@ Output structure:
     ├── need_extension_chr_end.txt         # List of ends needing extension
     ├── uncertain_chr_end.txt              # List of ambiguous ends
     ├── genome.telomere.check.left.2kb.fa  # Left end sequences
-    └── genome.telomere.check.right.2kb.fa # Right end sequences
+    ├── genome.telomere.check.right.2kb.fa # Right end sequences
+    ├── all_chromosomes_combined.png       # Whole-genome motif plot
+    └── <chromosome>_telomere_motif.png    # Per-chromosome motif plot
         """
     )
 
@@ -841,6 +876,13 @@ Output structure:
     )
 
     parser.add_argument(
+        '--plot-window-size',
+        type=int,
+        default=DEFAULT_MOTIF_PLOT_WINDOW_SIZE,
+        help='Whole-genome motif plot window size in bp (default: 1000)'
+    )
+
+    parser.add_argument(
         '--terminal-windows',
         type=int,
         default=1,
@@ -889,7 +931,8 @@ Output structure:
         min_terminal_repeats=args.min_terminal_repeats,
         min_terminal_density=args.min_terminal_density,
         min_terminal_to_internal_ratio=args.min_terminal_to_internal_ratio,
-        method=args.method
+        method=args.method,
+        plot_window_size=args.plot_window_size
     )
 
     checker.run()
