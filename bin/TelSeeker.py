@@ -329,7 +329,7 @@ class TelSeeker:
             print(f"TelSeeker Workflow Completed Successfully")
             print(f"{'='*80}")
             print(f"Output directory: {self.out}")
-            print(f"  - genome.telomere.check/      : Initial telomere quality check")
+            print(f"  - genome.telomere.check/      : Target chromosome end list")
             print(f"  - part1.telo.reads/           : Telomeric reads extraction results")
             print(f"  - part2.chr.end.job/          : Chromosome end extension results")
             print(f"  - part3.integration.results/  : Integration and summary")
@@ -420,123 +420,6 @@ class TelSeeker:
             print(f"  ... and {len(self.target_ends) - 10} more")
         print(f"[Step 0/4] Target list saved to: {need_extension_file}")
         print()
-
-    def _step0_check_telomeres(self):
-        """
-        Step 0: Check telomere quality using terminal window-count method.
-
-        Uses TelSeekerCheck.TelomereChecker to:
-        - Extract 100kb from each chromosome end
-        - Count motif and reverse-complement motif in fixed 10kb bins
-        - Require terminal repeat signal and terminal/internal enrichment
-        - Identify chromosome ends that need telomere extension
-
-        Input:
-            - genome_file (from DEGAP.py)
-
-        Output:
-            - genome.telomere.check/genome.telomere.check.csv
-            - genome.telomere.check/need_extension_chr_end.txt
-            - genome.telomere.check/genome.telomere.check.left.2kb.fa
-            - genome.telomere.check/genome.telomere.check.right.2kb.fa
-        """
-        print(f"[Step 0/4] Checking telomere quality (window_count method)...")
-        print(f"-" * 80)
-
-        # Check if Step 0 output already exists (skip mechanism)
-        check_dir = self.out / "genome.telomere.check"
-        need_extension_file = check_dir / "need_extension_chr_end.txt"
-        csv_file = check_dir / "genome.telomere.check.csv"
-
-        if self._check_step0_complete(need_extension_file, csv_file):
-            print(f"[Step 0/4] Found existing telomere check results:")
-            print(f"  - {csv_file}")
-            print(f"  - {need_extension_file}")
-
-            # Display summary of ends needing extension
-            if need_extension_file.exists():
-                with open(need_extension_file, 'r') as f:
-                    chr_ends = [line.strip() for line in f if line.strip()]
-                    if chr_ends:
-                        print(f"[Step 0/4] Chromosome ends requiring extension: {len(chr_ends)}")
-                        for chr_end in chr_ends[:5]:  # Show first 5
-                            print(f"    - {chr_end}")
-                        if len(chr_ends) > 5:
-                            print(f"    ... and {len(chr_ends) - 5} more")
-                    else:
-                        print(f"[Step 0/4] All chromosome ends have reached telomeres! ✓")
-
-            print(f"[Step 0/4] Skipping telomere check (already complete) ✓")
-            print()
-            return
-
-        try:
-            # Import TelomereChecker
-            from TelSeekerCheck import TelomereChecker
-
-            # Create checker with terminal window-count method parameters
-            checker = TelomereChecker(
-                genome_file=str(self.genome_file),
-                motif=self.motif,
-                output_dir=str(self.out),
-                trc_threshold=0.7,
-                check_length=100000,
-                extract_length=2000,
-                window_flank=500,
-                window_size=10000,
-                terminal_windows=1,
-                min_terminal_repeats=100,
-                min_terminal_density=10.0,
-                min_terminal_to_internal_ratio=3.0,
-                method="window_count"
-            )
-
-            # Run telomere check
-            print(f"[Step 0/4] Running terminal window-count telomere check...")
-            print(f"  Genome: {self.genome_file}")
-            print(f"  Motif: {self.motif}")
-            print(f"  Check length: 100kb")
-            print(f"  Window size: 10kb")
-            print(f"  Terminal windows: 1")
-            print()
-
-            checker.run()
-
-            # Display results summary
-            if need_extension_file.exists():
-                with open(need_extension_file, 'r') as f:
-                    chr_ends = [line.strip() for line in f if line.strip()]
-                    print(f"\n[Step 0/4] Telomere check complete!")
-                    print(f"  Total chromosome ends requiring extension: {len(chr_ends)}")
-                    if chr_ends:
-                        print(f"  Ends to extend:")
-                        for chr_end in chr_ends[:10]:  # Show first 10
-                            print(f"    - {chr_end}")
-                        if len(chr_ends) > 10:
-                            print(f"    ... and {len(chr_ends) - 10} more")
-
-            print(f"\n[Step 0/4] Telomere quality check complete ✓")
-            print()
-
-        except Exception as e:
-            print(f"\n[Step 0/4] ERROR: Telomere check failed")
-            print(f"  Error: {e}")
-            import traceback
-            traceback.print_exc()
-            raise
-
-    def _check_step0_complete(self, need_extension_file: Path, csv_file: Path) -> bool:
-        """
-        Check if Step 0 (telomere check) is already complete.
-
-        Args:
-            need_extension_file: Path to need_extension_chr_end.txt
-            csv_file: Path to genome.telomere.check.csv
-
-        Returns:
-            True if both files exist, False otherwise
-        """
-        return need_extension_file.exists() and csv_file.exists()
 
     def _step1_extract_telomeric_reads(self):
         """
