@@ -718,8 +718,8 @@ class WorkspaceBuilder:
         logger.info("=" * 80)
     
     def _load_chromosome_ends(self):
-        """Step 1: Read chromosome ends that need extension."""
-        logger.info("[Step 1/6] Loading chromosome ends to process...")
+        """Step 1: Read user-selected target chromosome ends."""
+        logger.info("[Step 1/6] Loading user-selected target chromosome ends...")
         
         need_extension_file = self.out_dir / 'genome.telomere.check' / 'need_extension_chr_end.txt'
         
@@ -733,7 +733,7 @@ class WorkspaceBuilder:
                 if line and not line.startswith('#'):
                     self.chr_ends.append(line)
         
-        logger.info(f"  → Found {len(self.chr_ends)} chromosome ends: {self.chr_ends}")
+        logger.info(f"  → Found {len(self.chr_ends)} target chromosome ends: {self.chr_ends}")
         logger.info("")
     
     def _create_work_directories(self):

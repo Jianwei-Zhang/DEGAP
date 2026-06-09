@@ -317,9 +317,9 @@ class TelSeeker:
             # Step 0: Load target chromosome ends
             self._step0_load_target_ends()
 
-            # Stop early when every chromosome end already has telomeric signal.
+            # Stop early only if the provided target list is explicitly empty.
             if not self._has_chr_ends_needing_extension():
-                print(f"\n[TelSeeker] No untelomeric chromosome ends detected.")
+                print(f"\n[TelSeeker] No target chromosome ends were provided.")
                 print(f"[TelSeeker] Skipping telomeric read extraction, extension, integration, and visualization.")
                 print(f"Output directory: {self.out}")
                 return
@@ -348,7 +348,7 @@ class TelSeeker:
             print(f"TelSeeker Workflow Completed Successfully")
             print(f"{'='*80}")
             print(f"Output directory: {self.out}")
-            print(f"  - genome.telomere.check/      : Target chromosome end list")
+            print(f"  - genome.telomere.check/      : User-provided target chromosome end list")
             print(f"  - part1.telo.reads/           : Telomeric reads extraction results")
             print(f"  - part2.chr.end.job/          : Chromosome end extension results")
             print(f"  - part3.integration.results/  : Integration and summary")
@@ -1179,7 +1179,7 @@ class TelSeeker:
         if not need_extension_file.exists():
             missing_files.append(str(need_extension_file))
             print(f"  ✗ Missing: {need_extension_file}")
-            print(f"     Hint: Run TelSeekerCheck.py first to identify chromosome ends needing extension")
+            print(f"     Hint: Provide target ends with -e/--target_ends; use TelSeekerCheck.py only for manual plots and end sequences")
         else:
             print(f"  ✓ Found: need_extension_chr_end.txt")
         

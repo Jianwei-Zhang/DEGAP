@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-TelSeekerCheck.py - Check if chromosome ends have reached telomeres
+TelSeekerCheck.py - Prepare chromosome-end telomere review files
 
 This script extracts chromosome-end sequences and telomere motif plots for
 manual review before TelSeeker extension.
@@ -446,7 +446,7 @@ class TelomereChecker:
         self.right_sequences = []
         
     def run(self):
-        """Run the complete telomere checking workflow"""
+        """Run the manual telomere review preparation workflow"""
         print("[TelomereChecker] Starting manual telomere review preparation...")
         print(f"  Genome: {self.genome_file}")
         print(f"  Motif: {self.motif}")
@@ -684,7 +684,7 @@ class TelomereChecker:
         print(f"  Written {len(self.results)} records")
     
     def _write_extension_list(self):
-        """Write list of chromosome ends that need extension"""
+        """Write automatically classified untelomeric ends for final-genome QC."""
         extension_file = os.path.join(self.check_dir, "need_extension_chr_end.txt")
         
         print(f"[TelomereChecker] Writing extension list: {extension_file}")
