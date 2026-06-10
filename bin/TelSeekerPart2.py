@@ -672,17 +672,18 @@ class DirectConnectionChecker:
 class WorkspaceBuilder:
     """Handles the creation and setup of chromosome end workspaces."""
     
-    def __init__(self, out_dir: str, genome_file: str):
+    def __init__(self, out_dir: str, genome_file: str, work_base_name: str = 'part2.chr.end.job'):
         """
         Initialize workspace builder.
         
         Args:
             out_dir: Output directory path
             genome_file: Path to genome FASTA file
+            work_base_name: Job directory name under out_dir
         """
         self.out_dir = Path(out_dir)
         self.genome_file = Path(genome_file)
-        self.work_base_dir = self.out_dir / 'part2.chr.end.job'
+        self.work_base_dir = self.out_dir / work_base_name
         self.chr_ends = []
         self.work_paths = {}
         self.seed_length = 0
@@ -2132,7 +2133,7 @@ def select_chr_ends_for_extension(chr_ends: List[str], direct_results: Dict[str,
     ]
 
 
-def prepare_chromosome_end_workspaces(out_dir: str, genome_file: str) -> WorkspaceBuilder:
+def prepare_chromosome_end_workspaces(out_dir: str, genome_file: str, work_base_name: str = 'part2.chr.end.job') -> WorkspaceBuilder:
     """
     Prepare workspaces for chromosome end extension.
     
@@ -2146,7 +2147,7 @@ def prepare_chromosome_end_workspaces(out_dir: str, genome_file: str) -> Workspa
     Returns:
         WorkspaceBuilder instance with setup completed
     """
-    builder = WorkspaceBuilder(out_dir, genome_file)
+    builder = WorkspaceBuilder(out_dir, genome_file, work_base_name=work_base_name)
     builder.setup_workspace()
     return builder
 

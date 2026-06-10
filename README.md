@@ -220,6 +220,40 @@ python bin/DEGAP.py --mode telseeker \
     --MaximumExtensionRound 25
 ```
 
+### TelSeeker Ctg Mode
+Designed for extending selected contig endpoints without preparing a split genome
+FASTA for each task. Each `--ctg` FASTA must contain exactly one record, and the
+endpoint is `L` for left-end extension or `R` for right-end extension.
+
+```bash
+python bin/DEGAP.py --mode telseeker_ctg \
+    --ctg ./path/chr1.L.ctg.fa L \
+    --ctg ./path/chr2.R.ctg.fa R \
+    --motif TTAGGG \
+    --hifi ./path/HiFiReads.fa \
+    --ont ./path/ONTReads.fa \
+    --out ./path/TelSeekerCtgOut \
+    --work 4 \
+    --tel-n 100 \
+    --tel-r 0.6 \
+    --tel-mm 0 \
+    --MaximumExtensionRound 25 \
+    --MaximumExtensionLength 1000000 \
+    -t 20
+```
+
+All contig endpoints in one run share the same preprocessed reads, split reads,
+and `part1.telo.reads/` cache. Reusing the same `--out` with additional `--ctg`
+tasks is allowed only when `--hifi`, `--ont`, `--motif`, `--tel-n`, `--tel-r`,
+and `--tel-mm` match the existing cache manifest. If they differ, DEGAP reports
+the mismatch and stops.
+
+Per-endpoint outputs are written under
+`telseeker_ctg.jobs/<contig_id>.<L|R>/result/`. The aggregate status file is
+`result/status.tsv`. If no telomeric reads are found, or none are available for
+the requested end direction, the endpoint is marked failed with
+`no_tel_reads` or `no_tel_reads_for_target_end`.
+
 Example target file:
 
 ```text

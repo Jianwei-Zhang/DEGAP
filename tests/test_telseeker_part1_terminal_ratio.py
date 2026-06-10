@@ -99,8 +99,8 @@ class TeloReadTerminalRatioTests(unittest.TestCase):
         self.assertTrue(result["right_pass"])
 
 
-class TeloReadWorkerStringencyTests(unittest.TestCase):
-    def test_normal_worker_uses_window_count_without_double_marker_requirement(self):
+class TeloReadWorkerTerminalRatioTests(unittest.TestCase):
+    def test_worker_uses_terminal_ratio_without_double_marker_requirement(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             input_file = tmp_path / "reads.fa"
@@ -114,7 +114,6 @@ class TeloReadWorkerStringencyTests(unittest.TestCase):
             extractor = TelSeekerPart1.TeloReadsExtractor(
                 output_dir=str(tmp_path),
                 motif="TTAGGG",
-                telo_read_stringency="normal",
                 tel_n=4,
                 tel_r=0.5,
                 tel_mm=0,
@@ -134,8 +133,8 @@ class TeloReadWorkerStringencyTests(unittest.TestCase):
             self.assertIn(">spaced_forward", right_output.read_text())
 
 
-class TeloReadCliStringencyTests(unittest.TestCase):
-    def test_part1_help_exposes_single_stringency_parameter(self):
+class TeloReadCliTerminalRatioTests(unittest.TestCase):
+    def test_part1_help_exposes_terminal_ratio_parameters(self):
         result = subprocess.run(
             [sys.executable, str(BIN_DIR / "TelSeekerPart1.py"), "--help"],
             capture_output=True,
@@ -143,12 +142,9 @@ class TeloReadCliStringencyTests(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("--telo-read-stringency", result.stdout)
         self.assertIn("--tel-n", result.stdout)
         self.assertIn("--tel-r", result.stdout)
         self.assertIn("--tel-mm", result.stdout)
-        self.assertIn("strict", result.stdout)
-        self.assertIn("relaxed", result.stdout)
 
 
 if __name__ == "__main__":

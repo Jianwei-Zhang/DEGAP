@@ -212,22 +212,6 @@ def classify_read_by_terminal_telomere(sequence: str, motif: str,
     }
 
 
-TELO_READ_STRINGENCY_PRESETS = {
-    "strict": {"enable_second_filter": True},
-    "normal": {"enable_second_filter": True},
-    "relaxed": {"enable_second_filter": True},
-}
-
-
-def resolve_telo_read_stringency_preset(stringency: str) -> dict:
-    """Return a copy of the telo-read extraction preset."""
-    normalized = (stringency or "normal").lower()
-    if normalized not in TELO_READ_STRINGENCY_PRESETS:
-        valid = ", ".join(sorted(TELO_READ_STRINGENCY_PRESETS))
-        raise ValueError(f"Invalid telo_read_stringency: {stringency}; expected one of: {valid}")
-    return dict(TELO_READ_STRINGENCY_PRESETS[normalized])
-
-
 class TeloReadsExtractor:
     """Extract telomeric reads from split read files using terminal read-end ratios."""
     
@@ -235,7 +219,6 @@ class TeloReadsExtractor:
                  trc_threshold: float = None, check_length: int = None,
                  batch_size: int = 1000, enable_second_filter: bool = None,
                  min_motif_count: int = None, overlapping: bool = False,
-                 telo_read_stringency: str = "normal",
                  read_window_size: int = None,
                  min_window_repeats: int = None,
                  min_window_density: float = None,
@@ -255,7 +238,6 @@ class TeloReadsExtractor:
             enable_second_filter: Enable second-level terminal-ratio filtering
             min_motif_count: Compatibility option; terminal-ratio mode ignores it
             overlapping: Compatibility option; terminal-ratio mode ignores it
-            telo_read_stringency: Compatibility preset name
             read_window_size: Compatibility option; terminal-ratio mode ignores it
             min_window_repeats: Compatibility option; terminal-ratio mode ignores it
             min_window_density: Compatibility option; terminal-ratio mode ignores it
@@ -263,19 +245,12 @@ class TeloReadsExtractor:
             tel_r: Minimum terminal hit ratio (hits / tel_n)
             tel_mm: Allowed mismatches per motif-length unit, either 0 or 1
         """
-        preset = resolve_telo_read_stringency_preset(telo_read_stringency)
-
         self.output_dir = output_dir
         self.motif = motif.upper()
         self.threads = threads
-        self.telo_read_stringency = (telo_read_stringency or "normal").lower()
         self.kmer_length = len(motif) - 2
         self.batch_size = batch_size
-        self.enable_second_filter = (
-            preset["enable_second_filter"]
-            if enable_second_filter is None
-            else enable_second_filter
-        )
+        self.enable_second_filter = True if enable_second_filter is None else enable_second_filter
         if tel_n <= 0:
             raise ValueError("tel_n must be greater than 0")
         if not (0 < tel_r <= 1):
@@ -348,7 +323,6 @@ class TeloReadsExtractor:
         print(f"  Window markers:")
         print(f"    Right (forward): {self.pat_right}")
         print(f"    Left (reverse):  {self.pat_left}")
-        print(f"  Telo-read stringency: {self.telo_read_stringency}")
         print(f"  Scan mode: terminal_ratio")
         print(f"  Terminal units (--tel-n): {self.tel_n}")
         print(f"  Terminal ratio (--tel-r): {self.tel_r}")
@@ -1027,7 +1001,6 @@ if __name__ == "__main__":
             f.write(f"  Right (forward): {self.pat_right}\n")
             f.write(f"  Left (reverse):  {self.pat_left}\n")
             f.write(f"Terminal-ratio configuration:\n")
-            f.write(f"  Telo-read stringency: {self.telo_read_stringency}\n")
             f.write(f"  Terminal units (--tel-n): {self.tel_n}\n")
             f.write(f"  Terminal ratio (--tel-r): {self.tel_r}\n")
             f.write(f"  Terminal mismatch (--tel-mm): {self.tel_mm}\n")
@@ -1044,7 +1017,6 @@ if __name__ == "__main__":
             f.write("-" * 60 + "\n")
             f.write(f"Parameters:\n")
             f.write(f"  Motif: {self.motif}\n")
-            f.write(f"  Telo-read stringency: {self.telo_read_stringency}\n")
             f.write(f"  Terminal units: {self.tel_n}\n")
             f.write(f"  Terminal ratio: {self.tel_r}\n")
             f.write(f"  Terminal mismatch: {self.tel_mm}\n")
@@ -1159,7 +1131,7 @@ if __name__ == "__main__":
         print(f"\n{'='*60}")
         print(f"SUMMARY (Terminal-ratio Algorithm)")
         print(f"{'='*60}")
-        print(f"\nFirst-level filtering (terminal_ratio, stringency={self.telo_read_stringency}):")
+        print(f"\nFirst-level filtering (terminal_ratio):")
         print(f"  Total reads processed:           {total:>10}")
         
         if total > 0:
@@ -1264,13 +1236,6 @@ def main():
     )
 
     parser.add_argument(
-        '--telo-read-stringency',
-        choices=['strict', 'normal', 'relaxed'],
-        default='normal',
-        help='Compatibility preset name; terminal telomere reads are controlled by --tel-n/--tel-r/--tel-mm (default: normal)'
-    )
-
-    parser.add_argument(
         '--tel-n',
         type=int,
         default=100,
@@ -1324,7 +1289,6 @@ def main():
         enable_second_filter=enable_second_filter,
         min_motif_count=args.min_motif_count,
         overlapping=args.overlapping,
-        telo_read_stringency=args.telo_read_stringency,
         tel_n=args.tel_n,
         tel_r=args.tel_r,
         tel_mm=args.tel_mm,

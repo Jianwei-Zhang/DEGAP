@@ -1,4 +1,6 @@
 import sys
+import csv
+import json
 import tempfile
 import unittest
 import importlib.util
@@ -16,10 +18,11 @@ from TelSeekerCheck import patterns_to_search_topsicle as check_patterns_to_sear
 from TelSeekerPart1 import calculate_trc as part1_calculate_trc
 from TelSeekerPart1 import TeloReadsExtractor
 from TelSeekerPart2 import finalize_chr_end_result
+from TelSeekerCtg import TelSeekerCtg, validate_shared_manifest_compatibility
 
 
 class TelSeekerContractTests(unittest.TestCase):
-    def make_telseeker_parameter(self, tmp_path: Path, telo_read_stringency=None, tel_read_params=None):
+    def make_telseeker_parameter(self, tmp_path: Path, tel_read_params=None):
         genome = tmp_path / "genome.fa"
         genome.write_text(">Chr01\nACGT\n")
         original_reads_info = {
@@ -46,8 +49,6 @@ class TelSeekerContractTests(unittest.TestCase):
             None,
             ["Chr01.L"],
         ]
-        if telo_read_stringency is not None:
-            parameter.append(telo_read_stringency)
         if tel_read_params is not None:
             parameter.append(tel_read_params)
         parameter.extend([
@@ -60,17 +61,6 @@ class TelSeekerContractTests(unittest.TestCase):
         ])
         return parameter
 
-    def test_init_reads_telo_read_stringency_after_target_ends(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp_path = Path(tmp)
-
-            runner = TelSeeker(
-                self.make_telseeker_parameter(tmp_path, "relaxed"),
-                [41, 20, False],
-            )
-
-            self.assertEqual(runner.telo_read_stringency, "relaxed")
-
     def test_init_reads_terminal_tel_read_parameters(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -78,7 +68,6 @@ class TelSeekerContractTests(unittest.TestCase):
             runner = TelSeeker(
                 self.make_telseeker_parameter(
                     tmp_path,
-                    "normal",
                     {"tel_n": 80, "tel_r": 0.7, "tel_mm": 1},
                 ),
                 [41, 20, False],
@@ -150,7 +139,7 @@ class TelSeekerContractTests(unittest.TestCase):
 
             self.assertEqual(calls, ["step0", "step1"])
 
-    def test_step1_passes_telo_read_stringency_to_part1(self):
+    def test_step1_passes_terminal_tel_read_parameters_to_part1(self):
         import TelSeekerPart1
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -171,7 +160,6 @@ class TelSeekerContractTests(unittest.TestCase):
                 runner.out = out_dir
                 runner.motif = "TTAGGG"
                 runner.thread = 20
-                runner.telo_read_stringency = "relaxed"
                 runner.tel_n = 80
                 runner.tel_r = 0.7
                 runner.tel_mm = 1
@@ -180,10 +168,108 @@ class TelSeekerContractTests(unittest.TestCase):
             finally:
                 TelSeekerPart1.TeloReadsExtractor = original_extractor
 
-            self.assertEqual(captured["telo_read_stringency"], "relaxed")
             self.assertEqual(captured["tel_n"], 80)
             self.assertEqual(captured["tel_r"], 0.7)
             self.assertEqual(captured["tel_mm"], 1)
+
+    def make_telseeker_ctg_parameter(self, tmp_path: Path, ctg_inputs):
+        reads = tmp_path / "reads.fa"
+        reads.write_text(">read1\nTTAGGGTTAGGG\n")
+        return [
+            "telseeker_ctg",
+            2,
+            "4",
+            str(reads),
+            str(tmp_path),
+            ctg_inputs,
+            "TTAGGG",
+            1,
+            500,
+            None,
+            None,
+            1000000,
+            0,
+            "hifi",
+            None,
+            {"tel_n": 100, "tel_r": 0.6, "tel_mm": 0},
+            {"hifi": [str(reads)], "ont": []},
+            str(tmp_path / "hifi_reads.idx"),
+            1000,
+            100,
+            None,
+            {
+                "original_hifi": [str(reads)],
+                "original_ont": None,
+                "working_hifi": str(reads),
+                "working_ont": None,
+            },
+            None,
+        ]
+
+    def test_telseeker_ctg_manifest_rejects_incompatible_reuse(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            old_reads = tmp_path / "old.fa"
+            new_reads = tmp_path / "new.fa"
+            old_reads.write_text(">r1\nACGT\n")
+            new_reads.write_text(">r1\nACGT\n")
+            manifest_dir = tmp_path / "telseeker_ctg.input"
+            manifest_dir.mkdir()
+            (manifest_dir / "cache_manifest.json").write_text(
+                json.dumps({
+                    "hifi": [str(old_reads.resolve())],
+                    "ont": [],
+                    "motif": "TTAGGG",
+                    "tel_n": 100,
+                    "tel_r": 0.6,
+                    "tel_mm": 0,
+                })
+            )
+
+            with self.assertRaisesRegex(ValueError, "hifi"):
+                validate_shared_manifest_compatibility(
+                    tmp_path,
+                    {"hifi": [str(new_reads)], "ont": []},
+                    "TTAGGG",
+                    {"tel_n": 100, "tel_r": 0.6, "tel_mm": 0},
+                )
+
+    def test_telseeker_ctg_requires_single_record_ctg_fasta(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            ctg = tmp_path / "ctg.fa"
+            ctg.write_text(">ctg1\nACGT\n>ctg2\nACGT\n")
+            runner = TelSeekerCtg(
+                self.make_telseeker_ctg_parameter(tmp_path, [(str(ctg), "L")]),
+                [41, 20, False],
+            )
+
+            with self.assertRaisesRegex(ValueError, "exactly one FASTA record"):
+                runner._prepare_task_inputs()
+
+    def test_telseeker_ctg_records_failure_when_no_tel_reads_exist(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            ctg = tmp_path / "ctg.fa"
+            ctg.write_text(">ctg1\n" + "ACGT" * 200 + "\n")
+            runner = TelSeekerCtg(
+                self.make_telseeker_ctg_parameter(tmp_path, [(str(ctg), "L")]),
+                [41, 20, False],
+            )
+            runner._validate_parameters()
+            runner._prepare_task_inputs()
+            runner.part1_dir.mkdir()
+            (runner.part1_dir / "Global.left.telo.reads.fa").write_text("")
+            (runner.part1_dir / "Global.right.telo.reads.fa").write_text("")
+
+            runnable = runner._classify_tel_read_availability()
+
+            self.assertEqual(runnable, [])
+            status_file = Path(runner.tasks[0]["job_dir"]) / "result" / "status.tsv"
+            with open(status_file, newline="") as f:
+                rows = list(csv.DictReader(f, delimiter="\t"))
+            self.assertEqual(rows[0]["status"], "failed")
+            self.assertEqual(rows[0]["stop_reason"], "no_tel_reads")
 
     def test_parse_linker_info_reads_extension_metadata(self):
         with tempfile.TemporaryDirectory() as tmp:

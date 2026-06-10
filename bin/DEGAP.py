@@ -241,10 +241,10 @@ def usage():
 	print ("\nExtension Control Options:")
 	print ("--MaximumExtensionLength num     Maximum cumulative extension length in bp (default: None, no limit)")
 	print ("                                 Extension stops when total extended length exceeds this value")
-	print ("                                 Applies to all modes (gapfiller/ctglinker/telseeker)")
+	print ("                                 Applies to all modes (gapfiller/ctglinker/telseeker/telseeker_ctg)")
 	print ("--MaximumExtensionRound num      Maximum number of extension rounds (default: None, no limit)")
 	print ("                                 Extension stops when round number exceeds this value")
-	print ("                                 Applies to all modes (gapfiller/ctglinker/telseeker)")
+	print ("                                 Applies to all modes (gapfiller/ctglinker/telseeker/telseeker_ctg)")
 	print ("                                 Minimum recommended value: 5")
 	print ("\nK-mer Filtering Options:")
 	print ("--kmer_filter                    Enable k-mer filtering to reduce reads before alignment (default: disabled)")
@@ -253,7 +253,7 @@ def usage():
 	print ("--kmer_size | -ks num            K-mer size for filtering reads (default: 41, only used when --kmer_filter is enabled)")
 	print ("--kmer_num | -kn num             Number of k-mers to use for filtering (default: 20, only used when --kmer_filter is enabled)")
 	print ("\nMode Options:")
-	print ("--mode gapfiller|ctglinker|telseeker")
+	print ("--mode gapfiller|ctglinker|telseeker|telseeker_ctg")
 	print ("\nResume Options:")
 	print ("--resume num                     Resume from specified round (e.g.: --resume 118)")
 	print ("--resume_auto                    Automatically resume from last interrupted round")
@@ -267,13 +267,19 @@ def usage():
 	print ("\t--genome genome.fasta         Genome file with all chromosomes (FASTA)")
 	print ("\t--motif ATCG...               Telomere motif (uppercase A/T/C/G); required in telseeker mode, no default")
 	print ("\t--target_ends|-e END [END ...] Target chromosome ends to extend, e.g. Chr01.L Chr01.R, or one text file")
-	print ("\t--telo-read-stringency strict|normal|relaxed")
-	print ("\t                               Compatibility preset name (default: normal)")
 	print ("\t--tel-n num                   Motif-length units checked at each read end for tel_reads (default: 100)")
 	print ("\t--tel-r num                   Minimum terminal hit ratio, hits/tel-n (default: 0.6)")
 	print ("\t--tel-mm 0|1                  Allowed mismatches per motif-length unit (default: 0)")
 	print ("\t--work num                    Number of chromosome ends to process in parallel (default: 1)")
 	print ("\tNote: telomere checking is independent; pass target ends with -e/--target_ends")
+
+	print ("\ntelseeker_ctg mode:")
+	print ("\t--ctg contig.fa L|R            Contig endpoint task; repeat for multiple endpoints")
+	print ("\t--motif ATCG...                Telomere motif (uppercase A/T/C/G); required")
+	print ("\t--tel-n num                    Motif-length units checked at each read end for tel_reads (default: 100)")
+	print ("\t--tel-r num                    Minimum terminal hit ratio, hits/tel-n (default: 0.6)")
+	print ("\t--tel-mm 0|1                   Allowed mismatches per motif-length unit (default: 0)")
+	print ("\t--work num                     Number of contig endpoints to process in parallel (default: 1)")
 
 	print ("\nctglinker mode:")
 	print ("\t--ctgseq contig_file         Contig set (FASTA format)")
@@ -287,7 +293,7 @@ def getoptions():
 	                                formatter_class=argparse.RawTextHelpFormatter)
 
 	# Basic parameters
-	parser.add_argument('--mode', type=str, help='Operation mode: gapfiller or ctglinker or telseeker')
+	parser.add_argument('--mode', type=str, help='Operation mode: gapfiller or ctglinker or telseeker or telseeker_ctg')
 	parser.add_argument('-o', '--out', type=str, help='Output directory path')
 	parser.add_argument('-t', '--thread', type=str, help='Number of threads for parallel processing (default: 20)')
 	parser.add_argument('-h', '--help', help='Show help message and exit', action='store_true')
@@ -323,13 +329,11 @@ def getoptions():
 	# telseeker mode specific parameters
 	parser.add_argument('--genome', type=str, help='Genome FASTA file with all chromosomes')
 	parser.add_argument('--chr', type=str, help='[Deprecated] Single chromosome FASTA (use --genome instead)')
-	parser.add_argument('--motif', type=str, help='Telomere motif (uppercase A/T/C/G); required in telseeker mode')
+	parser.add_argument('--motif', type=str, help='Telomere motif (uppercase A/T/C/G); required in telseeker modes')
 	parser.add_argument('--target_ends', '-e', nargs='+',
 	                    help='Target chromosome ends for telseeker mode, e.g. Chr01.L Chr01.R, or a text file with one target per line')
-	parser.add_argument('--telo-read-stringency',
-	                    choices=['strict', 'normal', 'relaxed'],
-	                    default='normal',
-	                    help='Compatibility preset name for telseeker mode (default: normal)')
+	parser.add_argument('--ctg', nargs=2, action='append', metavar=('CONTIG_FASTA', 'END'),
+	                    help='Contig endpoint for telseeker_ctg mode; repeat as --ctg contig.fa L --ctg contig2.fa R')
 	parser.add_argument('--tel-n', type=int, default=100,
 	                    help='Number of motif-length units checked at each read end for tel_reads (default: 100)')
 	parser.add_argument('--tel-r', type=float, default=0.6,
@@ -362,7 +366,7 @@ def getoptions():
 
 	# Check required parameters
 	if not args.mode:
-		print("Mode must be specified (gapfiller or ctglinker or telseeker)")
+		print("Mode must be specified (gapfiller or ctglinker or telseeker or telseeker_ctg)")
 		sys.exit()
 
 	# Determine mode based on parameter combination
@@ -500,8 +504,50 @@ def getoptions():
 		return [args.mode, args.remove, args.thread or '20', reads_file, args.out,
 		        genome_file, motif, work, args.edge, args.filterDepthHifi, args.filterDepthOnt,
 		        args.MaximumExtensionLength, args.MaximumExtensionRound, data_type, ont_reads,
-		        target_ends, args.telo_read_stringency,
+		        target_ends,
 		        {'tel_n': args.tel_n, 'tel_r': args.tel_r, 'tel_mm': args.tel_mm}], kparameters, resume_params
+
+	elif args.mode == "telseeker_ctg":
+		if not args.ctg:
+			print("--ctg parameter is required for telseeker_ctg mode, e.g. --ctg contig.fa L")
+			sys.exit()
+		if not args.motif:
+			print("--motif parameter is required for telseeker_ctg mode and must be uppercase A/T/C/G")
+			sys.exit()
+		motif = args.motif.strip()
+		if re.match(r'^[ACGT]+$', motif) is None:
+			print("--motif must be uppercase letters consisting of A/T/C/G only, e.g., TTTAGGG")
+			sys.exit()
+		for ctg_file, ctg_end in args.ctg:
+			if not os.path.exists(ctg_file) or os.path.getsize(ctg_file) == 0:
+				print(f"--ctg file doesn't exist or is empty: {ctg_file}")
+				sys.exit()
+			if ctg_end.upper() not in ["L", "R"]:
+				print(f"--ctg endpoint must be L or R: {ctg_file} {ctg_end}")
+				sys.exit()
+		if args.resume is not None or args.resume_auto:
+			print("telseeker_ctg mode does not support --resume or --resume_auto in v1")
+			sys.exit()
+		if args.filterDepthHifi is not None or args.filterDepthOnt is not None:
+			print("telseeker_ctg mode does not support --filterDepthHifi or --filterDepthOnt in v1")
+			sys.exit()
+		if args.tel_n <= 0:
+			print("--tel-n must be greater than 0")
+			sys.exit()
+		if args.tel_r <= 0 or args.tel_r > 1:
+			print("--tel-r must be in the interval (0, 1]")
+			sys.exit()
+
+		work = args.work if args.work else 1
+		read_inputs = {
+			'hifi': args.hifi or [],
+			'ont': args.ont or []
+		}
+
+		return [args.mode, args.remove, args.thread or '20', reads_file, args.out,
+		        args.ctg, motif, work, args.edge, args.filterDepthHifi, args.filterDepthOnt,
+		        args.MaximumExtensionLength, args.MaximumExtensionRound, data_type, ont_reads,
+		        {'tel_n': args.tel_n, 'tel_r': args.tel_r, 'tel_mm': args.tel_mm}, read_inputs], kparameters, resume_params
 
 	elif args.mode == "ctglinker":
 		# Check files required for ctglinker mode
@@ -520,7 +566,7 @@ def getoptions():
 		        args.MaximumExtensionLength, args.MaximumExtensionRound, data_type, ont_reads], kparameters, resume_params
 
 	else:
-		print("You should use gapfiller or ctglinker or telseeker!")
+		print("You should use gapfiller or ctglinker or telseeker or telseeker_ctg!")
 		sys.exit()
 
 parameter, kparameters, resume_params = getoptions()
@@ -578,8 +624,8 @@ if parameter[0] == "gapfiller":
     data_type = parameter[13]  # gapfiller has 15 parameters, data_type at index 13
 elif parameter[0] == "ctglinker":
     data_type = parameter[11]  # ctglinker has 13 parameters, data_type at index 11
-elif parameter[0] == "telseeker":
-    data_type = parameter[13]  # telseeker has 15 parameters, data_type at index 13
+elif parameter[0] in ["telseeker", "telseeker_ctg"]:
+    data_type = parameter[13]  # telseeker modes have data_type at index 13
 else:
     data_type = 'hifi'  # fallback default
 
@@ -590,6 +636,19 @@ if out[-1]=="/":
 if os.path.exists(out)!=True:
 	os.makedirs(out, exist_ok=True)
 
+if parameter[0] == "telseeker_ctg":
+	try:
+		from TelSeekerCtg import validate_shared_manifest_compatibility
+		validate_shared_manifest_compatibility(
+			out,
+			parameter[16],
+			parameter[6],
+			parameter[15],
+		)
+	except ValueError as e:
+		print(f"telseeker_ctg cache mismatch: {e}")
+		sys.exit(1)
+
 # ============================================================
 # STEP 1: File Preprocessing
 # ============================================================
@@ -599,7 +658,7 @@ if len(parameter) >= 14 and parameter[0] == "gapfiller":
 	ont_reads = parameter[14]  # ONT reads for gapfiller (index 14)
 elif len(parameter) >= 13 and parameter[0] == "ctglinker":
 	ont_reads = parameter[12]  # ONT reads for ctglinker (index 12)
-elif len(parameter) >= 14 and parameter[0] == "telseeker":
+elif len(parameter) >= 14 and parameter[0] in ["telseeker", "telseeker_ctg"]:
 	ont_reads = parameter[14]  # ONT reads for telseeker (index 14)
 
 # Preprocess reads files: create symlinks/conversions in processed_reads/
@@ -651,7 +710,7 @@ elif parameter[0] == "ctglinker":
 	filter_ont = parameter[8] is not None    # filterDepthOnt for ctglinker
 	param_length = 12
 	use_selectRawReads = False  # ctglinker doesn't use selectRawReads
-elif parameter[0] == "telseeker":
+elif parameter[0] in ["telseeker", "telseeker_ctg"]:
 	filter_hifi = parameter[9] is not None   # filterDepthHifi for telseeker
 	filter_ont = parameter[10] is not None   # filterDepthOnt for telseeker
 	param_length = 14
@@ -740,13 +799,13 @@ if data_type == 'ont':
 else:
 	parameter[3] = final_hifi_fa
 
-if final_ont_fa and data_type == 'mixed':
-	if parameter[0] == "gapfiller":
-		parameter[14] = final_ont_fa
-	elif parameter[0] == "ctglinker":
-		parameter[12] = final_ont_fa
-	elif parameter[0] == "telseeker":
-		parameter[14] = final_ont_fa
+	if final_ont_fa and data_type == 'mixed':
+		if parameter[0] == "gapfiller":
+			parameter[14] = final_ont_fa
+		elif parameter[0] == "ctglinker":
+			parameter[12] = final_ont_fa
+		elif parameter[0] in ["telseeker", "telseeker_ctg"]:
+			parameter[14] = final_ont_fa
 
 # ============================================================
 # STEP 3: Build Index, Calculate Stats, Split Reads
@@ -1184,7 +1243,7 @@ else:
 # Append readsDict to parameter list
 # Note: Depth filtering was already performed earlier if enabled
 # The main_readsdict was built using the filtered reads (if filtering was enabled)
-if parameter[0] == "telseeker":
+if parameter[0] in ["telseeker", "telseeker_ctg"]:
 	# For telseeker, pass HiFi index path string instead of object
 	parameter.append(out+"/hifi_reads.idx")
 else:
@@ -1226,7 +1285,7 @@ parameter.append(original_reads_info)
 
 # Add ONT readsDict for mixed mode
 # For telseeker, pass ONT index path string (if available) instead of object
-if parameter[0] == "telseeker":
+if parameter[0] in ["telseeker", "telseeker_ctg"]:
 	# Explicitly check for mixed mode and use the ont_reads.idx path
 	if data_type == 'mixed' and main_ont_readsdict is not None:
 		ont_index_path = out + "/ont_reads.idx"
@@ -1343,7 +1402,7 @@ elif parameter[0] == "ctglinker":
 elif parameter[0] == "telseeker":
     # The parameter list should already contain readsDict, maxReadsLen, hifiSeedLen, ontSeedLen
     # from the processing above
-    # Expected structure: [mode, remove, thread, reads, out, genome_fasta, motif, work, edge, filterDepthHifi, filterDepthOnt, MaximumExtensionLength, MaximumExtensionRound, data_type, ont_reads, target_ends, telo_read_stringency, tel_read_params, readsDict, maxReadsLen, hifiSeedLen, ontSeedLen, original_reads_info, ont_readsdict]
+    # Expected structure: [mode, remove, thread, reads, out, genome_fasta, motif, work, edge, filterDepthHifi, filterDepthOnt, MaximumExtensionLength, MaximumExtensionRound, data_type, ont_reads, target_ends, tel_read_params, readsDict, maxReadsLen, hifiSeedLen, ontSeedLen, original_reads_info, ont_readsdict]
     print(f"TelSeeker parameter list length: {len(parameter)}")
     print(f"TelSeeker parameters: {[str(p)[:50] + '...' if isinstance(p, str) and len(str(p)) > 50 else p for p in parameter]}")
 
@@ -1368,8 +1427,15 @@ elif parameter[0] == "telseeker":
     from TelSeeker import TelSeeker
     telseeker = TelSeeker(parameter, kparameters)
     telseeker.run()
+elif parameter[0] == "telseeker_ctg":
+    print(f"TelSeekerCtg parameter list length: {len(parameter)}")
+    print(f"TelSeekerCtg parameters: {[str(p)[:50] + '...' if isinstance(p, str) and len(str(p)) > 50 else p for p in parameter]}")
+
+    from TelSeekerCtg import TelSeekerCtg
+    telseeker_ctg = TelSeekerCtg(parameter, kparameters)
+    telseeker_ctg.run()
 # 清理预处理文件（当 --remove=1 或 --remove=2 时）
-if parameter[1] in [1, 2]:
+if parameter[1] in [1, 2] and parameter[0] != "telseeker_ctg":
     import shutil
     out_dir = parameter[4]
     cleanup_dirs = [

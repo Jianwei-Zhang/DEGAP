@@ -2,6 +2,12 @@
 .gitattributes
 DEGAP.pptx
 
+# Local AI workflow state
+.agents/
+.codex/
+.trellis/
+AGENTS.md
+
 # Python bytecode and caches
 __pycache__/
 *.py[cod]

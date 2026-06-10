@@ -38,14 +38,13 @@ class TelSeeker:
                 [13] data_type: 'hifi', 'ont', or 'mixed'
                 [14] ont_reads: ONT reads file path (or None)
 	                [15] target_ends: Target chromosome ends to extend
-	                [16] telo_read_stringency: strict|normal|relaxed (optional)
-	                [17] tel_read_params: Dict with tel_n/tel_r/tel_mm (optional)
-	                [18] readsDict: Path to HiFi reads index
-	                [19] maxReadsLen: Maximum read length
-	                [20] hifiSeedLen: HiFi seed length
-	                [21] ontSeedLen: ONT seed length (or None)
-	                [22] original_reads_info: Dict with file paths
-	                [23] ont_readsdict: Path to ONT reads index (or None)
+	                [16] tel_read_params: Dict with tel_n/tel_r/tel_mm (optional)
+		                [17] readsDict: Path to HiFi reads index
+		                [18] maxReadsLen: Maximum read length
+		                [19] hifiSeedLen: HiFi seed length
+		                [20] ontSeedLen: ONT seed length (or None)
+		                [21] original_reads_info: Dict with file paths
+		                [22] ont_readsdict: Path to ONT reads index (or None)
 
             kparameters: List of 2-3 k-mer parameters
                 [0] kmer_size: K-mer size (default: 41)
@@ -79,7 +78,6 @@ class TelSeeker:
         self.filterDepthHifi = parameter[9]
         self.filterDepthOnt = parameter[10]
         self.MaximumExtensionLength = parameter[11]
-        self.telo_read_stringency = "normal"
         self.tel_n = 100
         self.tel_r = 0.6
         self.tel_mm = 0
@@ -91,9 +89,6 @@ class TelSeeker:
             self.ont_reads = parameter[14]
             self.target_ends = parameter[15]
             offset = 16
-            if len(parameter) > offset and parameter[offset] in ["strict", "normal", "relaxed"]:
-                self.telo_read_stringency = parameter[offset]
-                offset += 1
             if len(parameter) > offset and isinstance(parameter[offset], dict):
                 tel_params = parameter[offset]
                 self.tel_n = tel_params.get("tel_n", self.tel_n)
@@ -175,8 +170,6 @@ class TelSeeker:
         if self.data_type not in ['hifi', 'ont', 'mixed']:
             raise ValueError(f"Invalid data_type: {self.data_type}")
 
-        if self.telo_read_stringency not in ['strict', 'normal', 'relaxed']:
-            raise ValueError(f"Invalid telo_read_stringency: {self.telo_read_stringency}")
         if self.tel_n <= 0:
             raise ValueError(f"Invalid tel_n: {self.tel_n}")
         if not (0 < self.tel_r <= 1):
@@ -261,7 +254,6 @@ class TelSeeker:
         print(f"  Threads:            {self.thread}")
         print(f"  Parallel workers:   {self.work}")
         print(f"  Edge tolerance:     {self.edge} bp")
-        print(f"  Telo read stringency: {self.telo_read_stringency}")
         print(f"  Tel read units:     {self.tel_n}")
         print(f"  Tel read ratio:     {self.tel_r}")
         print(f"  Tel read mismatch:  {self.tel_mm}")
@@ -483,7 +475,6 @@ class TelSeeker:
                 threads=self.thread,                 # Use thread parameter for parallel processing
                 batch_size=1000,                     # Batch size (default 1000 reads)
                 overlapping=False,                   # Non-overlapping count
-                telo_read_stringency=self.telo_read_stringency,
                 tel_n=self.tel_n,
                 tel_r=self.tel_r,
                 tel_mm=self.tel_mm

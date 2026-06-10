@@ -207,7 +207,7 @@ If you install tools manually (without Micromamba), ensure the following program
 
 | Parameter | Description | Applicable Modes |
 |-----------|-------------|------------------|
-| `--mode` | Execution mode: `gapfiller`, `ctglinker`, or `telseeker` | All |
+| `--mode` | Execution mode: `gapfiller`, `ctglinker`, `telseeker`, or `telseeker_ctg` | All |
 | `-o, --out` | Output directory | All |
 
 ### Input Data Parameters
@@ -220,6 +220,7 @@ If you install tools manually (without Micromamba), ensure the following program
 | `--seqright` | Right flanking sequence (GapFiller) | None |
 | `--ctgseq` | Input contigs (CtgLinker) | None |
 | `--genome` | Input genome/chromosomes (TelSeeker) | None |
+| `--ctg` | Single-record contig endpoint for TelSeeker Ctg, as `--ctg contig.fa L` or `--ctg contig.fa R`; repeat for multiple endpoints | None |
 | `--motif` | Telomere motif sequence (TelSeeker) | None |
 | `-e, --target_ends` | Target chromosome ends for TelSeeker. Supports direct values such as `-e Chr01.L Chr01.R`, or one file such as `-e target_ends.txt` with one target per line | Required |
 | `--tel-n` | Motif-length units checked at each read end for tel_reads | `100` |
@@ -419,6 +420,30 @@ python bin/DEGAP.py --mode telseeker \
     --kmer_filter \
     -t 20
 ```
+
+**TelSeeker Ctg Mode - Multiple Contig Endpoints:**
+```bash
+python bin/DEGAP.py --mode telseeker_ctg \
+    --ctg ./path/chr1_partial.fa L \
+    --ctg ./path/chr2_partial.fa R \
+    --motif TTAGGG \
+    --hifi ./path/HiFiReads.fq.gz \
+    --ont ./path/ONTReads.fq.gz \
+    --out ./path/TelSeekerCtgOut \
+    --work 4 \
+    --tel-n 100 \
+    --tel-r 0.6 \
+    --tel-mm 0 \
+    --MaximumExtensionRound 25 \
+    --MaximumExtensionLength 1000000 \
+    -t 20
+```
+
+Each `--ctg` FASTA must contain exactly one record. Repeating `--ctg` lets one
+run process multiple endpoints while sharing the same preprocessed reads, split
+reads, and `part1.telo.reads/` cache. Reusing the same `--out` for later
+endpoints is allowed only when the original `--hifi`, `--ont`, `--motif`,
+`--tel-n`, `--tel-r`, and `--tel-mm` match the existing cache manifest.
 
 **AutoGapfiller Mode - Mixed Mode with K-mer Filtering:**
 ```bash
@@ -874,6 +899,12 @@ output_directory/
 - If the log reports `No telomeric reads found after Step 1`, or `part1.telo.reads/Global.left.telo.reads.fa` and `Global.right.telo.reads.fa` are empty, rerun with a lower `--tel-r`, `--tel-mm 1`, or a smaller `--tel-n`
 - Check `--motif` parameter matches your species (e.g., TTAGGG for vertebrates)
 
+**9. TelSeeker Ctg Endpoint Failed**
+- Check `result/status.tsv` for aggregate status and `telseeker_ctg.jobs/<ctg>.<L|R>/result/status.tsv` for endpoint status
+- `no_tel_reads` means no global telomeric reads were found after Part1
+- `no_tel_reads_for_target_end` means telomeric reads exist, but not for the requested `L` or `R` direction
+- If reusing an existing `--out`, DEGAP stops on cache mismatch when `--hifi`, `--ont`, `--motif`, `--tel-n`, `--tel-r`, or `--tel-mm` differs from the manifest
+
 Example rerun with relaxed terminal telo-read discovery:
 
 ```bash
@@ -887,7 +918,7 @@ python bin/DEGAP.py --mode telseeker \
     --tel-mm 1
 ```
 
-**9. TelSeeker Motif Not Found**
+**10. TelSeeker Motif Not Found**
 - Verify motif sequence is correct for your species
 - Use uppercase letters only (A/T/C/G)
 - Common motifs: TTAGGG (vertebrates), TTTAGGG (plants), TTAGG (insects)
