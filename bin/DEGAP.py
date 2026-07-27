@@ -265,20 +265,20 @@ def usage():
 
 	print ("\ntelseeker mode:")
 	print ("\t--genome genome.fasta         Genome file with all chromosomes (FASTA)")
-	print ("\t--motif ATCG...               Telomere motif (uppercase A/T/C/G); required in telseeker mode, no default")
+	print ("\t-m | --motif ATCG...          Telomere motif (uppercase A/T/C/G); required in telseeker mode, no default")
 	print ("\t--target_ends|-e END [END ...] Target chromosome ends to extend, e.g. Chr01.L Chr01.R, or one text file")
-	print ("\t--tel-n num                   Motif-length units checked at each read end for tel_reads (default: 100)")
-	print ("\t--tel-r num                   Minimum terminal hit ratio, hits/tel-n (default: 0.6)")
-	print ("\t--tel-mm 0|1                  Allowed mismatches per motif-length unit (default: 0)")
+	print ("\t-tn | --tel-n num             Motif-length units checked at each read end for tel_reads (default: 100)")
+	print ("\t-tr | --tel-r num             Minimum terminal hit ratio, hits/tel-n (default: 0.6)")
+	print ("\t-tmm | --tel-mm 0|1           Allowed mismatches per motif-length unit (default: 0)")
 	print ("\t--work num                    Number of chromosome ends to process in parallel (default: 1)")
 	print ("\tNote: telomere checking is independent; pass target ends with -e/--target_ends")
 
 	print ("\ntelseeker_ctg mode:")
 	print ("\t--ctg contig.fa L|R            Contig endpoint task; repeat for multiple endpoints")
-	print ("\t--motif ATCG...                Telomere motif (uppercase A/T/C/G); required")
-	print ("\t--tel-n num                    Motif-length units checked at each read end for tel_reads (default: 100)")
-	print ("\t--tel-r num                    Minimum terminal hit ratio, hits/tel-n (default: 0.6)")
-	print ("\t--tel-mm 0|1                   Allowed mismatches per motif-length unit (default: 0)")
+	print ("\t-m | --motif ATCG...           Telomere motif (uppercase A/T/C/G); required")
+	print ("\t-tn | --tel-n num              Motif-length units checked at each read end for tel_reads (default: 100)")
+	print ("\t-tr | --tel-r num              Minimum terminal hit ratio, hits/tel-n (default: 0.6)")
+	print ("\t-tmm | --tel-mm 0|1            Allowed mismatches per motif-length unit (default: 0)")
 	print ("\t--work num                     Number of contig endpoints to process in parallel (default: 1)")
 
 	print ("\nctglinker mode:")
@@ -329,16 +329,16 @@ def getoptions():
 	# telseeker mode specific parameters
 	parser.add_argument('--genome', type=str, help='Genome FASTA file with all chromosomes')
 	parser.add_argument('--chr', type=str, help='[Deprecated] Single chromosome FASTA (use --genome instead)')
-	parser.add_argument('--motif', type=str, help='Telomere motif (uppercase A/T/C/G); required in telseeker modes')
+	parser.add_argument('-m', '--motif', type=str, help='Telomere motif (uppercase A/T/C/G); required in telseeker modes')
 	parser.add_argument('--target_ends', '-e', nargs='+',
 	                    help='Target chromosome ends for telseeker mode, e.g. Chr01.L Chr01.R, or a text file with one target per line')
 	parser.add_argument('--ctg', nargs=2, action='append', metavar=('CONTIG_FASTA', 'END'),
 	                    help='Contig endpoint for telseeker_ctg mode; repeat as --ctg contig.fa L --ctg contig2.fa R')
-	parser.add_argument('--tel-n', type=int, default=100,
+	parser.add_argument('-tn', '--tel-n', type=int, default=100,
 	                    help='Number of motif-length units checked at each read end for tel_reads (default: 100)')
-	parser.add_argument('--tel-r', type=float, default=0.6,
+	parser.add_argument('-tr', '--tel-r', type=float, default=0.6,
 	                    help='Minimum terminal motif-unit hit ratio for tel_reads, computed as hits/tel-n (default: 0.6)')
-	parser.add_argument('--tel-mm', type=int, choices=[0, 1], default=0,
+	parser.add_argument('-tmm', '--tel-mm', type=int, choices=[0, 1], default=0,
 	                    help='Allowed mismatches per motif-length unit for tel_reads, 0 or 1 (default: 0)')
 	parser.add_argument('--work', '-w', type=int, default=1, help='Number of parallel workers (default: 1)')
 

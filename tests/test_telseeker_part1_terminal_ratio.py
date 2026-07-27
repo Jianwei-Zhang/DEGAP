@@ -1,4 +1,5 @@
 import sys
+import ast
 import subprocess
 import tempfile
 import unittest
@@ -145,6 +146,31 @@ class TeloReadCliTerminalRatioTests(unittest.TestCase):
         self.assertIn("--tel-n", result.stdout)
         self.assertIn("--tel-r", result.stdout)
         self.assertIn("--tel-mm", result.stdout)
+        self.assertIn("-tn", result.stdout)
+        self.assertIn("-tr", result.stdout)
+        self.assertIn("-tmm", result.stdout)
+
+    def test_degap_parser_exposes_short_telomere_parameter_names(self):
+        tree = ast.parse((BIN_DIR / "DEGAP.py").read_text())
+        option_groups = []
+        for node in ast.walk(tree):
+            if not (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "add_argument"
+            ):
+                continue
+            options = {
+                arg.value
+                for arg in node.args
+                if isinstance(arg, ast.Constant) and isinstance(arg.value, str)
+            }
+            option_groups.append(options)
+
+        self.assertIn({"-m", "--motif"}, option_groups)
+        self.assertIn({"-tn", "--tel-n"}, option_groups)
+        self.assertIn({"-tr", "--tel-r"}, option_groups)
+        self.assertIn({"-tmm", "--tel-mm"}, option_groups)
 
 
 if __name__ == "__main__":

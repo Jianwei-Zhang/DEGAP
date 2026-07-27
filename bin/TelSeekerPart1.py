@@ -1177,7 +1177,7 @@ def main():
     )
     
     parser.add_argument(
-        '--motif',
+        '-m', '--motif',
         required=True,
         help='Telomere repeat motif (e.g., TTAGGG)'
     )
@@ -1236,21 +1236,21 @@ def main():
     )
 
     parser.add_argument(
-        '--tel-n',
+        '-tn', '--tel-n',
         type=int,
         default=100,
         help='Number of motif-length units checked at each read end (default: 100)'
     )
 
     parser.add_argument(
-        '--tel-r',
+        '-tr', '--tel-r',
         type=float,
         default=0.6,
         help='Minimum terminal motif-unit hit ratio, computed as hits / tel-n (default: 0.6)'
     )
 
     parser.add_argument(
-        '--tel-mm',
+        '-tmm', '--tel-mm',
         type=int,
         choices=[0, 1],
         default=0,

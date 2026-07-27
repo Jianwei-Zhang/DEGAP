@@ -32,13 +32,6 @@ except ImportError:
     HAS_BIOPYTHON = False
     print("Warning: BioPython not found. Some features may be limited.")
 
-from TelSeekerMotifPlot import (
-    DEFAULT_MOTIF_PLOT_WINDOW_SIZE,
-    HAS_MATPLOTLIB,
-    generate_motif_distribution_plots,
-)
-
-
 # ============================================================================
 # Part2 Task Report Generator (从 telo_part2_visual.py 移植)
 # ============================================================================
@@ -940,72 +933,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Inter,Helvetic
 # Data Parsing Functions (FIXED)
 # ============================================================================
 
-def parse_telomere_check_csv(csv_path: Path) -> Tuple[List[Dict], Dict]:
-    """
-    Parse telomere check CSV file.
-
-    FIXED: Handle the actual CSV format from TelSeekerCheck.py:
-    Chr01_100001-246753025,Left,untelomeric,TRC=0.05
-
-    Returns:
-        (list of chromosome end data, summary statistics)
-    """
-    if not csv_path.exists():
-        print(f"  ⚠ CSV file not found: {csv_path}")
-        return [], {}
-    
-    data = []
-    with open(csv_path, 'r') as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith('#'):
-                continue
-            
-            parts = line.split(',')
-            if len(parts) >= 3:
-                # Extract TRC score from "TRC=0.05" format
-                trc_str = parts[3] if len(parts) > 3 else parts[2]
-                trc_score = 0.0
-                if 'TRC=' in trc_str:
-                    try:
-                        trc_score = float(trc_str.split('=')[1])
-                    except:
-                        pass
-                
-                # Determine telomeric status
-                telomeric_str = parts[2].strip().lower()
-                is_telomeric = 'telomeric' in telomeric_str and 'untelomeric' not in telomeric_str
-                
-                record = {
-                    'chromosome': parts[0].strip(),
-                    'end': parts[1].strip(),
-                    'trc_score': trc_score,
-                    'is_telomeric': is_telomeric,
-                    'telomeric': 'Yes' if is_telomeric else 'No',
-                    'length': 0  # Not available in this format
-                }
-                data.append(record)
-    
-    # Calculate statistics
-    total_ends = len(data)
-    telomeric_ends = sum(1 for d in data if d['is_telomeric'])
-    non_telomeric_ends = total_ends - telomeric_ends
-    avg_trc = sum(d['trc_score'] for d in data) / total_ends if total_ends > 0 else 0.0
-    
-    # Count unique chromosomes
-    unique_chrs = set(d['chromosome'] for d in data)
-    
-    stats = {
-        'total_ends': total_ends,
-        'telomeric_ends': telomeric_ends,
-        'non_telomeric_ends': non_telomeric_ends,
-        'avg_trc_score': avg_trc,
-        'chromosomes': len(unique_chrs)
-    }
-    
-    return data, stats
-
-
 def parse_telo_reads_stats(out_dir: Path) -> Dict:
     """
     Parse telomeric reads extraction statistics.
@@ -1223,7 +1150,7 @@ def parse_part3_integration(part3_dir: Path) -> Dict:
     stats['csv_exists'] = True
     
     with open(csv_file, 'r') as f:
-        header = f.readline()  # Skip header: Chr_end,Telomeric,Connected_read,Round_num,Connection_type
+        header = f.readline()  # Skip header: Chr_end,Extended,Connected_read,Round_num,Connection_type
         for line in f:
             line = line.strip()
             if not line:
@@ -1232,10 +1159,10 @@ def parse_part3_integration(part3_dir: Path) -> Dict:
             parts = line.split(',')
             if len(parts) >= 5:
                 stats['total_ends'] += 1
-                telomeric = parts[1].strip().lower()
+                extended = parts[1].strip().lower()
                 conn_type = parts[4].strip().lower()
                 
-                if telomeric == 'yes':
+                if extended == 'yes':
                     stats['extended_ends'] += 1
                     if conn_type == 'direct':
                         stats['direct_connections'] += 1
@@ -1276,34 +1203,6 @@ def parse_need_extension_list(out_dir: Path) -> List[str]:
     except Exception as e:
         print(f"  ⚠ Error reading need_extension_chr_end.txt: {e}")
         return []
-
-
-def parse_final_genome_lengths(genome_path: Path) -> Dict[str, int]:
-    """
-    Parse final.genome.fa to get actual chromosome lengths.
-    
-    Returns:
-        Dictionary mapping chromosome name to length in bp
-    """
-    chr_lengths = {}
-    
-    if not genome_path.exists():
-        print(f"  ⚠ Final genome file not found: {genome_path}")
-        return chr_lengths
-    
-    if not HAS_BIOPYTHON:
-        print(f"  ⚠ BioPython not available, cannot parse genome lengths")
-        return chr_lengths
-    
-    try:
-        for record in SeqIO.parse(genome_path, 'fasta'):
-            chr_lengths[record.id] = len(record.seq)
-        
-        print(f"  ✓ Parsed {len(chr_lengths)} chromosome lengths from final genome")
-        return chr_lengths
-    except Exception as e:
-        print(f"  ⚠ Error parsing final genome: {e}")
-        return chr_lengths
 
 
 def get_genome_info(genome_path: Path) -> Dict:
@@ -1349,18 +1248,16 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
     """
     
     print("\n" + "="*80)
-    print("TelSeeker Visualization Report Generator (FIXED)")
+    print("TelSeeker Visualization Report Generator")
     print("="*80)
     
-    # Parse all data sources
-    print("\n[1/6] Parsing initial genome telomere check...")
-    initial_check_csv = out_dir / 'genome.telomere.check' / 'genome.telomere.check.csv'
-    print(f"  Looking for: {initial_check_csv}")
-    print(f"  Exists: {initial_check_csv.exists()}")
-    initial_data, initial_stats = parse_telomere_check_csv(initial_check_csv)
-    print(f"  ✓ Found {len(initial_data)} chromosome ends")
-    if len(initial_data) > 0:
-        print(f"    Sample: {initial_data[0]}")
+    # Locate the manual-review evidence prepared before extension.
+    print("\n[1/6] Locating initial manual-review evidence...")
+    initial_check_dir = out_dir / 'genome.telomere.check'
+    initial_left = initial_check_dir / 'genome.telomere.check.left.2kb.fa'
+    initial_right = initial_check_dir / 'genome.telomere.check.right.2kb.fa'
+    initial_combined_plot = initial_check_dir / 'all_chromosomes_combined.png'
+    print(f"  Initial review directory: {initial_check_dir}")
     
     print("\n[2/6] Parsing extension task list...")
     need_extension_list = parse_need_extension_list(out_dir)
@@ -1377,64 +1274,84 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
     
     print("\n[5/6] Parsing final integration results...")
     part3_dir = out_dir / 'part3.integration.results'
-    integration_stats = parse_part3_integration(part3_dir)
+    parse_part3_integration(part3_dir)
     
-    # Parse final genome check
-    final_check_csv = part3_dir / 'final.genome.telomere.check' / 'genome.telomere.check.csv'
-    print(f"  Looking for final genome check: {final_check_csv}")
-    print(f"  Exists: {final_check_csv.exists()}")
-    final_data, final_stats = parse_telomere_check_csv(final_check_csv)
-    print(f"  ✓ Final genome: {len(final_data)} chromosome ends")
-    
-    # Parse final genome lengths for visualization
-    final_genome_file = part3_dir / 'final.genome.fa'
-    chr_lengths = parse_final_genome_lengths(final_genome_file)
-    
+    # Locate the final manual-review evidence generated by TelSeekerCheck.
+    final_check_dir = part3_dir / 'final.genome.telomere.check'
+    final_left = final_check_dir / 'final.genome.telomere.check.left.2kb.fa'
+    final_right = final_check_dir / 'final.genome.telomere.check.right.2kb.fa'
+    final_combined_plot = final_check_dir / 'all_chromosomes_combined.png'
+    print(f"  Final review directory: {final_check_dir}")
+
     print("\n[6/6] Generating HTML report...")
     
     # Prepare data for JavaScript
-    js_initial_data = json.dumps(initial_data, indent=2)
-    js_initial_stats = json.dumps(initial_stats, indent=2)
     js_need_extension_list = json.dumps(need_extension_list, indent=2)
-    js_telo_reads = json.dumps(telo_reads_stats, indent=2)
     js_extension_results = json.dumps(extension_results, indent=2)
-    js_integration_stats = json.dumps(integration_stats, indent=2)
-    js_final_data = json.dumps(final_data, indent=2)
-    js_final_stats = json.dumps(final_stats, indent=2)
-    js_chr_lengths = json.dumps(chr_lengths, indent=2)
-    
-    # Generate telomere motif distribution plots
-    print("\n[7/7] Generating telomere motif distribution plots...")
-    motif_images = []
-    chrom_names_list = []
-    if HAS_BIOPYTHON and HAS_MATPLOTLIB and final_genome_file.exists():
-        try:
-            motif_images, chrom_names_list, combined_img = generate_motif_distribution_plots(
-                final_genome_file,
-                motif,
-                output_path.parent,
-                window_size=DEFAULT_MOTIF_PLOT_WINDOW_SIZE,
-            )
-            if combined_img:
-                print(f"  ✓ Generated {len(motif_images)} individual plots + 1 combined plot (showing {len(chrom_names_list)} chromosomes)")
-        except Exception as e:
-            print(f"  ⚠ Error generating motif plots: {e}")
-    else:
-        if not HAS_BIOPYTHON:
-            print("  ⚠ Skipped: BioPython not available")
-        elif not HAS_MATPLOTLIB:
-            print("  ⚠ Skipped: Matplotlib not available")
-        elif not final_genome_file.exists():
-            print(f"  ⚠ Skipped: Final genome not found ({final_genome_file})")
-    
-    # Prepare JavaScript data for motif images
-    js_motif_images = json.dumps(motif_images, indent=2)
+
+    # Reuse the plots generated by the final manual check. The visualizer must
+    # not run a second, independent chromosome-end analysis.
+    motif_suffix = '_telomere_motif.png'
+    motif_images = sorted(final_check_dir.glob(f'*{motif_suffix}'))
+    chrom_names_list = [path.name[:-len(motif_suffix)] for path in motif_images]
     js_chrom_names = json.dumps(chrom_names_list, indent=2)
-    
-    # Calculate summary statistics
-    extension_rate = (integration_stats['extended_ends'] / integration_stats['total_ends'] * 100) if integration_stats['total_ends'] > 0 else 0
-    
-    improvement = final_stats.get('telomeric_ends', 0) - initial_stats.get('telomeric_ends', 0)
+    js_final_motif_base = json.dumps('../part3.integration.results/final.genome.telomere.check')
+
+    if initial_left.exists() or initial_right.exists() or initial_combined_plot.exists():
+        initial_review_html = """
+                <p data-i18n-en="Review the initial chromosome-end sequences and motif plots, then select target ends manually. No automatic telomeric call is made."
+                   data-i18n-zh="请查看初始染色体末端序列和 motif 图，再人工选择延伸端点；这里不做自动端粒判定。">
+                    Review the initial chromosome-end sequences and motif plots, then select target ends manually. No automatic telomeric call is made.
+                </p>
+                <p>
+                    <a href="../genome.telomere.check/genome.telomere.check.left.2kb.fa">Left-end FASTA</a> |
+                    <a href="../genome.telomere.check/genome.telomere.check.right.2kb.fa">Right-end FASTA</a>
+                </p>
+                <div class="motif-plot-container">
+                    <img src="../genome.telomere.check/all_chromosomes_combined.png" alt="Initial telomere motif distribution" style="width: 100%; height: auto; display: block;">
+                </div>
+        """
+    else:
+        initial_review_html = """
+                <p class="empty-state" data-i18n-en="Initial manual-review files are not present in this run. Target ends were supplied directly."
+                   data-i18n-zh="本次运行中没有初始人工检查文件；延伸端点由用户直接提供。">
+                    Initial manual-review files are not present in this run. Target ends were supplied directly.
+                </p>
+        """
+
+    final_review_links = """
+                <p>
+                    <a href="../part3.integration.results/final.genome.telomere.check/final.genome.telomere.check.left.2kb.fa">Left-end FASTA</a> |
+                    <a href="../part3.integration.results/final.genome.telomere.check/final.genome.telomere.check.right.2kb.fa">Right-end FASTA</a>
+                </p>
+    """ if final_left.exists() or final_right.exists() else """
+                <p class="empty-state" data-i18n-en="Final chromosome-end review files are not available."
+                   data-i18n-zh="最终染色体末端人工检查文件尚不可用。">Final chromosome-end review files are not available.</p>
+    """
+
+    if final_combined_plot.exists():
+        final_motif_html = """
+        <div class="card">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <span data-i18n-en="📊 6. Final Genome Motif Distribution" data-i18n-zh="📊 6. 最终基因组 Motif 分布">📊 6. Final Genome Motif Distribution</span>
+                <select id="motif-chr-selector" class="chr-selector">
+                    <option value="all" data-i18n-en="All Chromosomes" data-i18n-zh="所有染色体" selected>All Chromosomes</option>
+                </select>
+            </div>
+            <div class="card-content">
+                <div class="motif-plot-container">
+                    <img id="motif-plot-img" src="../part3.integration.results/final.genome.telomere.check/all_chromosomes_combined.png" alt="Final telomere motif distribution" style="width: 100%; height: auto; display: block;">
+                </div>
+            </div>
+        </div>
+        """
+    else:
+        final_motif_html = """
+        <div class="card">
+            <div class="card-header" data-i18n-en="📊 6. Final Genome Motif Distribution" data-i18n-zh="📊 6. 最终基因组 Motif 分布">📊 6. Final Genome Motif Distribution</div>
+            <div class="card-content"><p class="empty-state">No final motif plots available</p></div>
+        </div>
+        """
     
     html_content = f"""<!DOCTYPE html>
 <html lang="en">
@@ -1616,77 +1533,6 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
             position: relative;
         }}
         
-        .table-container-limited {{
-            max-height: 400px;  /* Limit to show ~8 rows */
-            overflow-y: auto;
-            border: 1px solid #dee2e6;
-            border-radius: 10px;
-            background: white;
-            position: relative;
-        }}
-        
-        .table-container-limited.expanded {{
-            max-height: none;
-            overflow-y: visible;
-        }}
-        
-        .table-toggle-container {{
-            position: sticky;
-            bottom: 0;
-            width: 100%;
-            display: flex;
-            justify-content: flex-end;
-            padding: 6px 8px;
-            background: linear-gradient(180deg, rgba(255,255,255,0), rgba(255,255,255,0.95));
-            border-top: 1px solid #e9ecef;
-        }}
-        
-        .table-toggle-btn {{
-            background: #667eea;
-            color: #fff;
-            border: none;
-            border-radius: 16px;
-            padding: 6px 12px;
-            font-size: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-        }}
-        .table-toggle-btn:hover {{
-            background: #5a6fd8;
-        }}
-        
-        .sortable {{
-            cursor: pointer;
-            user-select: none;
-            position: relative;
-            padding-right: 20px;
-        }}
-        
-        .sortable:hover {{
-            background: #f1f3f5;
-        }}
-        
-        .sortable::after {{
-            content: '⇅';
-            position: absolute;
-            right: 8px;
-            opacity: 0.3;
-            font-size: 0.9em;
-        }}
-        
-        .sortable.asc::after {{
-            content: '▲';
-            opacity: 1;
-            color: #667eea;
-        }}
-        
-        .sortable.desc::after {{
-            content: '▼';
-            opacity: 1;
-            color: #667eea;
-        }}
-
         table {{
             width: 100%;
             border-collapse: separate;  /* Important for sticky headers */
@@ -1713,7 +1559,7 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
             background-color: #f8f9fa;
         }}
         
-        .table-container-limited thead, .table-container thead {{
+        .table-container thead {{
             position: sticky; /* enhances cross-browser behavior */
             top: 0;
             z-index: 15;
@@ -1752,174 +1598,6 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
             color: #495057;
         }}
 
-
-        .comparison-grid {{
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 30px;
-            margin-top: 20px;
-        }}
-
-        .comparison-card {{
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 10px;
-            border: 2px solid #e9ecef;
-        }}
-
-        .comparison-card h3 {{
-            margin: 0 0 15px 0;
-            color: #495057;
-            font-size: 1.2em;
-        }}
-
-        .comparison-stat {{
-            display: flex;
-            justify-content: space-between;
-            padding: 10px 0;
-            border-bottom: 1px solid #dee2e6;
-        }}
-
-        .comparison-stat:last-child {{
-            border-bottom: none;
-        }}
-
-        .comparison-label {{
-            font-weight: 500;
-            color: #6c757d;
-        }}
-
-        .comparison-value {{
-            font-weight: 600;
-            color: #495057;
-        }}
-
-        .chr-visualization {{
-            margin-top: 0;
-            padding-top: 30px;  /* Add space between title and first track */
-        }}
-
-        .track {{
-            margin-bottom: 50px;
-            position: relative;
-            padding: 0 80px;
-            padding-bottom: 20px;
-            border-bottom: 2px solid #dee2e6;
-        }}
-
-        .track:last-child {{
-            border-bottom: none;
-        }}
-
-        .track-header {{
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 8px;
-            position: relative;
-        }}
-
-        .chr-name {{
-            font-size: 0.95em;
-            color: #495057;
-            font-weight: 600;
-            position: absolute;
-            top: -25px;
-            left: 0;
-        }}
-
-        .track-position {{
-            position: absolute;
-            font-size: 0.85em;
-            color: #6c757d;
-            font-weight: 500;
-            top: 50%;
-            transform: translateY(-50%);
-        }}
-
-        .track-position.start {{
-            left: -10px;
-            transform: translateY(-50%) translateX(-100%);
-        }}
-
-        .track-position.end {{
-            right: -10px;
-            transform: translateY(-50%) translateX(100%);
-        }}
-
-        .track-bar {{
-            height: 30px;
-            background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
-            border-radius: 15px;
-            position: relative;
-            overflow: visible;
-            border: 1px solid #ced4da;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }}
-
-        .chr-telomere {{
-            position: absolute;
-            width: 50px;  /* Fixed 50px width */
-            height: 100%;
-            background: linear-gradient(135deg, #dc3545 0%, #e74c3c 100%);
-            box-shadow: 0 2px 6px rgba(220, 53, 69, 0.4);
-            z-index: 2;
-        }}
-
-        .chr-telomere.left {{
-            left: 0;
-            border-radius: 15px 0 0 15px;
-        }}
-
-        .chr-telomere.right {{
-            right: 0;
-            border-radius: 0 15px 15px 0;
-        }}
-
-        .chr-info {{
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: #495057;
-            font-size: 0.8em;
-            font-weight: 600;
-            pointer-events: none;
-            white-space: nowrap;
-            z-index: 1;
-        }}
-
-        .legend {{
-            display: flex;
-            gap: 20px;
-            align-items: center;
-            margin-top: 15px;
-            padding: 15px;
-            background: #f8f9fa;
-            border-radius: 8px;
-        }}
-
-        .legend-item {{
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 0.9em;
-            font-weight: 500;
-        }}
-
-        .legend-color {{
-            width: 24px;
-            height: 14px;
-            border-radius: 7px;
-        }}
-        
-        .legend-color.telomeric {{
-            background: linear-gradient(135deg, #dc3545 0%, #e74c3c 100%);
-        }}
-        
-        .legend-color.chromosome {{
-            background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
-            border: 1px solid #ced4da;
-        }}
 
         .empty-state {{
             text-align: center;
@@ -1982,10 +1660,6 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
                 margin-left: 0;
             }}
 
-            .comparison-grid {{
-                grid-template-columns: 1fr;
-            }}
-            
             .stats-overview {{
                 grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
             }}
@@ -2007,28 +1681,11 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
             </div>
         </div>
 
-        <!-- Section 1: Initial Genome Overview -->
+        <!-- Section 1: Initial manual review -->
         <div class="card">
-            <div class="card-header" data-i18n-en="📊 1. Initial Genome Overview" data-i18n-zh="📊 1. 初始基因组概览">📊 1. Initial Genome Overview</div>
+            <div class="card-header" data-i18n-en="🔎 1. Initial Chromosome-End Manual Review" data-i18n-zh="🔎 1. 初始染色体末端人工检查">🔎 1. Initial Chromosome-End Manual Review</div>
             <div class="card-content">
-                <div id="initial-table-container" class="table-container-limited">
-                    <table id="initial-table">
-                        <thead>
-                            <tr>
-                                <th>Chromosome</th>
-                                <th class="sortable" data-table="initial" data-column="end" data-type="text">End</th>
-                                <th class="sortable" data-table="initial" data-column="trc_score" data-type="number">TRC Score</th>
-                                <th class="sortable" data-table="initial" data-column="telomeric" data-type="text">Telomeric</th>
-                            </tr>
-                        </thead>
-                        <tbody id="initial-tbody">
-                            <!-- Populated by JavaScript -->
-                        </tbody>
-                    </table>
-                    <div class="table-toggle-container">
-                        <button id="initial-toggle-btn" class="table-toggle-btn" onclick="toggleTableExpand('initial')">Expand</button>
-                    </div>
-                </div>
+                {initial_review_html}
             </div>
         </div>
 
@@ -2037,9 +1694,9 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
             <div class="card-header" data-i18n-en="📋 2. Extension Task List" data-i18n-zh="📋 2. 延伸任务列表">📋 2. Extension Task List</div>
             <div class="card-content">
                 <div style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #667eea;">
-                    <h4 style="margin: 0 0 10px 0; color: #495057;" data-i18n-en="Chromosome Ends Requiring Extension:" data-i18n-zh="需要延伸的染色体端：">Chromosome Ends Requiring Extension:</h4>
-                    <p style="margin: 0 0 15px 0; color: #6c757d; font-size: 0.95em;" data-i18n-en="These chromosome ends have TRC &lt; 0.7 and need telomere extension." data-i18n-zh="以下染色体端的TRC &lt; 0.7，需要进行端粒延伸。">
-                        These chromosome ends have TRC < 0.7 and need telomere extension.
+                    <h4 style="margin: 0 0 10px 0; color: #495057;" data-i18n-en="User-selected chromosome ends:" data-i18n-zh="用户选择的染色体端：">User-selected chromosome ends:</h4>
+                    <p style="margin: 0 0 15px 0; color: #6c757d; font-size: 0.95em;" data-i18n-en="These target ends were supplied explicitly with -e/--target_ends after manual review." data-i18n-zh="这些目标端点由人工检查后通过 -e/--target_ends 明确提供。">
+                        These target ends were supplied explicitly with -e/--target_ends after manual review.
                     </p>
                     <div id="need-extension-list" style="font-family: 'Courier New', monospace; font-size: 0.9em;">
                         <!-- Populated by JavaScript -->
@@ -2100,97 +1757,37 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
             </div>
         </div>
 
-        <!-- Section 5: Final Integrated Genome -->
+        <!-- Section 5: Final manual review -->
         <div class="card">
-            <div class="card-header" data-i18n-en="✅ 5. Final Integrated Genome" data-i18n-zh="✅ 5. 最终整合基因组">✅ 5. Final Integrated Genome</div>
+            <div class="card-header" data-i18n-en="🔎 5. Final Chromosome-End Manual Review" data-i18n-zh="🔎 5. 最终染色体末端人工检查">🔎 5. Final Chromosome-End Manual Review</div>
             <div class="card-content">
-                <div id="final-table-container" class="table-container-limited">
-                    <table id="final-table">
-                        <thead>
-                            <tr>
-                                <th>Chromosome</th>
-                                <th class="sortable" data-table="final" data-column="end" data-type="text">End</th>
-                                <th class="sortable" data-table="final" data-column="trc_score" data-type="number">TRC Score</th>
-                                <th class="sortable" data-table="final" data-column="telomeric" data-type="text">Telomeric</th>
-                            </tr>
-                        </thead>
-                        <tbody id="final-tbody">
-                            <!-- Populated by JavaScript -->
-                        </tbody>
-                    </table>
-                    <div class="table-toggle-container">
-                        <button id="final-toggle-btn" class="table-toggle-btn" onclick="toggleTableExpand('final')">Expand</button>
-                    </div>
-                </div>
+                <p data-i18n-en="Review the final chromosome-end sequences and motif plots manually. A successful extension means that a linker was produced; it is not an automatic telomere-completeness call."
+                   data-i18n-zh="请人工检查最终染色体末端序列和 motif 图。延伸成功仅表示已生成 linker，不等同于自动判定端粒完整。">
+                    Review the final chromosome-end sequences and motif plots manually. A successful extension means that a linker was produced; it is not an automatic telomere-completeness call.
+                </p>
+                {final_review_links}
             </div>
         </div>
 
-        <!-- Section 6: Chromosome End Status Visualization -->
-        <div class="card">
-            <div class="card-header" data-i18n-en="📊 6. Chromosome End Status" data-i18n-zh="📊 6. 染色体端状态">📊 6. Chromosome End Status</div>
-            <div class="card-content">
-                <div class="chr-visualization" id="chromosome-tracks">
-                    <!-- Chromosome tracks will be inserted here by JavaScript -->
-                </div>
-                <div class="legend">
-                    <div class="legend-item">
-                        <div class="legend-color telomeric"></div>
-                        <span data-i18n-en="Telomeric Region" data-i18n-zh="端粒区域">Telomeric Region</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color chromosome"></div>
-                        <span data-i18n-en="Untelomeric Region" data-i18n-zh="非端粒区域">Untelomeric Region</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Section 7: Telomere Motif Distribution -->
-        <div class="card">
-            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-                <span data-i18n-en="📊 7. Telomere Motif Distribution" data-i18n-zh="📊 7. 端粒 Motif 分布">📊 7. Telomere Motif Distribution</span>
-                <select id="motif-chr-selector" class="chr-selector">
-                    <option value="all" data-i18n-en="All Chromosomes" data-i18n-zh="所有染色体" selected>All Chromosomes</option>
-                </select>
-            </div>
-            <div class="card-content">
-                <div class="motif-plot-container">
-                    <img id="motif-plot-img" src="all_chromosomes_combined.png" alt="Telomere Motif Distribution" style="width: 100%; height: auto; display: block;">
-                </div>
-            </div>
-        </div>
+        {final_motif_html}
     </div>
 
     <script>
         // Data from Python
-        const initialData = {js_initial_data};
-        const initialStats = {js_initial_stats};
         const needExtensionList = {js_need_extension_list};
-        const teloReadsStats = {js_telo_reads};
         const extensionResults = {js_extension_results};
-        const integrationStats = {js_integration_stats};
-        const finalData = {js_final_data};
-        const finalStats = {js_final_stats};
-        const chrLengths = {js_chr_lengths};
-        const motifImages = {js_motif_images};
         const motifChromosomes = {js_chrom_names};
-
-        let initialDataSorted = [...initialData];
-        let finalDataSorted = [...finalData];
-        let sortState = {{
-            initial: {{ column: null, direction: null }},
-            final: {{ column: null, direction: null }}
-        }};
+        const finalMotifBase = {js_final_motif_base};
 
         let currentLang = 'en';
         let languageButtons = [];
 
         const translations = {{
             en: {{
-                no_extension_needed: 'No chromosome ends require extension.'
+                no_extension_needed: 'No target chromosome ends were supplied.'
             }},
             zh: {{
-                no_extension_needed: '没有染色体端需要延伸。'
+                no_extension_needed: '未提供需要延伸的目标染色体端。'
             }}
         }};
 
@@ -2229,22 +1826,6 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
             }});
         }}
 
-        function updateToggleButtons() {{
-            const configs = [
-                {{ key: 'initial', containerId: 'initial-table-container', buttonId: 'initial-toggle-btn' }},
-                {{ key: 'final', containerId: 'final-table-container', buttonId: 'final-toggle-btn' }}
-            ];
-            configs.forEach((cfg) => {{
-                const container = document.getElementById(cfg.containerId);
-                const btn = document.getElementById(cfg.buttonId);
-                if (!container || !btn) {{
-                    return;
-                }}
-                const expanded = container.classList.contains('expanded');
-                btn.textContent = expanded ? 'Collapse' : 'Expand';
-            }});
-        }}
-
         function getConnectionTypeLabel(type) {{
             if (!type) {{
                 return 'NA';
@@ -2264,12 +1845,8 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
 
 
         function refreshLanguageSensitiveContent() {{
-            populateInitialTable();
             populateNeedExtensionList();
             populateExtensionTable();
-            populateFinalTable();
-            generateChromosomeVisualization();
-            updateToggleButtons();
             // Update i18n in motif selector options
             try {{
                 const sel = document.getElementById('motif-chr-selector');
@@ -2312,7 +1889,6 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
             applyAttributeTranslations(currentLang);
             refreshLanguageSensitiveContent();
             setActiveLanguageButton();
-            initializeSorting();
 
             // Initialize motif selector
             const motifSelector = document.getElementById('motif-chr-selector');
@@ -2332,9 +1908,9 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
                 motifSelector.addEventListener('change', () => {{
                     const val = motifSelector.value;
                     if (val === 'all') {{
-                        motifImg.src = 'all_chromosomes_combined.png';
+                        motifImg.src = finalMotifBase + '/all_chromosomes_combined.png';
                     }} else {{
-                        motifImg.src = `${{val}}_telomere_motif.png`;
+                        motifImg.src = finalMotifBase + '/' + val + '_telomere_motif.png';
                     }}
                 }});
             }}
@@ -2396,28 +1972,6 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
             container.appendChild(list);
         }}
 
-        // Populate initial genome table
-        function populateInitialTable() {{
-            const tbody = document.getElementById('initial-tbody');
-            tbody.innerHTML = '';
-            
-            if (initialDataSorted.length === 0) {{
-                tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No data available</td></tr>';
-                return;
-            }}
-            
-            initialDataSorted.forEach(row => {{
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td>${{row.chromosome}}</td>
-                    <td>${{row.end}}</td>
-                    <td>${{row.trc_score.toFixed(3)}}</td>
-                    <td><span class="badge badge-${{row.is_telomeric ? 'yes' : 'no'}}">${{row.telomeric}}</span></td>
-                `;
-                tbody.appendChild(tr);
-            }});
-        }}
-
         // Populate extension table
         function populateExtensionTable() {{
             const tbody = document.getElementById('extension-tbody');
@@ -2446,190 +2000,6 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
                     <td><a href="${{reportFileName}}" target="_blank" rel="noopener" title="View detailed report for ${{row.chr_end}}">View</a></td>
                 `;
                 tbody.appendChild(tr);
-            }});
-        }}
-
-        // Populate final genome table
-        function populateFinalTable() {{
-            const tbody = document.getElementById('final-tbody');
-            tbody.innerHTML = '';
-            
-            if (finalDataSorted.length === 0) {{
-                tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No final genome data available</td></tr>';
-                return;
-            }}
-            
-            finalDataSorted.forEach(row => {{
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td>${{row.chromosome}}</td>
-                    <td>${{row.end}}</td>
-                    <td>${{row.trc_score.toFixed(3)}}</td>
-                    <td><span class="badge badge-${{row.is_telomeric ? 'yes' : 'no'}}">${{row.telomeric}}</span></td>
-                `;
-                tbody.appendChild(tr);
-            }});
-        }}
-
-        // Generate chromosome visualization with actual lengths (track-style)
-        function generateChromosomeVisualization() {{
-            const container = document.getElementById('chromosome-tracks');
-            container.innerHTML = '';
-            
-            if (finalData.length === 0) {{
-                container.innerHTML = '<div class="empty-state">No chromosome data available</div>';
-                return;
-            }}
-            
-            // Group by chromosome
-            const chrGroups = {{}};
-            finalData.forEach(row => {{
-                if (!chrGroups[row.chromosome]) {{
-                    chrGroups[row.chromosome] = {{}};
-                }}
-                chrGroups[row.chromosome][row.end] = row.is_telomeric;
-            }});
-            
-            // Find max chromosome length for scaling (longest = 100% width)
-            const maxLength = Math.max(...Object.values(chrLengths));
-            
-            // Create tracks for each chromosome
-            Object.keys(chrGroups).sort().forEach(chr => {{
-                const ends = chrGroups[chr];
-                const leftTelo = ends['Left'] || ends['left'] || ends['L'] || false;
-                const rightTelo = ends['Right'] || ends['right'] || ends['R'] || false;
-                
-                // Get chromosome length
-                const chrLength = chrLengths[chr] || 0;
-                if (chrLength === 0) {{
-                    return; // Skip if length unknown
-                }}
-                
-                // Calculate scaled width percentage (longest = 100%)
-                const widthPercent = (chrLength / maxLength) * 100;
-                
-                // Format chromosome length
-                const lengthMb = (chrLength / 1000000).toFixed(2);
-                
-                // Create track container
-                const trackDiv = document.createElement('div');
-                trackDiv.className = 'track';
-                
-                // Build track HTML - chromosome name without length
-                let trackHTML = `
-                    <div class="chr-name">${{chr}}</div>
-                    <div class="track-header">
-                        <div class="track-position start">0 Mb</div>
-                        <div class="track-bar" style="width: ${{widthPercent}}%;">
-                `;
-                
-                // Add left telomere if present (fixed 100px width)
-                if (leftTelo) {{
-                    trackHTML += `<div class="chr-telomere left"></div>`;
-                }}
-                
-                // Add right telomere if present (fixed 100px width)
-                if (rightTelo) {{
-                    trackHTML += `<div class="chr-telomere right"></div>`;
-                }}
-                
-                // Add status info in center
-                const leftStatus = `L:${{leftTelo ? '✓' : '✗'}}`;
-                const rightStatus = `R:${{rightTelo ? '✓' : '✗'}}`;
-                trackHTML += `
-                            <div class="chr-info">${{leftStatus}} | ${{rightStatus}}</div>
-                        </div>
-                        <div class="track-position end">${{lengthMb}} Mb</div>
-                    </div>
-                `;
-                
-                trackDiv.innerHTML = trackHTML;
-                container.appendChild(trackDiv);
-            }});
-        }}
-
-        // Sorting function
-        function sortTable(tableType, column, dataType) {{
-            const state = sortState[tableType];
-            
-            // Determine new direction
-            let newDirection = 'asc';
-            if (state.column === column) {{
-                if (state.direction === 'asc') {{
-                    newDirection = 'desc';
-                }} else if (state.direction === 'desc') {{
-                    newDirection = null;  // Reset to original order
-                }}
-            }}
-            
-            // Update state
-            state.column = newDirection ? column : null;
-            state.direction = newDirection;
-            
-            // Get data array
-            const dataArray = tableType === 'initial' ? initialDataSorted : finalDataSorted;
-            
-            // Sort or reset
-            if (newDirection) {{
-                dataArray.sort((a, b) => {{
-                    let aVal, bVal;
-                    
-                    if (dataType === 'number') {{
-                        aVal = a[column];
-                        bVal = b[column];
-                    }} else {{
-                        aVal = String(a[column]).toLowerCase();
-                        bVal = String(b[column]).toLowerCase();
-                    }}
-                    
-                    if (newDirection === 'asc') {{
-                        return aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
-                    }} else {{
-                        return aVal < bVal ? 1 : aVal > bVal ? -1 : 0;
-                    }}
-                }});
-            }} else {{
-                // Reset to original order
-                if (tableType === 'initial') {{
-                    initialDataSorted = [...initialData];
-                }} else {{
-                    finalDataSorted = [...finalData];
-                }}
-            }}
-            
-            // Update sort indicators
-            document.querySelectorAll(`.sortable[data-table="${{tableType}}"]`).forEach(th => {{
-                th.classList.remove('asc', 'desc');
-                if (th.dataset.column === column && newDirection) {{
-                    th.classList.add(newDirection);
-                }}
-            }});
-            
-            // Re-populate table
-            if (tableType === 'initial') {{
-                populateInitialTable();
-            }} else {{
-                populateFinalTable();
-            }}
-        }}
-        
-        // Expand/Collapse table
-        function toggleTableExpand(which) {{
-            const container = document.getElementById(which === 'initial' ? 'initial-table-container' : 'final-table-container');
-            const btn = document.getElementById(which + '-toggle-btn');
-            const expanded = container.classList.toggle('expanded');
-            btn.textContent = expanded ? 'Collapse' : 'Expand';
-        }}
-
-        // Add click listeners to sortable headers
-        function initializeSorting() {{
-            document.querySelectorAll('.sortable').forEach(th => {{
-                th.addEventListener('click', () => {{
-                    const tableType = th.dataset.table;
-                    const column = th.dataset.column;
-                    const dataType = th.dataset.type;
-                    sortTable(tableType, column, dataType);
-                }});
             }});
         }}
 
@@ -2712,7 +2082,7 @@ def main():
         help='TelSeeker output directory path'
     )
     parser.add_argument(
-        '--motif',
+        '-m', '--motif',
         default='TTAGGG',
         help='Telomere motif sequence (default: TTAGGG for vertebrates)'
     )

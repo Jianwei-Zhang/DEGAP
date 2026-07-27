@@ -397,7 +397,8 @@ class TelomereChecker:
                  min_terminal_density: float = 10.0,
                  min_terminal_to_internal_ratio: float = 3.0,
                  method: str = "window_count",
-                 plot_window_size: int = DEFAULT_MOTIF_PLOT_WINDOW_SIZE):
+                 plot_window_size: int = DEFAULT_MOTIF_PLOT_WINDOW_SIZE,
+                 check_name: str = "genome.telomere.check"):
         """
         Initialize TelomereChecker
 
@@ -416,9 +417,12 @@ class TelomereChecker:
             min_terminal_to_internal_ratio: Required terminal/internal density enrichment
             method: Detection method, either 'window_count' or 'legacy_trc'
             plot_window_size: Whole-genome motif plot window size (default: 1000bp)
+            check_name: Output directory and end-sequence filename prefix
         """
         if method not in {"window_count", "legacy_trc"}:
             raise ValueError("method must be 'window_count' or 'legacy_trc'")
+        if not check_name or Path(check_name).name != check_name:
+            raise ValueError("check_name must be a non-empty directory name")
 
         self.genome_file = genome_file
         self.motif = motif.upper()
@@ -434,6 +438,7 @@ class TelomereChecker:
         self.min_terminal_to_internal_ratio = min_terminal_to_internal_ratio
         self.method = method
         self.plot_window_size = plot_window_size
+        self.check_name = check_name
         self.kmer_length = len(motif) - 2
 
         # Window markers (motif*2)
@@ -460,9 +465,12 @@ class TelomereChecker:
         # Step 1: Create output directory
         self._create_output_directory()
 
-        # Step 2: Extract manual review sequences. The automatic classification
-        # path is retained for TelSeeker final-genome reports, but standalone
-        # check mode is intentionally manual-only.
+        # Remove automatic-call artifacts left by older versions so this
+        # directory contains only current manual-review evidence.
+        self._remove_legacy_automatic_outputs()
+
+        # Step 2: Extract manual-review sequences. Initial and final checks use
+        # this same evidence-only path.
         self._process_genome_for_review()
 
         # Step 3: Write manual review outputs only.
@@ -477,12 +485,27 @@ class TelomereChecker:
         
     def _create_output_directory(self):
         """Create output directory structure"""
-        # Fixed directory name: genome.telomere.check
-        # This is hardcoded regardless of input genome file name
-        self.check_dir = os.path.join(self.output_dir, "genome.telomere.check")
+        self.check_dir = os.path.join(self.output_dir, self.check_name)
         os.makedirs(self.check_dir, exist_ok=True)
         
         print(f"[TelomereChecker] Output directory: {self.check_dir}")
+
+    def _remove_legacy_automatic_outputs(self):
+        """Remove obsolete automatic telomere-call files from the check directory."""
+        legacy_filenames = [
+            "genome.telomere.check.csv",
+            "uncertain_chr_end.txt",
+        ]
+        # In the initial directory, need_extension_chr_end.txt can be the
+        # explicit user-supplied task list. Only the final review directory can
+        # safely treat it as an obsolete automatic-call artifact.
+        if self.check_name == "final.genome.telomere.check":
+            legacy_filenames.append("need_extension_chr_end.txt")
+
+        for filename in legacy_filenames:
+            legacy_file = Path(self.check_dir) / filename
+            if legacy_file.exists():
+                legacy_file.unlink()
         
     def _process_genome(self):
         """Process genome and check each chromosome end"""
@@ -724,8 +747,7 @@ class TelomereChecker:
     
     def _write_left_sequences(self):
         """Write left end sequences"""
-        # Fixed filename: genome.telomere.check.left.2kb.fa
-        left_file = os.path.join(self.check_dir, "genome.telomere.check.left.2kb.fa")
+        left_file = os.path.join(self.check_dir, f"{self.check_name}.left.2kb.fa")
         
         print(f"[TelomereChecker] Writing left sequences: {left_file}")
         
@@ -736,8 +758,7 @@ class TelomereChecker:
     
     def _write_right_sequences(self):
         """Write right end sequences"""
-        # Fixed filename: genome.telomere.check.right.2kb.fa
-        right_file = os.path.join(self.check_dir, "genome.telomere.check.right.2kb.fa")
+        right_file = os.path.join(self.check_dir, f"{self.check_name}.right.2kb.fa")
         
         print(f"[TelomereChecker] Writing right sequences: {right_file}")
         
@@ -811,7 +832,7 @@ Output structure:
     )
 
     parser.add_argument(
-        '--motif',
+        '-m', '--motif',
         default='TTAGGG',
         help='Telomere repeat motif (default: TTAGGG)'
     )

@@ -749,9 +749,9 @@ class TelSeeker:
         print(f"\n[Step 3/4] Integrating genome sequences...")
         final_genome = self._integrate_genome_sequences(part2_dir, results, part3_dir)
         
-        # Analyze final genome with telomere checker
+        # Prepare final-genome chromosome ends for manual telomere review.
         if final_genome and final_genome.exists():
-            print(f"\n[Step 3/4] Analyzing final genome telomeres...")
+            print(f"\n[Step 3/4] Preparing final genome for manual telomere review...")
             self._analyze_final_genome(final_genome, part3_dir)
         
         print(f"\n[Step 3/4] Integration complete ✓")
@@ -783,7 +783,7 @@ class TelSeeker:
             chr_end = chr_end_dir.name
             result = {
                 'chr_end': chr_end,
-                'telomeric': 'no',
+                'extended': 'no',
                 'connected_read': 'NA',
                 'round_num': 'NA',
                 'connection_type': 'NA'
@@ -794,8 +794,9 @@ class TelSeeker:
             linker_info = chr_end_dir / 'linker.info'
             
             if linker_fa.exists() and linker_info.exists():
-                # Successfully connected to telomere
-                result['telomeric'] = 'yes'
+                # A linker was produced. Final telomere completeness is reviewed
+                # separately from the chromosome-end sequence and motif plots.
+                result['extended'] = 'yes'
                 
                 # Parse linker.info
                 info = self._parse_linker_info(linker_info)
@@ -872,13 +873,13 @@ class TelSeeker:
         with open(csv_file, 'w', newline='') as f:
             writer = csv.writer(f)
             # Write header
-            writer.writerow(['Chr_end', 'Telomeric', 'Connected_read', 'Round_num', 'Connection_type'])
+            writer.writerow(['Chr_end', 'Extended', 'Connected_read', 'Round_num', 'Connection_type'])
             
             # Write data rows
             for result in results:
                 writer.writerow([
                     result['chr_end'],
-                    result['telomeric'],
+                    result['extended'],
                     result['connected_read'],
                     result['round_num'],
                     result['connection_type']
@@ -900,7 +901,7 @@ class TelSeeker:
         from Bio.SeqRecord import SeqRecord
         
         # Filter successful results
-        successful = [r for r in results if r['telomeric'] == 'yes']
+        successful = [r for r in results if r['extended'] == 'yes']
         
         if not successful:
             print(f"  No successful connections to integrate")
@@ -1036,7 +1037,7 @@ class TelSeeker:
     
     def _analyze_final_genome(self, final_genome_file: Path, part3_dir: Path):
         """
-        Analyze final integrated genome using TelomereChecker (window_count method).
+        Prepare final chromosome-end sequences and motif plots for manual review.
 
         Args:
             final_genome_file: Path to final.genome.fa
@@ -1046,70 +1047,18 @@ class TelSeeker:
             # Import TelomereChecker
             from TelSeekerCheck import TelomereChecker
 
-            # Create checker instance
-            # Output will be placed in part3_dir, and TelomereChecker will create
-            # a subdirectory named 'genome.telomere.check'
-            # But we want it named 'final.genome.telomere.check' instead
-
-            # Create custom output directory name
-            check_output_dir = part3_dir / 'final.genome.telomere.check'
-            check_output_dir.parent.mkdir(parents=True, exist_ok=True)
-
-            # Create checker with terminal window-count method parameters
             checker = TelomereChecker(
                 genome_file=str(final_genome_file),
                 motif=self.motif,
                 output_dir=str(part3_dir),
-                trc_threshold=0.7,
-                check_length=100000,
-                extract_length=2000,
-                window_flank=500,
-                window_size=10000,
-                terminal_windows=1,
-                min_terminal_repeats=100,
-                min_terminal_density=10.0,
-                min_terminal_to_internal_ratio=3.0,
-                method="window_count"
+                check_name='final.genome.telomere.check',
             )
-            
-            # Override the check_dir to use our custom name
-            checker.check_dir = str(check_output_dir)
-            
-            # Create the directory
-            check_output_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Run telomere check (terminal window-count method, but suppress its output)
-            print(f"  Running telomere check on final genome (window_count method)...")
-            print(f"    Check length: 100kb, Window size: 10kb")
+            checker.run()
 
-            # Temporarily redirect stdout to suppress verbose output
-            import sys
-            from io import StringIO
-            old_stdout = sys.stdout
-            sys.stdout = StringIO()
-
-            try:
-                # Process genome directly without calling run()
-                checker._process_genome()
-                checker._write_csv_report()
-                checker._write_extension_list()
-                checker._write_uncertain_list()
-                checker._write_left_sequences()
-                checker._write_right_sequences()
-            finally:
-                sys.stdout = old_stdout
-
-            # Print summary of results
-            telomeric_count = sum(1 for r in checker.results if r['status'] == 'telomeric')
-            total_count = len(checker.results)
-
-            print(f"  ✓ Analysis complete (window_count method)")
-            print(f"    Total ends checked: {total_count}")
-            if total_count > 0:
-                print(f"    Telomeric ends:     {telomeric_count} ({telomeric_count/total_count*100:.1f}%)")
-            else:
-                print(f"    Telomeric ends:     {telomeric_count}")
-            print(f"    Results saved to:   {check_output_dir}")
+            check_output_dir = part3_dir / 'final.genome.telomere.check'
+            print("  ✓ Final manual-review evidence prepared")
+            print("    Automatic telomeric/untelomeric calls are not generated")
+            print(f"    Results saved to: {check_output_dir}")
             
         except ImportError as e:
             print(f"  Warning: Could not import TelomereChecker: {e}")
@@ -1132,18 +1081,19 @@ class TelSeeker:
             print(f"  No chromosome ends found to analyze")
             return
         
-        telomeric_yes = sum(1 for r in results if r['telomeric'] == 'yes')
-        telomeric_no = total - telomeric_yes
+        extended_yes = sum(1 for r in results if r['extended'] == 'yes')
+        extended_no = total - extended_yes
         
         direct = sum(1 for r in results if r['connection_type'] == 'direct')
         extension = sum(1 for r in results if r['connection_type'] == 'extension')
         
         print(f"\n[Step 3/4] Summary Statistics:")
         print(f"  Total chromosome ends:     {total}")
-        print(f"  Successfully extended:     {telomeric_yes} ({telomeric_yes/total*100:.1f}%)")
-        print(f"  Failed to extend:          {telomeric_no} ({telomeric_no/total*100:.1f}%)")
+        print(f"  Successfully extended:     {extended_yes} ({extended_yes/total*100:.1f}%)")
+        print(f"  Failed to extend:          {extended_no} ({extended_no/total*100:.1f}%)")
+        print("  Final telomere status:     manual review required")
         
-        if telomeric_yes > 0:
+        if extended_yes > 0:
             print(f"\n  Connection Methods:")
             print(f"    Direct connection:       {direct}")
             print(f"    Extension connection:    {extension}")

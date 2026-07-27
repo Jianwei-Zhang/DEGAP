@@ -7,6 +7,7 @@ DEGAP.pptx
 .codex/
 .trellis/
 AGENTS.md
+/docs/
 
 # Python bytecode and caches
 __pycache__/

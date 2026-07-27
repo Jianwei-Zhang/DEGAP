@@ -221,11 +221,11 @@ If you install tools manually (without Micromamba), ensure the following program
 | `--ctgseq` | Input contigs (CtgLinker) | None |
 | `--genome` | Input genome/chromosomes (TelSeeker) | None |
 | `--ctg` | Single-record contig endpoint for TelSeeker Ctg, as `--ctg contig.fa L` or `--ctg contig.fa R`; repeat for multiple endpoints | None |
-| `--motif` | Telomere motif sequence (TelSeeker) | None |
+| `-m, --motif` | Telomere motif sequence (TelSeeker) | None |
 | `-e, --target_ends` | Target chromosome ends for TelSeeker. Supports direct values such as `-e Chr01.L Chr01.R`, or one file such as `-e target_ends.txt` with one target per line | Required |
-| `--tel-n` | Motif-length units checked at each read end for tel_reads | `100` |
-| `--tel-r` | Minimum terminal hit ratio, computed as hits / tel-n | `0.6` |
-| `--tel-mm` | Allowed mismatches per motif-length unit, `0` or `1` | `0` |
+| `-tn, --tel-n` | Motif-length units checked at each read end for tel_reads | `100` |
+| `-tr, --tel-r` | Minimum terminal hit ratio, computed as hits / tel-n | `0.6` |
+| `-tmm, --tel-mm` | Allowed mismatches per motif-length unit, `0` or `1` | `0` |
 
 **Note**: At least one of `--hifi` or `--ont` must be provided.
 
@@ -720,9 +720,11 @@ output_directory/
 ├── part3.integration.results/      # Integration and summary
 │   ├── check_part2_jobs.csv       # Summary of all chromosome ends
 │   ├── final.genome.fa            # Final integrated genome
-│   └── final.genome.telomere.check/  # Final genome telomere check
-│       ├── genome.telomere.check.csv
-│       └── ...
+│   └── final.genome.telomere.check/  # Final manual chromosome-end review
+│       ├── final.genome.telomere.check.left.2kb.fa
+│       ├── final.genome.telomere.check.right.2kb.fa
+│       ├── all_chromosomes_combined.png
+│       └── <chromosome>_telomere_motif.png
 ├── visual.report/                  # Visualization reports
 │   ├── Global.report.html         # Global overview report
 │   ├── Chr01.Left.report.html     # Individual chromosome end reports
@@ -733,9 +735,9 @@ output_directory/
 ```
 
 **Key Output Files:**
-- `part3.integration.results/final.genome.fa`: Final genome with extended telomeres
+- `part3.integration.results/final.genome.fa`: Final genome with successfully connected extensions integrated
 - `genome.telomere.check/need_extension_chr_end.txt`: Target chromosome ends used by TelSeeker
-- `part3.integration.results/final.genome.telomere.check/uncertain_chr_end.txt`: Final-genome ends needing manual telomere review, if any
+- `part3.integration.results/final.genome.telomere.check/`: Final chromosome-end FASTA files and motif plots for manual review; no automatic completeness calls
 - `part2.chr.end.job/<Chr>.<End>/linker.fa`: Extended sequence for each chromosome end
 - `visual.report/Global.report.html`: Interactive visualization of all results
 
@@ -938,7 +940,7 @@ Check the following log files for debugging:
 
 **TelSeeker mode:**
 - `genome.telomere.check/need_extension_chr_end.txt`: Target ends loaded from `-e/--target_ends`
-- `part3.integration.results/final.genome.telomere.check/uncertain_chr_end.txt`: Ambiguous final telomere-check calls
+- `part3.integration.results/final.genome.telomere.check/`: Final chromosome-end FASTA files and motif plots for manual review
 - `part1.telo.reads/part1.log`: Telomeric reads extraction log
 - `part2.chr.end.job/<Chr>.<End>/extension/process.log`: Extension log for each chromosome end
 - `part3.integration.results/check_part2_jobs.csv`: Summary of all chromosome ends

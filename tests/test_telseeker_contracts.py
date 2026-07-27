@@ -19,6 +19,7 @@ from TelSeekerPart1 import calculate_trc as part1_calculate_trc
 from TelSeekerPart1 import TeloReadsExtractor
 from TelSeekerPart2 import finalize_chr_end_result
 from TelSeekerCtg import TelSeekerCtg, validate_shared_manifest_compatibility
+from TelSeekerVisualizer import generate_html_visualization
 
 
 class TelSeekerContractTests(unittest.TestCase):
@@ -362,24 +363,104 @@ class TelSeekerContractTests(unittest.TestCase):
 
             self.assertFalse(checker._check_step2_complete(part2_dir))
 
-    def test_final_genome_analysis_writes_uncertain_review_file(self):
+    def test_final_genome_analysis_writes_manual_review_evidence_only(self):
         with tempfile.TemporaryDirectory() as tmp:
             part3_dir = Path(tmp) / "part3.integration.results"
             part3_dir.mkdir()
             final_genome = part3_dir / "final.genome.fa"
             final_genome.write_text(">Chr01\n" + "A" * 200 + "\n")
 
+            check_dir = part3_dir / "final.genome.telomere.check"
+            check_dir.mkdir()
+            for legacy_name in (
+                "genome.telomere.check.csv",
+                "need_extension_chr_end.txt",
+                "uncertain_chr_end.txt",
+            ):
+                (check_dir / legacy_name).write_text("legacy\n")
+
             runner = TelSeeker.__new__(TelSeeker)
             runner.motif = "TTAGGG"
 
             runner._analyze_final_genome(final_genome, part3_dir)
 
-            uncertain_file = (
-                part3_dir
-                / "final.genome.telomere.check"
-                / "uncertain_chr_end.txt"
+            self.assertTrue(
+                (check_dir / "final.genome.telomere.check.left.2kb.fa").exists()
             )
-            self.assertTrue(uncertain_file.exists())
+            self.assertTrue(
+                (check_dir / "final.genome.telomere.check.right.2kb.fa").exists()
+            )
+            self.assertFalse((check_dir / "genome.telomere.check.csv").exists())
+            self.assertFalse((check_dir / "need_extension_chr_end.txt").exists())
+            self.assertFalse((check_dir / "uncertain_chr_end.txt").exists())
+
+    def test_part3_summary_uses_extended_not_telomeric(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            part2_dir = tmp_path / "part2.chr.end.job"
+            success_dir = part2_dir / "Chr01.L"
+            failed_dir = part2_dir / "Chr01.R"
+            success_dir.mkdir(parents=True)
+            failed_dir.mkdir(parents=True)
+            (success_dir / "linker.fa").write_text(">linker\nACGT\n")
+            (success_dir / "linker.info").write_text(
+                "Connection Method: direct\nConnected Read: read1\n"
+            )
+
+            runner = TelSeeker.__new__(TelSeeker)
+            results = runner._collect_part2_results(part2_dir)
+
+            self.assertEqual([row["extended"] for row in results], ["yes", "no"])
+            self.assertTrue(all("telomeric" not in row for row in results))
+
+            csv_file = tmp_path / "check_part2_jobs.csv"
+            runner._write_results_csv(results, csv_file)
+            self.assertEqual(
+                csv_file.read_text().splitlines()[0],
+                "Chr_end,Extended,Connected_read,Round_num,Connection_type",
+            )
+
+    def test_global_report_uses_manual_initial_and_final_review_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp)
+            initial_dir = out_dir / "genome.telomere.check"
+            final_dir = (
+                out_dir
+                / "part3.integration.results"
+                / "final.genome.telomere.check"
+            )
+            visual_dir = out_dir / "visual.report"
+            initial_dir.mkdir()
+            final_dir.mkdir(parents=True)
+            visual_dir.mkdir()
+
+            (initial_dir / "need_extension_chr_end.txt").write_text("Chr01.L\n")
+            (initial_dir / "genome.telomere.check.left.2kb.fa").write_text(
+                ">Chr01_L\nACGT\n"
+            )
+            (initial_dir / "genome.telomere.check.right.2kb.fa").write_text(
+                ">Chr01_R\nACGT\n"
+            )
+            (initial_dir / "all_chromosomes_combined.png").write_bytes(b"png")
+            (final_dir / "final.genome.telomere.check.left.2kb.fa").write_text(
+                ">Chr01_L\nACGT\n"
+            )
+            (final_dir / "final.genome.telomere.check.right.2kb.fa").write_text(
+                ">Chr01_R\nACGT\n"
+            )
+            (final_dir / "all_chromosomes_combined.png").write_bytes(b"png")
+            (final_dir / "Chr01_telomere_motif.png").write_bytes(b"png")
+
+            report_file = visual_dir / "Global.report.html"
+            generate_html_visualization(out_dir, report_file, "TTAGGG")
+            report = report_file.read_text()
+
+            self.assertIn("Initial Chromosome-End Manual Review", report)
+            self.assertIn("Final Chromosome-End Manual Review", report)
+            self.assertIn("final.genome.telomere.check.left.2kb.fa", report)
+            self.assertIn("A successful extension means that a linker was produced", report)
+            self.assertNotIn("TRC Score", report)
+            self.assertNotIn("Chromosome End Status", report)
 
     def test_part1_trc_matches_telseeker_check_trc(self):
         sequence = "TTAGGGTTAGGGTTAGGG"

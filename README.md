@@ -200,6 +200,9 @@ per chromosome. It also writes `genome.telomere.check.left.2kb.fa` and
 already know the target chromosome ends, skip `TelSeekerCheck.py` and pass them
 directly with `-e Chr01.L Chr01.R` or with `-e target_ends.txt`.
 
+Telomere parameters also have concise aliases: `-m/--motif`, `-tn/--tel-n`,
+`-tr/--tel-r`, and `-tmm/--tel-mm`.
+
 Telomeric read discovery checks both physical read ends. At each end, TelSeeker
 scans `--tel-n * len(--motif)` bases with motif rotations and reverse-complement
 rotations. A read end passes when `hits / --tel-n >= --tel-r`; `--tel-mm` allows
