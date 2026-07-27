@@ -1,6 +1,8 @@
 import sys
 import csv
 import json
+import shutil
+import subprocess
 import tempfile
 import unittest
 import importlib.util
@@ -459,8 +461,28 @@ class TelSeekerContractTests(unittest.TestCase):
             self.assertIn("Final Chromosome-End Manual Review", report)
             self.assertIn("final.genome.telomere.check.left.2kb.fa", report)
             self.assertIn("A successful extension means that a linker was produced", report)
+            self.assertIn('id="initial-review-table"', report)
+            self.assertIn('id="final-review-table"', report)
+            self.assertIn("Chromosome-End Task Status", report)
+            self.assertIn("Connected does not mean telomere-complete", report)
+            self.assertIn('"selected": true', report)
+            self.assertIn('"extension_status": "targeted"', report)
             self.assertNotIn("TRC Score", report)
-            self.assertNotIn("Chromosome End Status", report)
+
+            if shutil.which("node"):
+                report_script = report.split("<script>", 1)[1].split("</script>", 1)[0]
+                script_file = out_dir / "Global.report.js"
+                script_file.write_text(report_script)
+                syntax_check = subprocess.run(
+                    ["node", "--check", str(script_file)],
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(
+                    syntax_check.returncode,
+                    0,
+                    syntax_check.stdout + syntax_check.stderr,
+                )
 
     def test_part1_trc_matches_telseeker_check_trc(self):
         sequence = "TTAGGGTTAGGGTTAGGG"
