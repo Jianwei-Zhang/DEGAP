@@ -4,11 +4,11 @@
 
 **DEGAP degaps gaps!**
 
-**DEGAP v2** is an enhanced gap-filling software that resolves gap regions by utilizing high-fidelity (HiFi) and/or Oxford Nanopore (ONT) long reads. It supports multiple modes for different assembly scenarios.
+**DEGAP2.0** is an enhanced gap-filling and sequence-extension toolkit that resolves assembly gaps and extends chromosome ends using high-fidelity (HiFi) and/or Oxford Nanopore (ONT) long reads.
 
 ## System Requirements
 
-**DEGAP v2** has been developed with Python under a Linux environment. The following packages/tools are required (versions aligned with `environment.yml`):
+**DEGAP2.0** runs on Linux with Python 3.10. Required Python packages and external tools are declared in `environment.yml`, with selected versions pinned:
 
 **Python Packages:**
 - Python (3.10)
@@ -62,11 +62,19 @@ We recommend using [Micromamba](https://mamba.readthedocs.io/en/latest/installat
    micromamba env update -f environment.yml --prune
    ```
 
-The `environment.yml` file pins the main Python version, core Python packages (Biopython, Pysam, NumPy, Matplotlib, SciPy) and the required external tools (Minimap2, Hifiasm, SAMtools, Seqkit, MUMmer4, GNU Parallel, Ripgrep), ensuring a reproducible runtime environment for **DEGAP v2**.
+The `environment.yml` file declares Python, core Python packages (Biopython, Pysam, NumPy, Matplotlib, SciPy), and required external tools (Minimap2, Hifiasm, SAMtools, Seqkit, MUMmer4, GNU Parallel, Ripgrep). It pins Python and selected tool versions; unpinned dependencies are resolved when the **DEGAP2.0** environment is created or updated.
 
 ## Tutorial
 
-**DEGAP v2** provides 4 modes (GapFiller, CtgLinker, TelSeeker, AutoGapfiller) to fill gaps and extend sequences.
+**DEGAP2.0** provides 5 execution modes to fill gaps, link contigs, and extend telomeres:
+
+| Mode | Command Entry | Use Case | Key Inputs |
+| --- | --- | --- | --- |
+| **GapFiller** | `bin/DEGAP.py --mode gapfiller` | Fill a specific gap between known left and right flanking sequences | `--seqleft`, `--seqright`, `--hifi`/`--ont`, `--flag left\|right` |
+| **CtgLinker** | `bin/DEGAP.py --mode ctglinker` | Link contigs and close gaps by elongating contig edges | `--ctgseq`, `--hifi`/`--ont` |
+| **TelSeeker** | `bin/DEGAP.py --mode telseeker` | Extend specified chromosome ends (`Chr.L` / `Chr.R`) toward telomeres | `--genome`, `--motif`, `-e`, `--hifi`/`--ont` |
+| **TelSeeker Ctg** | `bin/DEGAP.py --mode telseeker_ctg` | Extend individual single-record contig endpoints (`L` or `R`) with shared read caching | `--ctg <fasta> <L\|R>`, `--motif`, `--hifi`/`--ont` |
+| **AutoGapfiller** | `bin/AutoGapfiller.py` | Automatically detect all genome gaps and run parallel gap-filling jobs | `--genome`, `--hifi`/`--ont`, `--work` (optional `--setup_only`) |
 
 ### Input Data Requirements
 
@@ -189,16 +197,12 @@ python bin/DEGAP.py --mode telseeker \
     --MaximumExtensionRound 25
 ```
 
-Review the `TelSeekerCheck.py` output before choosing TelSeeker input. The check
-step generates whole-genome motif distribution plots using the same 1 kb plotting
-window as the final TelSeeker report:
-`all_chromosomes_combined.png` plus one `<chromosome>_telomere_motif.png` image
-per chromosome. It also writes `genome.telomere.check.left.2kb.fa` and
-`genome.telomere.check.right.2kb.fa` for sequence-level review. Automatic
-`genome.telomere.check.csv`, `need_extension_chr_end.txt`, and
-`uncertain_chr_end.txt` files are no longer written by standalone check. If you
+Review the `TelSeekerCheck.py` output before choosing TelSeeker targets. The check
+step generates whole-genome motif distribution plots using a 1 kb plotting
+window (`all_chromosomes_combined.png` plus `<chromosome>_telomere_motif.png` per chromosome) and writes `genome.telomere.check.left.2kb.fa` and
+`genome.telomere.check.right.2kb.fa` for terminal sequence inspection. If you
 already know the target chromosome ends, skip `TelSeekerCheck.py` and pass them
-directly with `-e Chr01.L Chr01.R` or with `-e target_ends.txt`.
+directly with `-e Chr01.L Chr01.R` or `-e target_ends.txt`.
 
 Telomere parameters also have concise aliases: `-m/--motif`, `-tn/--tel-n`,
 `-tr/--tel-r`, and `-tmm/--tel-mm`.
@@ -281,7 +285,7 @@ python bin/AutoGapfiller.py \
 
 **Note:** You can add the `--setup_only` parameter to only create the gap-filling job directories without executing them. This is useful for inspecting the tasks before running or for manual execution control.
 
-## Key Features in v2
+## Key Features in DEGAP2.0
 
 - **Multi-data support**: HiFi-only, ONT-only, or Mixed (HiFi+ONT) modes
 - **K-mer filtering**: `--kmer_filter` for faster processing with large datasets
