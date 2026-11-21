@@ -178,8 +178,10 @@ class GapFillingVisualizer:
             filled = gap.get('filled', False)
             fill_direction = gap.get('fill_direction', 'none')
 
-            # 确定要复制的 flag
-            if filled and fill_direction in ['left', 'right']:
+            # New jobs have one shared report, including unclosed results.
+            if gap.get('report_direction') == 'bidirectional' or fill_direction == 'bidirectional':
+                flag_to_copy = 'bidirectional'
+            elif filled and fill_direction in ['left', 'right']:
                 # 成功填充：复制成功的方向
                 flag_to_copy = fill_direction
             else:
@@ -189,13 +191,28 @@ class GapFillingVisualizer:
             # 源文件路径
             source_report = gap_filling_dir / f"{chrom}.{gap_id}.{flag_to_copy}" / "visualization_output" / "gapfiller_report.html"
 
+            if flag_to_copy == 'bidirectional':
+                source_report = gap_filling_dir / f"{chrom}.{gap_id}.bidirectional" / "family-report.html"
+
             # 目标文件路径
             target_report = self.output_dir / f"{chrom}.{gap_id}.{flag_to_copy}.html"
 
             # 复制文件
             if source_report.exists():
                 try:
-                    shutil.copy2(source_report, target_report)
+                    if flag_to_copy == 'bidirectional':
+                        # Keep source artifacts in place, but rebase report links.
+                        import re
+                        import os
+                        from html import escape, unescape
+                        from urllib.parse import quote
+                        def rebase(match):
+                            source = source_report.parent / unescape(match.group(1))
+                            relative = os.path.relpath(source, target_report.parent)
+                            return 'href="' + escape(quote(relative, safe='/.'), quote=True) + '"'
+                        target_report.write_text(re.sub(r'href="([^"]+)"', rebase, source_report.read_text()))
+                    else:
+                        shutil.copy2(source_report, target_report)
                     copied_count += 1
                     print(f"  Copied: {chrom}.{gap_id}.{flag_to_copy}.html")
                 except Exception as e:
@@ -1268,7 +1285,7 @@ class GapFillingVisualizer:
 
                     // Details - View link to sub-task report
                     // For filled gaps: use fill_direction, for unfilled: use 'left'
-                    const linkFlag = gap.filled && gap.fill_direction ? gap.fill_direction : 'left';
+                    const linkFlag = gap.report_direction || (gap.filled && gap.fill_direction ? gap.fill_direction : 'left');
                     const reportFile = `${{chrom}}.${{gap.gap_id}}.${{linkFlag}}.html`;
                     const details = `<a href="${{reportFile}}" target="_blank" title="View details for ${{chrom}} Gap ${{gap.gap_id}}" data-i18n-en="View" data-i18n-zh="查看">View</a>`;
 

@@ -16,6 +16,7 @@ import time
 class FindExtensionContigs(object):
 	def __init__(self,ExtensionReads, data_type='hifi', ont_reads=None, original_reads_info=None):
 		self.extensionReads=ExtensionReads
+		self.strict_tools = getattr(ExtensionReads.roundInput.elongation.base, "family_mode", False)
 		self.data_type=data_type
 		self.ont_reads=ont_reads
 		self.original_reads_info=original_reads_info
@@ -46,7 +47,11 @@ class FindExtensionContigs(object):
 		else:
 			logfilet=open(self.log,'w')
 
-			self.hifiasm()
+			cache_assembler = getattr(self.extensionReads.roundInput.elongation.base, "family_assembler", None)
+			if self.strict_tools and cache_assembler:
+				cache_assembler(self)
+			else:
+				self.hifiasm()
 
 			# Check if hifiasm attributes were properly initialized
 			hifiasm_command = getattr(self, 'hifiasmCommand', 'Not initialized (skipped due to no extension reads)')
@@ -74,6 +79,11 @@ class FindExtensionContigs(object):
 			logLine+='extensionContigs\t'+self.extensionContigs+"\n"
 			self.selectContigNote=''
 			self.selectContigNote=self.selectContig()
+			if self.strict_tools and 'No extension contigs or reads found' in self.selectContigNote:
+				# Normal exhaustion has no selected-alignment metrics to serialize.
+				logfilet.write(logLine + 'selectContigNote\t' + self.selectContigNote + '\n')
+				logfilet.close()
+				return
 			if 'hifiasmHasNoAccurateAssembly' in self.selectContigNote:
 				print (self.selectContigNote)
 				self.readCommon()
@@ -146,7 +156,7 @@ class FindExtensionContigs(object):
 			self.selectExtensionContigsAln = []
 			return "No extension contigs or reads found"
 
-		self.potentialExtensionContigsAln=GapFillerClass.mummer(self.extensionReads.roundInput.inputSeq,self.extensionContigs,self.potentialExtensionContigsAln)
+		self.potentialExtensionContigsAln=GapFillerClass.mummer(self.extensionReads.roundInput.inputSeq,self.extensionContigs,self.potentialExtensionContigsAln, strict=self.strict_tools)
 		self.selectContigIdentity=99.0
 		self.selectContigDistance=10
 		self.selectContigAlnLength=1000
@@ -489,7 +499,8 @@ class FindExtensionContigs(object):
 		prefilter_mummerout = GapFillerClass.mummer(
 			seed_seq_file,
 			extension_reads_file,
-			self.extensionReads.roundInput.elongation.roundDir+'/temp3_prefilter'
+			self.extensionReads.roundInput.elongation.roundDir+'/temp3_prefilter',
+			strict=self.strict_tools
 		)
 		
 		# 第二步：从 MUMmer 结果中提取通过预过滤的 reads ID
@@ -512,6 +523,8 @@ class FindExtensionContigs(object):
 					pass
 					
 		except Exception as e:
+			if getattr(self, "strict_tools", False):
+				raise
 			print(f"Error during pre-filtering: {e}")
 			print("Falling back to using all extension reads (no pre-filtering)")
 			# 如果预过滤失败，回退到使用所有 reads
@@ -521,6 +534,8 @@ class FindExtensionContigs(object):
 					if record.id not in readlisttemp:
 						readlisttemp.append(record.id)
 			except Exception as e2:
+				if getattr(self, "strict_tools", False):
+					raise
 				print(f"Error reading extension reads file: {e2}")
 				readlisttemp = []
 		file1=open(self.readCommonResult,'w')
@@ -692,6 +707,8 @@ class FindExtensionContigs(object):
 					pass
 				
 			except Exception as e:
+				if getattr(self, "strict_tools", False):
+					raise
 				print(f"Error during minimap2 all-vs-all: {e}")
 				print("Falling back to original MUMmer-based pairwise comparison...")
 				
@@ -722,7 +739,7 @@ class FindExtensionContigs(object):
 								ft2.writelines(l)
 								ft2.close()
 
-								mummerout=GapFillerClass.mummer(self.extensionReads.roundInput.elongation.roundDir+'/temp2',self.extensionReads.roundInput.elongation.roundDir+'/temp1',self.extensionReads.roundInput.elongation.roundDir+'/temp3')
+								mummerout=GapFillerClass.mummer(self.extensionReads.roundInput.elongation.roundDir+'/temp2',self.extensionReads.roundInput.elongation.roundDir+'/temp1',self.extensionReads.roundInput.elongation.roundDir+'/temp3', strict=self.strict_tools)
 								ft3=open(mummerout,'r')
 								maxCommonLen=0
 								mummeresult=[]
@@ -922,6 +939,8 @@ class FindExtensionContigs(object):
 			return combined_file
 			
 		except Exception as e:
+			if getattr(self, "strict_tools", False):
+				raise
 			print(f"Error combining extension reads: {e}")
 			return None
 
@@ -1106,6 +1125,8 @@ class FindExtensionContigs(object):
 				return output_fastq if converted_count > 0 else None
 
 		except Exception as e:
+			if getattr(self, "strict_tools", False):
+				raise
 			print(f"Error in seqkit conversion: {e}")
 			# 清理临时文件
 			try:
@@ -1178,6 +1199,8 @@ class FindExtensionContigs(object):
 
 		# Check if reads preparation was successful
 		if reads_file is None:
+			if self.strict_tools:
+				raise ValueError("Selected extension reads could not be prepared for hifiasm")
 			print("Warning: Failed to prepare reads for hifiasm. Skipping hifiasm assembly.")
 			# Set proper termination condition instead of creating empty files
 			self.extensionSeqNote = "No extension reads available for hifiasm preparation"
@@ -1233,6 +1256,8 @@ class FindExtensionContigs(object):
 
 			# Skip hifiasm execution if input files are problematic
 			if has_empty_files:
+				if self.strict_tools:
+					raise ValueError("hifiasm input is missing or empty")
 				print("🚫 Skipping hifiasm execution due to empty or missing input files")
 				print("This prevents hifiasm crashes and core file generation")
 				return
@@ -1263,10 +1288,14 @@ class FindExtensionContigs(object):
 					else:
 						print("hifiasm version: Unknown (version check failed)")
 				else:
+					if self.strict_tools:
+						raise FileNotFoundError("hifiasm is unavailable")
 					print("❌ Error: hifiasm not found in PATH")
 					print("Please ensure hifiasm is installed and accessible")
 					return
 			except Exception as e:
+				if self.strict_tools:
+					raise
 				print(f"Error checking hifiasm availability: {e}")
 				print("Proceeding with caution...")
 
@@ -1348,6 +1377,8 @@ class FindExtensionContigs(object):
 					print(f"Error checking for core files: {e}")
 
 				if result.returncode != 0:
+					if self.strict_tools:
+						raise subprocess.CalledProcessError(result.returncode, self.hifiasmCommand, result.stdout, result.stderr)
 					print(f"Warning: hifiasm command failed with return code {result.returncode}")
 					print(f"Error output: {result.stderr}")
 					print(f"Standard output: {result.stdout}")
@@ -1387,6 +1418,8 @@ class FindExtensionContigs(object):
 						pass
 
 			except subprocess.TimeoutExpired as te:
+				if getattr(self, "strict_tools", False):
+					raise
 				print("⏰ TIMEOUT: hifiasm command timed out after 1 hour")
 				print("🔧 Possible solutions:")
 				print("   1. Reduce input data size")
@@ -1431,6 +1464,8 @@ class FindExtensionContigs(object):
 					pass
 
 			except Exception as e:
+				if getattr(self, "strict_tools", False):
+					raise
 				print(f"❌ Exception while executing hifiasm: {e}")
 				print("🔧 Will continue with readCommon fallback method")
 				print("Will continue with fallback assembly methods")
@@ -1459,6 +1494,8 @@ class FindExtensionContigs(object):
 			else:
 				print(f"Warning: hifiasm directory does not exist or is not a directory: {self.hifiasmDir}")
 		except Exception as e:
+			if getattr(self, "strict_tools", False):
+				raise
 			print(f"Error listing files in hifiasm directory {self.hifiasmDir}: {e}")
 			print("This may indicate hifiasm failed to run or the directory was corrupted")
 		
@@ -1508,6 +1545,8 @@ class FindExtensionContigs(object):
 			print(f"Successfully processed hifiasm result file with {len(hifiasmResultDict)} contigs")
 
 		except Exception as e:
+			if getattr(self, "strict_tools", False):
+				raise
 			print(f"Error processing hifiasm result file: {e}")
 			print("This may indicate corrupted hifiasm output or file access issues")
 

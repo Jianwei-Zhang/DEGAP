@@ -70,7 +70,7 @@ The `environment.yml` file declares Python, core Python packages (Biopython, Pys
 
 | Mode | Command Entry | Use Case | Key Inputs |
 | --- | --- | --- | --- |
-| **GapFiller** | `bin/DEGAP.py --mode gapfiller` | Fill a specific gap between known left and right flanking sequences | `--seqleft`, `--seqright`, `--hifi`/`--ont`, `--flag left\|right` |
+| **GapFiller** | `bin/DEGAP.py --mode gapfiller` | Fill a specific gap between known left and right flanking sequences | `--seqleft`, `--seqright`, `--hifi`/`--ont` |
 | **CtgLinker** | `bin/DEGAP.py --mode ctglinker` | Link contigs and close gaps by elongating contig edges | `--ctgseq`, `--hifi`/`--ont` |
 | **TelSeeker** | `bin/DEGAP.py --mode telseeker` | Extend specified chromosome ends (`Chr.L` / `Chr.R`) toward telomeres | `--genome`, `--motif`, `-e`, `--hifi`/`--ont` |
 | **TelSeeker Ctg** | `bin/DEGAP.py --mode telseeker_ctg` | Extend individual single-record contig endpoints (`L` or `R`) with shared read caching | `--ctg <fasta> <L\|R>`, `--motif`, `--hifi`/`--ont` |
@@ -100,12 +100,31 @@ The `--kmer_filter` parameter is a switch to enable k-mer based read filtering:
 
 **Note:** K-mer filtering provides a good balance between speed and accuracy for most applications.
 
-For all modes, we recommend adding `--MaximumExtensionRound 25`. In our tests,
-successful extension jobs usually finished within 25 rounds, so this parameter
-helps avoid long-running jobs that are unlikely to converge.
+Use `--MaximumExtensionRound` to bound extension attempts. In GapFiller and
+AutoGapfiller, `--MaximumExtensionRound 25` allows **25 attempts in total across
+both families**, not 25 per side. The shared length limit likewise sums the new
+bases from both sides; it excludes the original flanks and does not subtract the
+final overlap.
 
 ### GapFiller Mode
 Designed for filling a specific gap when the exact left and right sequences are known.
+
+Both sides extend in alternating turns. Each new sequence is checked against all
+historical versions of the opposite family, including the original flank. If one
+side cannot extend, its history remains available while the other continues.
+Eligible connections are ranked by identity, overlap length, endpoint overhang,
+and stable version order; only the best result from that check is retained.
+
+`--flag` is no longer needed: old commands receive a notice and the option is
+ignored. Re-running the same command resumes the new family checkpoint. Old
+single-sided output directories are not migrated; use a new directory instead.
+The final length-limited attempt is kept whole and checked for closure before
+stopping, so it can cross `--MaximumExtensionLength`.
+
+Read `family-result.json` for the outcome: only `status: "closed"` denotes a
+filled gap. Otherwise, `<name>.final.fa` contains separate family sequences,
+not a joined assembly. `family-report.html` shows both histories and the selected
+connection; `process.agp` refers to exported `family-components.fa` sequences.
 
 ```bash
 python bin/DEGAP.py --mode gapfiller \
@@ -114,7 +133,6 @@ python bin/DEGAP.py --mode gapfiller \
     --hifi ./path/HiFiReads.fa \
     --ont ./path/ONTReads.fa \
     --out ./path/Output \
-    --flag left \
     --MaximumExtensionRound 25 \
     --kmer_filter \
     -t 20

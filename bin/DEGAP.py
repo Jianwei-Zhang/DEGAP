@@ -261,7 +261,7 @@ def usage():
 	print ("\ngapfiller mode:")
 	print ("\t--seqleft sequence_file      Sequence before GAP (FASTA format)")
 	print ("\t--seqright sequence_file     Sequence after GAP (FASTA format)")
-	print ("\t--flag left|right            Choose seqleft or seqright as seed (default: left)")
+	print ("\t--flag left|right            Deprecated compatibility option; ignored (bidirectional extension)")
 
 	print ("\ntelseeker mode:")
 	print ("\t--genome genome.fasta         Genome file with all chromosomes (FASTA)")
@@ -309,10 +309,10 @@ def getoptions():
 	parser.add_argument('--filterDepthHifi', type=float, default=None, help='Filter HiFi reads by mapped depth. if num==0.3 means: mapped HiFi reads on depth>=0.3*avgdepth and depth<=(2-0.3)*avgdepth will be filtered')
 	parser.add_argument('--filterDepthOnt', type=float, default=None, help='Filter ONT reads by mapped depth. if num==0.2 means: mapped ONT reads on depth>=0.2*avgdepth and depth<=(2-0.2)*avgdepth will be filtered')
 	parser.add_argument('--MaximumExtensionLength', type=int, default=None,
-	                    help='Maximum cumulative extension length in bp. Extension stops when total extended length exceeds this value. '
+	                    help='Maximum cumulative extension length in bp. Family searches share the budget across sides; the last complete attempt may cross it. '
 	                         'Applies to all modes (gapfiller/ctglinker/telseeker). Default: None (no limit)')
 	parser.add_argument('--MaximumExtensionRound', type=int, default=None,
-	                    help='Maximum number of extension rounds. Extension stops when round number exceeds this value. '
+	                    help='Maximum extension attempts. Family searches count attempts across both sides, including normal unsuccessful attempts. '
 	                         'Applies to all modes (gapfiller/ctglinker/telseeker). Default: None (no limit). '
 	                         'Note: Setting to 0 will skip extension; minimum recommended value is 5')
 
@@ -346,7 +346,7 @@ def getoptions():
 	# Parameters for gapfiller mode
 	parser.add_argument('--seqleft', type=str, help='Sequence before GAP (FASTA format)')
 	parser.add_argument('--seqright', type=str, help='Sequence after GAP (FASTA format)')
-	parser.add_argument('--flag', type=str, default='left', help='Choose seqleft or seqright as seed to fill the gap')
+	parser.add_argument('--flag', type=str, default=None, help='Deprecated: accepted but ignored; extension is bidirectional')
 
 	# ctglinker mode specific parameters
 	parser.add_argument('--ctgseq', type=str, help='Contig set file path')
@@ -358,6 +358,22 @@ def getoptions():
 		sys.exit()
 
 	args = parser.parse_args()
+
+	if args.flag is not None:
+		print("Notice: --flag is deprecated and ignored; gap filling extends both families.")
+	args.flag = 'left'  # Internal legacy-call placeholder, not a user-selected direction.
+	for limit in (args.MaximumExtensionRound, args.MaximumExtensionLength):
+		if limit is not None and limit < 0:
+			parser.error("Extension limits must be nonnegative")
+	if args.mode == 'gapfiller':
+		if args.resume is not None:
+			parser.error("Single-sided --resume ROUND is unsupported; rerun the same command to resume family state")
+		if args.out:
+			from FamilyGap import reject_legacy_output
+			try:
+				reject_legacy_output(args.out)
+			except ValueError as error:
+				parser.error(str(error))
 
 	# Handle help information
 	if args.help:
@@ -582,6 +598,12 @@ def generate_gapfiller_visualization_report(output_dir, flag, max_extension_leng
         flag (str): 延伸方向 ('left' 或 'right')
         max_extension_length (int): 最大延伸长度限制
     """
+    if os.path.exists(os.path.join(output_dir, "family-result.json")):
+        from FamilyResult import load_result
+        load_result(output_dir)
+        print(f"Family report / 双向家族报告: {os.path.join(output_dir, 'family-report.html')}")
+        return
+
     try:
         print("正在生成可视化报告...")
 

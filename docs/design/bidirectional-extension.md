@@ -64,7 +64,7 @@ GapFiller 管理两个家族。AutoGapfiller 每个 gap 创建一个双向任务
 
 按稳定候选顺序交替推进当前端点与候选端点：A、B、A、C、A、D……；候选轮转，一侧停止后跳过但保留历史。只检查当前端点家族与候选家族的连接，不凭此额外创建候选之间的连接。单个候选时退化为普通左右交替。当前端点停止后，候选继续轮转。较多候选会分摊有限预算。
 
-必须保存候选原始 contig/端点身份、方向和完整序列来源。端点库中的裁剪片段不是完整 contig；闭合结果应正确重建完整序列、AGP 和已用 contig 信息。候选序列或连接上下文改变后，不复用陈旧结果。
+必须保存候选原始 contig/端点身份、方向和完整序列来源。当前端点库保存完整 contig/scaffold 及反向互补候选；比对时截取的端点片段不得当作完整 contig。闭合结果应正确重建完整序列、AGP 和已用 contig 信息。候选序列或连接上下文改变后，不复用陈旧结果。
 
 ### TelSeeker
 
@@ -80,35 +80,45 @@ GapFiller 管理两个家族。AutoGapfiller 每个 gap 创建一个双向任务
 
 ## 验收清单
 
-- [ ] 双家族顺序推进和第零代闭合。
-- [ ] 一侧正常停止，另一侧继续并与其旧版本闭合；两侧停止明确未闭合。
-- [ ] L3/R2 可用而 L3/R3 不可用时选择 L3/R2。
-- [ ] 多候选按规定选择唯一结果，平局与遍历顺序无关。
-- [ ] 轮数/长度共享、失败尝试计数、零预算、最后一轮越长后闭合。
-- [ ] 独立 reads 历史、共享只读输入、版本对不重复检查。
-- [ ] 断点恢复、执行中断、内容损坏和输入变化处理；恢复不重复扣预算。
-- [ ] GapFiller 真实单轮工具调用接入；保留必要历史，正确输出序列/AGP/日志。
+- [x] 双家族顺序推进和第零代闭合。
+- [x] 一侧正常停止，另一侧继续并与其旧版本闭合；两侧停止明确未闭合。
+- [x] L3/R2 可用而 L3/R3 不可用时选择 L3/R2。
+- [x] 多候选按规定选择唯一结果，平局与遍历顺序无关。
+- [x] 轮数/长度共享、失败尝试计数、零预算、最后一轮越长后闭合。
+- [x] 独立 reads 历史、共享只读输入、版本对不重复检查。
+- [x] 断点恢复、执行中断、内容损坏和输入变化处理；恢复不重复扣预算。
+- [x] GapFiller 真实单轮工具调用接入；保留必要历史，正确输出序列/AGP/日志。
 - [ ] AutoGapfiller 单任务生成、执行、汇总及可视化兼容。
 - [ ] CtgLinker 多候选延伸/共享预算/完整 contig 重建及已用端点追踪。
 - [ ] TelSeeker 统一底层且没有伪对侧闭合；既有端粒测试通过。
-- [ ] `--flag` 忽略提示、CLI 帮助和使用文档同步。
+- [x] `--flag` 忽略提示、CLI 帮助和使用文档同步。
 - [ ] 定向单元与集成测试通过，现有回归测试通过；区分受控测试和真实数据成效。
 
 ## 实施记录
 
 1. 2026-11-21：先落设计与验收文档（`2a1064a`）。
-2. 2026-11-21：新增 `bin/ExtensionFamilies.py` 与 `bin/FamilyOverlap.py`，实现独立于旧 CLI 的家族调度、共享预算、不可变版本记录、阶段恢复和真实 MUMmer 闭合适配。**现有入口尚未切换**，不能据此认为四个模式已完成。
+2. 2026-11-21：新增 `bin/ExtensionFamilies.py` 与 `bin/FamilyOverlap.py`，实现独立于旧 CLI 的家族调度、共享预算、不可变版本记录、阶段恢复和真实 MUMmer 闭合适配。该阶段入口尚未切换，不能据此认为四个模式已完成。
    - `tests/test_extension_families.py`：31 项，覆盖左右/多候选调度、冻结侧、历史闭合、预算、唯一候选择优、单端目标、断点和产物损坏。
    - `tests/test_family_overlap.py`：11 项，包含本机真实 MUMmer 双向连接、L3/R2 胜过错误 R3、工具阶段中断后复用、损坏阶段拒绝；受控拼接与已知完整序列完全一致。
    - 验证命令（DEGAP 仓库根目录）：`python3 -m unittest discover -s tests -p 'test_*.py'`；本次 79 项通过（42 新增、37 既有），无跳过。真实 MUMmer 测试在工具缺失时会跳过，届时不能声称完成真实工具验证。
    - 本次未运行真实 reads 的 minimap2/局部组装流水线，未验证客户数据或填补率提升。
 
+3. 2026-11-21：接入真实单轮工具流程与 GapFiller 公开入口，AutoGapfiller 改为每 gap 单任务。
+   - `FamilyRound.py` 隔离家族可变状态、共享 reads 索引，复用既有 reads 筛选与局部组装；`FamilyTools.py` 为新路径检查管道退出状态，区分正常无结果与工具故障。
+   - 映射、reads 筛选、hifiasm 和 contig 选择分别记录有效产物；后续步骤中断后复用已完成的映射/组装，未完成阶段保留在 `.incomplete.*` 目录。
+   - 新路径按实际参与 contig 比对的 seed 长度拼接，修正混合模式 HiFi/ONT seed 长度不同时重复拼接的风险；原单侧路径不改变。
+   - `FamilyGap.py` 记录实际读取的输入、工具和代码内容身份；`GapFiller.py` 的 gapfiller 模式已调用家族调度器。旧单侧目录在 CLI 预处理前拒绝；`--flag` 提示并忽略。
+   - `FamilyResult.py` 发布单一闭合 FASTA 或分开的未闭合家族、可重建输出的 AGP/组成序列、结果清单和双语家族证据报告。结果读取验证内容，不靠日志成功字符串。
+   - AutoGapfiller 的任务生成、清单读取、完成检查和报告链接已适配；未覆盖整个 AutoGapfiller CLI 预处理到最终基因组整合的实跑，验收项暂不勾选。
+   - 新增 31 项工具/单轮/公开入口/结果/AutoGapfiller 适配测试。完整命令：`micromamba run -n GRT python -m unittest discover -s tests -p 'test_*.py'`，110 项通过，无跳过。
+   - 真实工具验证使用本机已有 GRT 环境（包含 pysam/hifiasm），无安装/修改环境。60 kb 合成已知序列的 reads 经过 minimap2、samtools、hifiasm、MUMmer，通过公开 GapFiller 类入口完成两侧延伸和闭合，结果逐碱基一致。此为受控 HiFi 工具链证据，不是客户数据、ONT/mixed 全流程或成效基准。
+   - 系统 Python 缺少 pysam，不适合运行新单轮集成测试；应使用已具备依赖的环境。GRT 当前没有 seqkit，因此尚未实跑 DEGAP.py 的完整 reads 预处理入口（CLI 兼容/旧目录拒绝已测）。
+
 ### 下一阶段接入要点
 
-- 从现有单轮流程接入 reads 搜索和局部组装；延后固定 `terminalSeq` 闭合，改由家族调度器统一比较。
-- 已发现旧 `FindExtensionReads` 有把工具异常转换为 `initializationError` 等 note 的路径，另有外部命令失败后继续的路径；接入时必须明确区分工具故障和正常没有延伸，不得直接把所有 note 当作家族耗尽。
-- 旧 `OutputSequence`、日志、AGP 和可视化都假设单侧固定终点，需要同步适配；在这些契约接通前不切换生产入口。
-- 第零代旧直连要求 identity >=80%；后续旧 `linkgap` 没有额外 identity 下限。新 MUMmer 适配明确保留这一区别，均要求至少 10 kb 重叠，并按已确认的 identity 优先顺序选唯一结果。
-- 旧单侧任务隔离、AutoGapfiller 单任务、CtgLinker 候选完整 contig 重建、TelSeeker 单端适配及用户文档仍待完成。
+- CtgLinker 仍使用旧单侧 GapFiller 路径。接入多候选家族时，需要更新 `_extract_used_contigs_from_gapfiller`、`setGapFiller` 及最终 scaffold 拼接，不能伪造旧 `roundResult` 或只替换调用。当前 `_create_edge_library` 写出的是完整序列及 RC 候选，保持身份和方向，防止旧重建逻辑再次补入整个候选造成重复。
+- TelSeekerPart2 的单端循环以及 TelSeekerCtg 调用尚未切换，需复用新单轮/家族状态、保持端粒判定与单端输出，禁止 `terminalSeq=initialSeq` 自闭合。
+- 需完成 AutoGapfiller 从实际 CLI 任务执行到最终基因组整合的受控验证，以及 ONT/mixed 的针对性接入验证。
+- 第零代旧直连要求 identity >=80%；后续旧 `linkgap` 没有额外 identity 下限。适配保持这一区别，均要求至少 10 kb 重叠。
 
 后续每阶段更新本节与验收勾选，只根据实际验证结果勾选，不以设计或窄范围测试替代端到端证据。

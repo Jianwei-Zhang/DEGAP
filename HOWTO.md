@@ -104,7 +104,23 @@ If you install tools manually (without Micromamba), ensure the following program
 **Key Parameters**:
 - `--seqleft`: Left flanking sequence (FASTA)
 - `--seqright`: Right flanking sequence (FASTA)
-- `--flag`: Direction to elongate (`left` or `right`)
+- `--flag`: Deprecated compatibility option; a notice is printed and it is ignored.
+
+Left and right families extend in alternating turns. A new version is compared
+with every existing opposite version, so a usable older version is not replaced
+by a later incorrect extension. A stalled family remains available for closure
+while the other continues. Only the best eligible connection is emitted.
+
+`--MaximumExtensionRound` counts attempts across both sides, including a normal
+unsuccessful attempt. `--MaximumExtensionLength` sums newly added bases across
+both sides, without counting original flanks or repeatedly counting historical
+versions. A final complete attempt may cross the length threshold; its closure
+check still runs before stopping. Zero budgets still allow original-flank closure.
+
+Resume a new family task by rerunning the same command. `--resume_auto` is also
+accepted; the family checkpoint is restored automatically. `--resume ROUND`
+and old single-sided output directories are not imported. Use a new directory
+for an old task and leave its results intact.
 
 ### 2. CtgLinker Mode
 **Purpose**: Link contigs and fill gaps in fragmented assemblies.
@@ -320,7 +336,7 @@ The `--kmer_filter` parameter is a switch to enable k-mer based read filtering, 
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `--flag` | Elongation direction (GapFiller) | `left` |
+| `--flag` | Deprecated; ignored with a notice | Not needed |
 | `--edge` | Edge length for error detection | 500 |
 | `--MaximumExtensionLength` | Maximum extension length | None |
 | `--seedLen` | Seed length for alignment | Auto-calculated |
@@ -377,7 +393,6 @@ python bin/DEGAP.py --mode gapfiller \
     --hifi ./path/HiFiReads.fq.gz \
     --ont ./path/ONTReads.fq.gz \
     --out ./path/Output \
-    --flag left \
     --kmer_filter \
     -t 20
 ```
@@ -468,7 +483,6 @@ python bin/DEGAP.py --mode gapfiller \
     --seqright gap_right.fasta \
     --hifi hifi_reads.fq \
     -o ./output_gapfiller \
-    --flag left \
     -t 20
 ```
 
@@ -633,24 +647,31 @@ python bin/AutoGapfiller.py \
 
 ```
 output_directory/
-├── <name>.final.fa                 # Final filled sequence
-├── process.log                     # Detailed processing log
-├── process.summary                 # Summary of each round
-├── process.agp                     # AGP format assembly info
-├── checkpoint.info                 # Checkpoint for resume
-├── process/                        # Round-by-round results
-│   ├── round1/
-│   │   ├── linkedSequence.fasta   # Linked sequence for this round
-│   │   ├── outputExtensionSequence.fasta
-│   │   ├── potentialExtensionReads.*.sam
-│   │   └── ...
-│   ├── round2/
-│   └── ...
-└── USED_DIRECT_CONNECTION          # Marker if direct connection was used
+├── <name>.final.fa                 # One closed sequence, or separate unclosed families
+├── family-result.json              # Verified status, selected versions, provenance
+├── family-report.html              # Both histories and eligible connections
+├── family-components.fa            # Cumulative sequences referenced by AGP
+├── families.json                   # Family checkpoint and shared budget
+├── process.log                     # Search outcome and selected connection
+├── process.summary                 # Per-family attempts, growth and stop reason
+├── process.agp                     # AGP reconstructing the exported FASTA
+├── family-overlaps/                # Version-pair alignments and tool receipts
+└── attempts/<family>/<attempt>/
+    ├── mapping/                   # Reusable minimap2/samtools output
+    ├── reads/                     # Read selection and verified stage receipt
+    ├── assembler/                 # Reusable local assembly
+    └── assembly/                  # Contig selection and cumulative sequence
 ```
 
+Only `family-result.json` with `status: "closed"` represents a filled gap.
+An unclosed result preserves the families as separate FASTA records. Completed
+mapping, assembly and selection stages are verified before reuse; interrupted
+uncommitted stages are retained in `.incomplete.*` directories rather than
+silently accepted. Family histories required for recovery are retained even
+when the legacy `--remove` option is supplied.
+
 **Key Output Files:**
-- `<name>.final.fa`: Final gap-filled sequence (main result)
+- `<name>.final.fa`: Main sequence output; check `family-result.json` to distinguish closed from separate unclosed families.
 - `process.log`: Detailed log including gap length, alignment info, extension details
 - `process.summary`: Tab-separated summary of each extension round
 - `linkedSequence.fasta`: Successfully linked sequence (if gap closed)
@@ -931,8 +952,9 @@ Check the following log files for debugging:
 
 **GapFiller mode:**
 - `process.log`: Detailed processing log with gap length and alignment info
-- `process.summary`: Summary of each extension round
-- `checkpoint.info`: Checkpoint information for resume
+- `process.summary`: Per-family attempted rounds, growth and stop reason
+- `families.json`: Family histories, shared budgets and resume state
+- `family-result.json`: Verified final status and chosen version pair
 
 **CtgLinker mode:**
 - `project/round*/process.log`: Per-round processing logs
