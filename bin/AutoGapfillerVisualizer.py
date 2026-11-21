@@ -791,12 +791,12 @@ class GapFillingVisualizer:
                                 </th>
                                 <th class="lang-en">Gap ID</th>
                                 <th class="lang-zh" style="display:none;">Gap ID</th>
-                                <th class="lang-en">Extended</th>
-                                <th class="lang-zh" style="display:none;">是否延伸</th>
+                                <th class="lang-en">Filled</th>
+                                <th class="lang-zh" style="display:none;">是否填补</th>
                                 <th class="lang-en">Connection Type</th>
                                 <th class="lang-zh" style="display:none;">连接类型</th>
-                                <th class="lang-en">Flag</th>
-                                <th class="lang-zh" style="display:none;">Flag</th>
+                                <th class="lang-en">Direction</th>
+                                <th class="lang-zh" style="display:none;">方向/模式</th>
                                 <th class="lang-en">Rounds</th>
                                 <th class="lang-zh" style="display:none;">轮次数量</th>
                                 <th class="lang-en">Fill Length</th>

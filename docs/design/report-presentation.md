@@ -45,3 +45,12 @@ No alternative design model was invoked.
   needed. The preview data are controlled fixtures, not biological results.
 - Local previews and browser evidence: `/tmp/degap-report-style-preview`.
 - No genomic mapping/assembly runs were repeated for this presentation-only change.
+
+## Follow-up alignment (2026-11-22)
+
+- Updated `bin/AutoGapfillerVisualizer.py` task-table headers from `Extended` / `是否延伸` and `Flag` to `Filled` / `是否填补` and `Direction` / `方向/模式` so gap closure is not conflated with extension and deprecated `--flag` wording is removed.
+- Updated `bin/TelSeekerVisualizer.py` presentation templates to escape dynamic identifiers/filenames/labels, render unlimited (`None`) round/length limits as `No limit` / `无限制`, and fix the stale `telo_part2_visual.py` footer name to `TelSeekerVisualizer.py`.
+- `bin/FamilyResult.py`, `bin/FamilyCtgLinker.py`, and `bin/ReportStyle.py` were inspected and required no changes.
+- AGY `gemini-4-neon-high` made these presentation edits. AST comparison confirms only rendering functions changed; no parsers, schemas, algorithms, or JS control flow were modified.
+- Final unified regression: **181 tests passed, 0 skipped, 275.821 seconds**, including new coverage for headers, unlimited/zero limits, identifier escaping and the translated HTML layer. Log: `/tmp/degap-docs-final-regression-20261122.log`. No browser was launched for this follow-up.
+- Separate real-read validation and report/result checks are recorded in [the new SSH 180 dataset report](../validation/2026-11-22-ssh180-new-dataset.md).

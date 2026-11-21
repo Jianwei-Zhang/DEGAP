@@ -140,21 +140,22 @@ GapFiller 管理两个家族。AutoGapfiller 每个 gap 创建一个双向任务
    - 默认清理路径原会删除准备好的 reads/分块，破坏跨家族与恢复复用；新路径明确保留这些输入以及历史和阶段收据，CLI 帮助和文档同步说明。
    - 测试只使用已有 GRT 环境，缺少的 seqkit 和 GNU parallel 放在 `/tmp/degap-family-validation-tools`。下载分别核对发布资产 SHA-256 和 Ubuntu 软件包索引 SHA-256，仅解包使用，未安装到共享环境。
 
-### 最终验收记录
+### 历史与最新验收记录
 
-- 统一测试：**152 项全部通过，无跳过**，用时 179.876 秒。日志：`/tmp/degap-family-final-regression.log`；受控 CLI 产物保存在 `/tmp/degap-family-final-fixtures`（本机验证位置，不随仓库分发）。
-- 从 CGAT 工作区运行的命令：
+- **初版统一回归（ONT 质量修复前，2026-11-21）**：**152 项通过，无跳过**，用时 179.876 秒（日志 `/tmp/degap-family-final-regression.log`，受控产物 `/tmp/degap-family-final-fixtures`）。后续 SSH 180 真实数据排查发现该轮合成 ONT CLI 用例的 `hifiasm` 实际报 FASTA 格式错误而依靠 read-common fallback 闭合，因此该轮“ONT 组装阶段成功”的更强结论已撤回（详见 `docs/validation/2026-11-21-ssh180-real-ont.md`）。
+- **ONT 质量与零退出码修复后最新统一回归（提交 `c0fd8e3`，2026-11-21）**：**179 项全部通过，0 跳过**，用时 293.157 秒（日志 `/tmp/degap-ont-fix-full.log`，受控产物 `/tmp/degap-ont-fix-final-fixtures`）。该轮强化了真实 ONT FASTQ 质量恢复、零退出码显式错误检测、缺失 GFA 报错，并要求合成 ONT CLI 用例产出真实 `hifiasm` primary-contig GFA 序列段；同工具版本 SSH 180 复测（作业 `43009160` / `43009161`）通过输入、工具与恢复检查，天然 N-gap 与人工遮蔽 gap 均未闭合（详见 `docs/validation/2026-11-21-ont-quality-repair.md`）。
+- 回归命令示例（在 CGAT 工作区运行，使用本机已有 GRT 环境与验证工具）：
 
   ```bash
   PATH=/tmp/degap-family-validation-tools:$PATH \
-    DEGAP_VALIDATION_ARTIFACTS=/tmp/degap-family-final-fixtures \
+    DEGAP_VALIDATION_ARTIFACTS=/tmp/degap-ont-fix-final-fixtures \
     PYTHONWARNINGS=ignore \
     micromamba run -n GRT python -m unittest discover -s DEGAP2.0/tests -p 'test_*.py'
   ```
 
   在其他机器上需先提供 BioPython/pysam 等 Python 依赖及 seqkit、GNU parallel、minimap2、samtools、hifiasm、MUMmer 工具；缺少真实工具导致的测试跳过不等于完成工具链验收。
-- `test_family_cli.py` 覆盖真实 HiFi/ONT/mixed gap CLI、默认清理级别保留恢复输入、HiFi 重跑阶段复用、CtgLinker CLI/完整 scaffold 与组成校验、AutoGapfiller 单任务执行到最终基因组及报告/重跑、TelSeeker 真实单端延伸、TelSeekerCtg 完整 CLI 与收据恢复。
-- `test_extension_families.py` / `test_family_overlap.py` 覆盖历史配对、冻结侧继续、唯一择优、共享预算与损坏/中断恢复；`test_family_round.py` / `test_family_results.py` 覆盖单轮隔离和阶段复用、结果/AGP、消费者坐标和任务队列；`test_family_ctglinker.py` / `test_family_telomere.py` 覆盖候选方向/吸收/重建、单端检测与新结果报告。既有端粒 tests 同时通过。
+- `test_family_cli.py` 覆盖真实 HiFi/ONT/mixed gap CLI、默认清理级别保留恢复输入、HiFi/ONT 重跑阶段复用、CtgLinker CLI/完整 scaffold 与组成校验、AutoGapfiller 单任务执行到最终基因组及报告/重跑、TelSeeker 真实单端延伸、TelSeekerCtg 完整 CLI 与收据恢复。
+- `test_extension_families.py` / `test_family_overlap.py` 覆盖历史配对、冻结侧继续、唯一择优、共享预算与损坏/中断恢复；`test_family_round.py` / `test_family_results.py` 覆盖单轮隔离和阶段复用、结果/AGP、消费者坐标和任务队列；`test_family_ctglinker.py` / `test_family_telomere.py` 覆盖候选方向/吸收/重建、单端检测与新结果报告。既有端粒测试同时通过。
 
 - 真实 reads 工具链验证使用受控合成数据，不是客户数据验收，也不代表已经证明错误率下降或填补率提升。
 - 保留第零代 identity >=80% 与后续旧 `linkgap` 没有额外 identity 下限的区别，均要求至少 10 kb 重叠。
