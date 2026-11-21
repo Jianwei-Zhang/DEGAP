@@ -1163,7 +1163,7 @@ Note: This script requires preprocessing and gap detection to be completed first
     # 必需参数
     parser.add_argument('--output', '-o', required=True, help='Output directory')
     parser.add_argument('--hifi', nargs='+', help='HiFi reads file path(s) (FASTA/FASTQ format, multiple files supported)')
-    parser.add_argument('--ont', nargs='+', help='ONT reads file path(s) (FASTA/FASTQ format, multiple files supported)')
+    parser.add_argument('--ont', nargs='+', help='ONT reads file path(s); original FASTQ(.gz) required for ONT-only assembly (multiple files supported)')
 
     # 并行控制参数
     parser.add_argument('--work', '-w', type=int, default=1, help='Maximum parallel workers (default: 1)')

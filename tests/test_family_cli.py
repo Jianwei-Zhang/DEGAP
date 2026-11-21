@@ -38,6 +38,13 @@ class RealFamilyCLITests(unittest.TestCase):
                 f">{platform}{i}\n{self.truth[start:start+20000]}\n"
                 for i, start in enumerate(range(0, 40001, 1000))))
 
+        # Explicit synthetic qualities for the synthetic fixture only; production
+        # recovery must never fabricate FASTQ scores from a FASTA input.
+        with (self.root / "ont.fastq").open("w") as stream:
+            for record in SeqIO.parse(self.root / "ont.fa", "fasta"):
+                record.letter_annotations["phred_quality"] = [40] * len(record)
+                SeqIO.write(record, stream, "fastq")
+
     def command(self, script, args, log="command.log"):
         path = self.root / log
         with path.open("w") as stream:
@@ -50,7 +57,7 @@ class RealFamilyCLITests(unittest.TestCase):
         args = ["--mode", "gapfiller", "--out", str(out), "--seqleft", str(self.left),
                 "--seqright", str(self.right), "--MaximumExtensionRound", "6", "-t", "2", "--remove", "2"]
         for platform in platforms:
-            args += ["--" + platform, str(self.root / (platform + ".fa"))]
+            args += ["--" + platform, str(self.root / (platform + (".fastq" if platform == "ont" else ".fa")))]
         self.command("DEGAP.py", args)
         from FamilyResult import load_result
         result = load_result(out)
@@ -69,7 +76,50 @@ class RealFamilyCLITests(unittest.TestCase):
         self.assertEqual({str(p): p.stat().st_mtime_ns for p in out.rglob("stage.json")}, stages)
 
     def test_gap_cli_ont(self):
-        self.gap(["ont"])
+        out, args = self.gap(["ont"])
+        gfas = list(out.glob("attempts/*/*/assembler/hifiasm/*.p_ctg.gfa"))
+        self.assertTrue(gfas, "ONT must actually assemble, not succeed only via fallback")
+        self.assertTrue(any(any(line.startswith("S\t") for line in p.read_text().splitlines()) for p in gfas))
+        for log in out.glob("attempts/*/*/assembler/hifiasm/hifiasm.stderr.log"):
+            self.assertNotIn("[ERROR]", log.read_text())
+        self.assertTrue(list(out.glob("attempts/*/*/assembler/ont.extension.fastq")))
+        receipts = {str(p):p.stat().st_mtime_ns for p in out.rglob("stage.json")}
+        databases = {str(p):p.stat().st_mtime_ns for p in (out/"ont-quality-cache").glob("*.sqlite")}
+        self.assertEqual(len(databases),1)
+        self.command("DEGAP.py", args+["--resume_auto"], log="resume.log")
+        self.assertEqual(receipts,{str(p):p.stat().st_mtime_ns for p in out.rglob("stage.json")})
+        self.assertEqual(databases,{str(p):p.stat().st_mtime_ns for p in (out/"ont-quality-cache").glob("*.sqlite")})
+        source=self.root/"ont.fastq"
+        source.write_text(source.read_text().replace("I"*20000,"H"*20000))
+        failed=subprocess.run([sys.executable,str(BIN/"DEGAP.py")]+list(map(str,args)),capture_output=True,text=True)
+        self.assertNotEqual(failed.returncode,0)
+        self.assertIn("checkpoint inputs",failed.stderr)
+
+
+    def test_ont_fasta_cannot_be_published_as_biological_exhaustion(self):
+        out=self.root/"fasta-only"
+        args=[sys.executable,str(BIN/"DEGAP.py"),"--mode","gapfiller","--out",str(out),
+              "--seqleft",str(self.left),"--seqright",str(self.right),"--ont",str(self.root/"ont.fa"),
+              "--MaximumExtensionRound","1","-t","2"]
+        result=subprocess.run(args,capture_output=True,text=True,timeout=300)
+        self.assertNotEqual(result.returncode,0)
+        self.assertIn("FASTQ",result.stderr)
+        self.assertFalse((out/"family-result.json").exists())
+        self.assertFalse(list(out.glob("attempts/*/*/assembler/stage.json")))
+
+    def test_ctglinker_ont_uses_original_fastq(self):
+        from FamilyCtgLinker import load_ctg_result
+        contigs=self.root/"contigs.fa"
+        contigs.write_text(self.left.read_text()+self.right.read_text())
+        out=self.root/"ont-ctg"
+        self.command("DEGAP.py",["--mode","ctglinker","--out",str(out),"--ctgseq",str(contigs),
+                                "--ont",str(self.root/"ont.fastq"),"--MaximumExtensionRound","6","-t","2"])
+        result=load_ctg_result(out)
+        self.assertEqual(len(result["scaffolds"]),1)
+        self.assertEqual(str(SeqIO.read(out/"DG.scaffold.fa","fasta").seq),self.truth)
+        self.assertTrue(list(out.rglob("ont.extension.fastq")))
+        for log in out.rglob("hifiasm.stderr.log"):
+            self.assertNotIn("[ERROR]",log.read_text())
 
     def test_gap_cli_mixed(self):
         self.gap(["hifi", "ont"])
@@ -89,10 +139,16 @@ class RealFamilyCLITests(unittest.TestCase):
         self.assertTrue((out / "processed_reads" / "hifi_reads.fa").is_file())
 
     def test_auto_cli_single_job_to_integrated_genome(self):
+        self.auto_cli("hifi")
+
+    def test_auto_cli_ont_preserves_original_fastq_and_resume(self):
+        self.auto_cli("ont")
+
+    def auto_cli(self, platform):
         genome = self.root / "genome.fa"
         genome.write_text(">chr1\n" + self.truth[:20000] + "N" * 20000 + self.truth[40000:] + "\n")
         out = self.root / "auto"
-        self.command("AutoGapfiller.py", ["--genome", str(genome), "--hifi", str(self.root / "hifi.fa"),
+        self.command("AutoGapfiller.py", ["--genome", str(genome), "--"+platform, str(self.root / ("ont.fastq" if platform=="ont" else "hifi.fa")),
                                          "--output", str(out), "-w", "1", "-t", "2",
                                          "--MaximumExtensionRound", "6", "--remove", "3"])
         manifests = list(out.rglob("family-result.json"))
@@ -105,11 +161,16 @@ class RealFamilyCLITests(unittest.TestCase):
         self.assertTrue(scripts)
         self.assertTrue(all("--flag" not in script for script in scripts))
         stages = {str(p): p.stat().st_mtime_ns for p in out.rglob("stage.json")}
-        self.command("AutoGapfiller.py", ["--genome", str(genome), "--hifi", str(self.root / "hifi.fa"),
+        self.command("AutoGapfiller.py", ["--genome", str(genome), "--"+platform, str(self.root / ("ont.fastq" if platform=="ont" else "hifi.fa")),
                                          "--output", str(out), "-w", "1", "-t", "2",
                                          "--MaximumExtensionRound", "6", "--remove", "3"], log="resume.log")
         self.assertEqual(str(SeqIO.read(final[0], "fasta").seq), self.truth)
         self.assertEqual({str(p): p.stat().st_mtime_ns for p in out.rglob("stage.json")}, stages)
+
+        if platform=="ont":
+            self.assertTrue(list(out.rglob("ont.extension.fastq")))
+            for log in out.rglob("hifiasm.stderr.log"):
+                self.assertNotIn("[ERROR]",log.read_text())
 
     @unittest.skipUnless(shutil.which("parallel"), "GNU parallel required for telomeric read preprocessing")
     def test_telseeker_ctg_cli_direct_result_and_verified_resume(self):

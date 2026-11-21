@@ -986,3 +986,11 @@ For questions, bug reports, or feature requests:
 ## License
 
 Please refer to the LICENSE file for licensing information.
+
+
+## ONT 质量值与组装错误处理
+
+- ONT 单独组装需要原始 FASTQ/FASTQ.gz 的真实 Phred+33 质量值；左右家族共享质量索引，按筛选后的 read ID、序列和方向恢复 FASTQ，不伪造质量值。
+- HiFi 仍支持 FASTA。混合模式中的 ONT FASTA 可作为 `--ul` 补充输入；如果某轮只剩 ONT，需要原始 ONT FASTQ 才能进入 ONT 单独组装。
+- 输入仅修改质量值也会使原有恢复契约失效。显式工具报错即使退出码为 0，或没有应有的组装 GFA，都不能算作正常“无 contig”。
+- 升级本次修复后请保留旧失败目录，使用新输出目录复测；不要复用先前被误认为成功的组装收据。

@@ -160,68 +160,19 @@ def preprocess_reads_files(hifi_reads, ont_reads, out, data_type):
     return (hifi_fa, hifi_orig, hifi_fmt, ont_fa, ont_orig, ont_fmt)
 
 def convert_extension_fasta_to_fastq(extension_fasta, original_fastq, output_fastq):
-	"""
-	将筛选后的extension reads FASTA转换为FASTQ
-	从原始FASTQ中提取对应reads的质量信息
-	"""
-	if not os.path.exists(extension_fasta) or os.path.getsize(extension_fasta) == 0:
-		print(f"Warning: Extension FASTA file not found or empty: {extension_fasta}")
-		return None
+    """Compatibility helper with genuine source qualities and sequence checks."""
+    from pathlib import Path
+    from ONTAssemblyReads import restore_fastq, source_contract
+    return restore_fastq(extension_fasta, source_contract(original_fastq), output_fastq,
+                         Path(output_fastq).parent / "ont-quality-cache")
 
-	if not os.path.exists(original_fastq):
-		print(f"Warning: Original FASTQ file not found: {original_fastq}")
-		return None
-
-	print(f"Converting {extension_fasta} to FASTQ format using quality from {original_fastq}")
-
-	# 读取extension reads ID列表
-	extension_ids = set()
-	try:
-		for record in SeqIO.parse(extension_fasta, "fasta"):
-			extension_ids.add(record.id)
-		print(f"Found {len(extension_ids)} extension reads to convert")
-	except Exception as e:
-		print(f"Error reading extension FASTA: {e}")
-		return None
-
-	if len(extension_ids) == 0:
-		print("No extension reads found in FASTA file")
-		return None
-
-	# 从原始FASTQ中提取对应reads
-	converted_count = 0
-	try:
-		with open(output_fastq, 'w') as out_f:
-			# Determine format of original file
-			if original_fastq.endswith(('.fastq', '.fq', '.fastq.gz', '.fq.gz')):
-				format_type = "fastq"
-			else:
-				format_type = "fasta"
-
-			for record in SeqIO.parse(original_fastq, format_type):
-				if record.id in extension_ids:
-					if format_type == "fastq":
-						# Write as FASTQ with original quality
-						SeqIO.write(record, out_f, "fastq")
-					else:
-						# If original was FASTA, generate dummy quality scores
-						record.letter_annotations["phred_quality"] = [40] * len(record.seq)
-						SeqIO.write(record, out_f, "fastq")
-					converted_count += 1
-
-		print(f"Successfully converted {converted_count} reads to FASTQ format: {output_fastq}")
-		return output_fastq if converted_count > 0 else None
-
-	except Exception as e:
-		print(f"Error converting to FASTQ: {e}")
-		return None
 
 def usage():
 	print ("DEGAP v2.0 - Dynamic Elongation of a Genome Assembly Path")
 	print ("==========================================================")
 	print ("\nData Input Options:")
 	print ("--hifi file1 [file2 ...]         HiFi read file(s) (FASTA/FASTQ, supports multiple files)")
-	print ("--ont file1 [file2 ...]          ONT read file(s) (FASTA/FASTQ, supports multiple files)")
+	print ("--ont file1 [file2 ...]          ONT read file(s) (FASTQ required for ONT-only assembly; multiple files supported)")
 	print ("Note: Use --hifi alone for HiFi-only mode")
 	print ("      Use --ont alone for ONT-only mode")
 	print ("      Use both --hifi and --ont for Mixed mode")
@@ -301,7 +252,7 @@ def getoptions():
 	# Reads input parameters (can be used individually or together for mixed mode)
 	# Support multiple input files: --hifi F1.fq.gz F2.fq.gz F3.fq.gz
 	parser.add_argument('--hifi', nargs='+', help='HiFi reads file(s) (FASTA/FASTQ format, multiple files supported)')
-	parser.add_argument('--ont', nargs='+', help='ONT reads file(s) (FASTA/FASTQ format, multiple files supported)')
+	parser.add_argument('--ont', nargs='+', help='ONT reads file(s); FASTQ(.gz) with original qualities required for ONT-only assembly; FASTA allowed as mixed --ul input')
 
 	parser.add_argument('--remove', type=int, default=2,
 	                   help='Legacy cleanup level (1/2/3); family histories, prepared reads and verified stages are always retained')

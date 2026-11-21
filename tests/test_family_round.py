@@ -252,6 +252,49 @@ class SingleRoundTests(unittest.TestCase):
             with self.assertRaises(subprocess.CalledProcessError):
                 obj.hifiasm()
 
+    def test_zero_exit_hifiasm_error_is_not_normal_exhaustion(self):
+        from FindExtensionContigs import FindExtensionContigs, HifiasmExecutionError
+        for strict in (True, False):
+            for channel in ("stdout", "stderr"):
+                with self.subTest(strict=strict, channel=channel):
+                    obj = FindExtensionContigs.__new__(FindExtensionContigs)
+                    obj.strict_tools, obj.data_type = strict, "hifi"
+                    obj.extensionReads = SimpleNamespace(roundInput=SimpleNamespace(
+                        elongation=SimpleNamespace(roundDir=str(self.attempt), base=self.base)))
+                    obj.prepareHifiasmReads = lambda: str(self.seed)
+                    def command(cmd, **kwargs):
+                        if cmd.startswith("hifiasm -i"):
+                            error = "[ERROR] input is in fasta format rather than fastq format"
+                            return subprocess.CompletedProcess(cmd, 0, error if channel=="stdout" else "",
+                                                               error if channel=="stderr" else "")
+                        return subprocess.CompletedProcess(cmd, 0, "/fixture/hifiasm", "")
+                    with patch("FindExtensionContigs.subprocess.run", side_effect=command):
+                        with self.assertRaisesRegex(HifiasmExecutionError, "exit 0"):
+                            obj.hifiasm()
+                    self.assertFalse(Path(obj.hifiasmResult).exists())
+
+    def test_zero_exit_without_assembly_artifact_is_tool_failure(self):
+        from FindExtensionContigs import FindExtensionContigs, HifiasmExecutionError
+        obj = FindExtensionContigs.__new__(FindExtensionContigs)
+        obj.strict_tools, obj.data_type = True, "hifi"
+        obj.extensionReads = SimpleNamespace(roundInput=SimpleNamespace(
+            elongation=SimpleNamespace(roundDir=str(self.attempt), base=self.base)))
+        obj.prepareHifiasmReads = lambda: str(self.seed)
+        with patch("FindExtensionContigs.subprocess.run", return_value=subprocess.CompletedProcess("tool",0,"ok","")):
+            with self.assertRaisesRegex(HifiasmExecutionError,"no primary-contig GFA"):
+                obj.hifiasm()
+        self.assertFalse(Path(obj.hifiasmResult).exists())
+
+    def test_semantic_assembler_failure_does_not_publish_stage_receipt(self):
+        from FindExtensionContigs import FindExtensionContigs, HifiasmExecutionError
+        with patch("FindExtensionReads.FindExtensionReads",side_effect=self.reads), \
+             patch.object(FindExtensionContigs,"hifiasm",side_effect=HifiasmExecutionError("[ERROR] invalid input")):
+            with self.assertRaises(HifiasmExecutionError):
+                self.runner(self.family,self.attempt)
+        self.assertTrue((self.attempt / "reads/stage.json").exists())
+        self.assertFalse((self.attempt / "assembler/stage.json").exists())
+        self.assertFalse((self.attempt / "assembly/stage.json").exists())
+
     def test_missing_hifiasm_is_not_a_normal_stop(self):
         from FindExtensionContigs import FindExtensionContigs
         obj = FindExtensionContigs.__new__(FindExtensionContigs)

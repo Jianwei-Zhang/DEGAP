@@ -31,6 +31,14 @@ def prepare_context(base, overlap_contract):
         files[str(path)] = content_hash(path)
         reads_info["working_" + platform] = str(path)
     base.reads_info = reads_info
+    # Quality changes must invalidate assembly/checkpoint reuse even when the
+    # normalized FASTA is unchanged. Build the shared quality index lazily.
+    if "ont" in platforms:
+        from ONTAssemblyReads import original_ont, source_contract
+        base.ont_quality_sources = source_contract(original_ont(base))
+        base.ont_quality_cache = str(Path(base.out).resolve() / "ont-quality-cache")
+        for source in base.ont_quality_sources:
+            files[source["path"]] = source["sha256"]
     if getattr(base, "kmer_filter", False):
         for platform in platforms:
             part_directory = Path(base.out) / (platform + "_reads_part")
@@ -53,7 +61,7 @@ def prepare_context(base, overlap_contract):
         # checked execution reports a missing tool rather than a biological stop.
         tools[name] = {"path": path, "sha256": content_hash(path) if path else None}
     code_files = ["FamilyGap.py", "ExtensionFamilies.py", "FamilyOverlap.py", "FamilyRound.py", "FamilyTools.py",
-                  "FindExtensionReads.py", "FindExtensionContigs.py", "GapFillerClass.py"]
+                  "FindExtensionReads.py", "FindExtensionContigs.py", "GapFillerClass.py", "ONTAssemblyReads.py"]
     return {
         "driver": "family-gap-v1", "files": files, "tools": tools, "overlap": overlap_contract,
         "code": {name: content_hash(Path(__file__).parent / name) for name in code_files},

@@ -6,6 +6,12 @@
 
 **DEGAP2.0** is an enhanced gap-filling and sequence-extension toolkit that resolves assembly gaps and extends chromosome ends using high-fidelity (HiFi) and/or Oxford Nanopore (ONT) long reads.
 
+## ONT input qualities
+
+ONT-only local assembly (`hifiasm --ont`) requires original **FASTQ / FASTQ.gz with genuine Phred+33 qualities**. DEGAP restores selected reads in their selected orientation, validates their sequence, and shares a content-verified quality index across extension families. Quality-only input changes invalidate recovery. It never fabricates scores from FASTA.
+
+HiFi FASTA input remains supported. ONT FASTA can still be used as the supplementary `--ul` input when HiFi reads are available, but a mixed search falling back to ONT-only assembly also needs original ONT FASTQ. Missing qualities or explicit assembler errors are tool/input failures, not normal biological exhaustion. Preserve old failed runs and use a **new output directory** after upgrading this repair.
+
 ## System Requirements
 
 **DEGAP2.0** runs on Linux with Python 3.10. Required Python packages and external tools are declared in `environment.yml`, with selected versions pinned:
