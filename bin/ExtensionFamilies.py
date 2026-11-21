@@ -100,6 +100,7 @@ class Family:
     used_reads: List[str] = field(default_factory=list)
     last_reads: List[str] = field(default_factory=list)
     stop_reason: Optional[str] = None
+    anchor_backoff: int = 0
 
     @property
     def current(self):
@@ -118,6 +119,7 @@ class AttemptResult:
     used_reads: Tuple[str, ...] = ()
     stop_reason: Optional[str] = None
     terminal_reason: Optional[str] = None
+    retry_reason: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -137,6 +139,7 @@ class Connection:
     left_end: int
     right_start: int
     right_end: int
+    evidence: Optional[dict] = None
 
     def rank(self, order):
         return (-self.identity, -self.overlap, self.overhang,
@@ -228,7 +231,7 @@ class FamilySearch:
             "families": [asdict(f) for f in self.families.values()],
             "cursor": self.cursor, "pending": self.pending,
             "completed_attempts": self.completed_attempts,
-            "checked": self.checked, "status": self.status,
+            "checked": self.checked, "checked_diagnostics": getattr(self, "checked_diagnostics", {}), "status": self.status,
             "winner": asdict(self.winner) if self.winner else None,
         })
 
@@ -238,6 +241,7 @@ class FamilySearch:
                 state.get("contract_id") != self.contract_id or
                 state.get("contract") != self.contract):
             raise ValueError("Family checkpoint inputs, parameters or schema changed; use a new directory")
+        self.checked_diagnostics = state.get("checked_diagnostics", {})
         try:
             restored = {}
             for item in state["families"]:
@@ -254,6 +258,8 @@ class FamilySearch:
                     version.verify()
                     if number and version.length <= family.versions[number - 1].length:
                         raise ValueError("Non-growing family history")
+                if type(family.anchor_backoff) is not int or family.anchor_backoff not in (0, 2000):
+                    raise ValueError("Invalid terminal-anchor backoff")
                 if (type(family.attempts) is not int or family.attempts < len(family.versions) - 1 or
                         family.added_bases != family.current.length - family.versions[0].length):
                     raise ValueError("Family budget mismatch")
@@ -335,6 +341,10 @@ class FamilySearch:
                 for candidate in matches:
                     self._validate_connection(candidate, left, right)
                 self.checked[key] = [asdict(c) for c in matches]
+                if hasattr(compare, "diagnostic"):
+                    if not hasattr(self, "checked_diagnostics"):
+                        self.checked_diagnostics = {}
+                    self.checked_diagnostics[key] = compare.diagnostic(left, right)
                 self._save()
             candidates.extend(Connection(**c) for c in self.checked[key])
         if candidates:
@@ -364,7 +374,7 @@ class FamilySearch:
             # The adapter cannot mutate scheduler state before receipt publication.
             view = Family(family.key, family.direction, list(family.versions),
                           family.attempts, family.added_bases, list(family.used_reads),
-                          list(family.last_reads), family.stop_reason)
+                          list(family.last_reads), family.stop_reason, family.anchor_backoff)
             result = extend(view, attempt_dir)
             if not isinstance(result, AttemptResult):
                 raise TypeError("Extension adapter must return AttemptResult")
@@ -382,12 +392,14 @@ class FamilySearch:
                 stop_reason = result.stop_reason or "no_growth"
             else:
                 stop_reason = result.stop_reason
-            if version is None and not stop_reason and not result.terminal_reason:
+            if result.retry_reason and (version or result.stop_reason or result.terminal_reason or family.anchor_backoff):
+                raise ValueError("Invalid terminal-anchor retry request")
+            if version is None and not stop_reason and not result.terminal_reason and not result.retry_reason:
                 raise ValueError("An unsuccessful attempt must provide a normal stop reason")
             receipt = {
                 "receipt_id": receipt_id, "version": asdict(version) if version else None,
                 "used_reads": sorted(set(result.used_reads)), "stop_reason": stop_reason,
-                "terminal_reason": result.terminal_reason,
+                "terminal_reason": result.terminal_reason, "retry_reason": result.retry_reason,
             }
             atomic_json(receipt_path, receipt)
         # Verify reused artifacts before accepting their sequence and budget.
@@ -399,9 +411,14 @@ class FamilySearch:
                 raise ValueError("Invalid extension receipt version")
         if receipt["terminal_reason"] and len(self.families) != 1:
             raise ValueError("Unexpected terminal objective in a paired search")
-        if not version and not receipt["stop_reason"] and not receipt["terminal_reason"]:
+        if not version and not receipt["stop_reason"] and not receipt["terminal_reason"] and not receipt.get("retry_reason"):
             raise ValueError("Attempt receipt is missing its stop reason")
+        if receipt.get("retry_reason"):
+            if receipt["retry_reason"] != "terminal_anchor_backoff" or family.anchor_backoff:
+                raise ValueError("Invalid terminal-anchor retry receipt")
+            family.anchor_backoff = 2000
         if version:
+            family.anchor_backoff = 0
             family.added_bases += version.length - family.current.length
             family.versions.append(version)
             family.last_reads = receipt["used_reads"]

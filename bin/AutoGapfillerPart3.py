@@ -409,6 +409,12 @@ class GapFillingAnalyzer:
         replace_start = gap_start - 1 - left_len
         replace_end = gap_end - 1 + right_len
 
+        junction = final_result.get('junction')
+        integration_file = final_result.get('integration_sequence_file')
+        if junction and integration_file:
+            # Only the actual gap and explicitly approved end edits are replaced.
+            replace_start = gap_start - 1 - junction['left_replace_bases']
+            replace_end = gap_end - 1 + junction['right_replace_bases']
         # 组合结果
         return {
             'chromosome': gap_data['chromosome'],
@@ -426,7 +432,10 @@ class GapFillingAnalyzer:
             'fill_direction': final_result['fill_direction'],
             'fill_length': final_result['fill_length'],
             'rounds': final_result['rounds'],
-            'final_sequence_file': final_result.get('final_sequence_file', ''),
+            'final_sequence_file': integration_file or final_result.get('final_sequence_file', ''),
+            'junction': junction,
+            'anchor_retries': final_result.get('anchor_retries', []),
+            'connection_diagnostics': final_result.get('connection_diagnostics', []),
             'report_direction': 'bidirectional' if bidirectional_data else final_result['fill_direction'] if final_result['filled'] else 'left',
             'left_status': bidirectional_result.get('left_status', bidirectional_result['status']) if bidirectional_result else left_result['status'] if left_result else 'not_executed',
             'right_status': bidirectional_result.get('right_status', bidirectional_result['status']) if bidirectional_result else right_result['status'] if right_result else 'not_executed'
@@ -450,6 +459,10 @@ class GapFillingAnalyzer:
                         for f in result['families']}
             return {
                 'filled': closed,
+                'junction': result.get('junction'),
+                'anchor_retries': result.get('anchor_retries', []),
+                'connection_diagnostics': result.get('connection_diagnostics', []),
+                'integration_sequence_file': str((job_dir / result['integration_sequence']).resolve()) if closed and result.get('integration_sequence') else '',
                 'fill_type': ('direct_connection' if result['total_rounds'] == 0 else 'extension') if closed else 'unfilled',
                 'fill_length': result['gap_length'] if closed else 0,
                 'rounds': result['total_rounds'],

@@ -93,6 +93,7 @@ class CtgFamilyPipeline:
         self.base.out = str(Path(base.out).resolve())
         self.base.name = "ctglinker"
         self.base.thread = int(base.thread)
+        self.base.allow_terminal_backoff = True
         self.root = Path(self.base.out)
         reject_legacy_ctg_output(self.root)
         self.root.mkdir(parents=True, exist_ok=True)
@@ -270,7 +271,26 @@ class CtgFamilyPipeline:
         if len(member_ids) != len(set(member_ids)):
             raise ValueError("Connection would reuse an already incorporated contig")
         sequence = joined_sequence(winner, left_version, right_version)
-        segments = clip_segments(left_segments, 0, winner.left_end) + clip_segments(right_segments, winner.right_end, right_version.length)
+        if (winner.evidence or {}).get("plan_path"):
+            from JunctionRepair import load_plan
+            plan = load_plan(winner.evidence)
+            # Original assemblies keep their existing component provenance.
+            if direction == "right":
+                origins = {winner.left_family: (current, "+"), winner.right_family: (other, strand)}
+            else:
+                origins = {winner.left_family: (other, strand), winner.right_family: (current, "+")}
+            segments = []
+            for number, piece in enumerate(plan["pieces"]):
+                if piece["kind"] == "original":
+                    assembly, orientation = origins[piece["family"]]
+                    source_segments = copy.deepcopy(assembly["segments"]) if orientation == "+" else reverse_segments(assembly["segments"])
+                    segments += clip_segments(source_segments, piece["start"], piece["end"])
+                else:
+                    source_id = f"J{self.pending['number']}P{number}"
+                    self.sources[source_id] = dict(fasta_source(piece["path"], piece["end"]), kind=piece["kind"], event=self.pending["number"])
+                    segments.append({"component": source_id, "start": piece["start"], "end": piece["end"], "strand": "+"})
+        else:
+            segments = clip_segments(left_segments, 0, winner.left_end) + clip_segments(right_segments, winner.right_end, right_version.length)
         if self._sequence(segments) != sequence:
             raise ValueError("Connection composition does not reconstruct its sequence")
         key = f"DG{self.next_dg}"
@@ -309,8 +329,13 @@ class CtgFamilyPipeline:
             context = {"project": self.context, "endpoint": pending}
             search = FamilySearch(directory, seeds, primary="primary", context=context,
                                   max_rounds=self.context["max_rounds"], max_length=self.context["max_length"])
+            if hasattr(self.overlap, "configure_boundaries"):
+                self.overlap.configure_boundaries(self.base, seeds)
             search.run(self.extend, self.overlap)
-            publish_search(search, unclosed_families=["primary"])
+            published = publish_search(search, unclosed_families=["primary"])
+            event["junction"] = published.get("junction")
+            event["anchor_retries"] = published.get("anchor_retries", [])
+            event["connection_diagnostics"] = published.get("connection_diagnostics", [])
             event.update(status=search.status, total_rounds=search.total_rounds,
                          total_extension_length=search.total_length,
                          result_dir=str(directory.relative_to(self.root)))
@@ -511,6 +536,8 @@ def render_ctg_report(result):
     if result.get("status"):
         header_badge = f'<div>{badge_html(result["status"], status_tone(result["status"]))}</div>'
 
+    from JunctionReport import render_project_junctions
+    junction_html = render_project_junctions(dict(result, events=events_data))
     css = report_css()
     return f'''<!doctype html>
 <html lang="en">

@@ -42,9 +42,20 @@ class SingleRound:
         base.initialSeq = family.versions[0].path
         # Intentionally no fixed terminal. OutputSequence defers family closure.
         base.terminalSeq = None
+        input_path = family.current.path
+        if family.anchor_backoff:
+            from FamilyOverlap import read_sequence
+            seq = read_sequence(input_path)
+            backoff = min(family.anchor_backoff, max(0, len(seq)-1000))
+            work = Path(directory)
+            work.mkdir(parents=True, exist_ok=True)
+            trimmed = seq[:-backoff] if family.direction == "rightward" else seq[backoff:]
+            path = work/"anchor-backoff.fa"
+            path.write_text(">anchor_backoff\n"+trimmed+"\n")
+            input_path = str(path)
         return SimpleNamespace(
             base=base, roundDir=str(directory), roundNum=family.attempts,
-            roundInputSeq=family.current.path, usedReads=list(family.used_reads),
+            roundInputSeq=input_path, usedReads=list(family.used_reads),
             lastRoundUsedReads=list(family.last_reads), extensionLen=family.added_bases,
             endSignal=False,
         )
@@ -77,6 +88,19 @@ class SingleRound:
         return state
 
     def __call__(self, family, directory):
+        result = self._call(family, directory)
+        if (getattr(self.base, "allow_terminal_backoff", False) and family.current.number == 0
+                and not family.anchor_backoff and family.current.length > 3000
+                and result.stop_reason in NORMAL_READ_STOPS.union({"no_extension_contigs", "no_growth", "no_new_extension_reads"})):
+            # This is a separate scheduler attempt, never hidden extra assembly.
+            return AttemptResult(retry_reason="terminal_anchor_backoff")
+        if family.anchor_backoff and result.sequence_path:
+            from ExtensionFamilies import sequence_identity
+            if sequence_identity(result.sequence_path)[2] <= family.current.length:
+                return AttemptResult(stop_reason="anchor_backoff_no_net_growth")
+        return result
+
+    def _call(self, family, directory):
         if self.shared_cache is None:
             return self._execute(family, Path(directory))
         # Opposite endpoints do not affect a single extension attempt. Reuse its

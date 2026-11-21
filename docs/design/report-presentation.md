@@ -54,3 +54,14 @@ No alternative design model was invoked.
 - AGY `gemini-4-neon-high` made these presentation edits. AST comparison confirms only rendering functions changed; no parsers, schemas, algorithms, or JS control flow were modified.
 - Final unified regression: **181 tests passed, 0 skipped, 275.821 seconds**, including new coverage for headers, unlimited/zero limits, identifier escaping and the translated HTML layer. Log: `/tmp/degap-docs-final-regression-20261122.log`. No browser was launched for this follow-up.
 - Separate real-read validation and report/result checks are recorded in [the new SSH 180 dataset report](../validation/2026-11-22-ssh180-new-dataset.md).
+
+## Junction evidence follow-up (2026-11-22)
+
+AGY `gemini-4-neon-high` implemented `bin/JunctionReport.py` and its focused presentation tests. Integration adds the helper to family, CtgLinker and AutoGapfiller reports. The new sections distinguish fast/full connection diagnostics, rejected pairs, gap-only length, flank delta, original-overlap trimming, supported/unapplied terminal edits, and budgeted anchor retries. They remain offline and expose full evidence through expandable tables. Existing language/chart controls are retained.
+
+Unlike the earlier presentation-only changes above, this follow-up accompanies algorithm and composition changes documented in [junction validation](junction-validation.md). Automated report/schema checks are required; no new browser validation is claimed.
+
+
+### Final AutoGapfiller coordinate alignment
+
+AGY `gemini-4-neon-high` corrected the inclusive-gap arithmetic, downstream flank-delta shifts, zero/negative gap handling and numeric genomic sorting in `_create_full_html`. Tracks are explicitly labeled as original coordinates and use original gap spans. A source/AST audit confirms that only this rendering method and its tests changed in the final follow-up. Six focused tests pass with Node; actual rendered report projections also match remaining N intervals from the final FASTA. No browser validation is claimed. Results, limitations and the portable evidence archive are recorded in [SSH 180 junction validation](../validation/2026-11-22-junction-repair.md).

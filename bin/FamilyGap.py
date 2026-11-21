@@ -61,13 +61,13 @@ def prepare_context(base, overlap_contract):
         # checked execution reports a missing tool rather than a biological stop.
         tools[name] = {"path": path, "sha256": content_hash(path) if path else None}
     code_files = ["FamilyGap.py", "ExtensionFamilies.py", "FamilyOverlap.py", "FamilyRound.py", "FamilyTools.py",
-                  "FindExtensionReads.py", "FindExtensionContigs.py", "GapFillerClass.py", "ONTAssemblyReads.py"]
+                  "FindExtensionReads.py", "FindExtensionContigs.py", "GapFillerClass.py", "ONTAssemblyReads.py", "JunctionRepair.py"]
     return {
         "driver": "family-gap-v1", "files": files, "tools": tools, "overlap": overlap_contract,
         "code": {name: content_hash(Path(__file__).parent / name) for name in code_files},
         "parameters": {name: getattr(base, name, None) for name in
                        ("data_type", "seedLen", "hifiSeedLen", "ontSeedLen", "edge", "thread",
-                        "kmer_size", "kmer_num", "kmer_filter", "filterDepthHifi", "filterDepthOnt")},
+                        "kmer_size", "kmer_num", "kmer_filter", "filterDepthHifi", "filterDepthOnt", "allow_terminal_backoff")},
     }
 
 
@@ -76,9 +76,12 @@ def run_gap(base):
     local = copy.copy(base)
     local.out = str(Path(base.out).resolve())
     local.thread = int(local.thread)
+    local.allow_terminal_backoff = True
     overlap = MummerOverlap(Path(local.out) / "family-overlaps", int(local.edge))
     context = prepare_context(local, overlap.contract)
-    search = FamilySearch(local.out, [("L", "rightward", local.seqleft), ("R", "leftward", local.seqright)],
+    seeds = [("L", "rightward", local.seqleft), ("R", "leftward", local.seqright)]
+    overlap.configure_boundaries(local, seeds)
+    search = FamilySearch(local.out, seeds,
                           primary="L", context=context,
                           max_rounds=getattr(local, "MaximumExtensionRound", None),
                           max_length=getattr(local, "MaximunExtensionLength", None))

@@ -98,6 +98,14 @@ How ONT quality recovery works (`bin/ONTAssemblyReads.py`):
 - Length is checked **before** launching the next attempt, so the final complete attempt may exceed `--MaximumExtensionLength` and is still kept whole and checked for closure before stopping.
 - Setting `--MaximumExtensionRound 0` skips extension attempts while still allowing round-0 direct closure. Negative limits are rejected. Both limits default to `None` (unlimited).
 
+### Connection and flank evidence
+
+A failed terminal-window comparison triggers a full-sequence check; small collinear alignment blocks can form one validated connection. The minimum effective overlap is not reduced just to close a short-overlap case.
+
+Original flank cores are retained. Terminal candidates can come from original-read consensus even if a seed error survives in all extension versions. At most 2 kb near each gap-facing end may be revised, with distinct spanning-read support, both strands, and unique original-boundary placement. Unconfirmed differences are reported but not applied. Gap-only length, flank length delta and true-overlap trimming are separate metrics. Initial-end anchor backoff is one additional scheduled attempt and consumes the shared round budget.
+
+Read [junction validation and terminal repair](docs/design/junction-validation.md) for the exact default policy, ambiguity handling, minimal AutoGapfiller replacement payload, and evidence files. Changing these algorithm contracts requires a new output directory; do not delete the old workspace.
+
 ### Outcome States & Tool Errors
 
 Treat **tool ran (exit 0)**, **gap closed / connected**, and **sequence biologically verified** as distinct states:

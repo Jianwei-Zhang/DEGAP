@@ -27,7 +27,14 @@ def content_hash(path):
     path = Path(path).resolve()
     before = path.stat()
     stamp = (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns)
-    digest = _hash_at_stamp(str(path), stamp)
+    import time
+    # Coarse filesystem timestamps can stay identical during a same-size rewrite.
+    # Do not memoize small/recent files; immutable large read inputs still share
+    # their content hash once their timestamp has settled.
+    if before.st_size <= 1024 * 1024 or max(before.st_mtime, before.st_ctime) >= time.time() - 2.0:
+        digest = _read_hash(str(path))
+    else:
+        digest = _hash_at_stamp(str(path), stamp)
     after = path.stat()
     if stamp != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns):
         raise ValueError(f"Input changed while hashing: {path}")
@@ -39,6 +46,10 @@ from functools import lru_cache
 
 @lru_cache(maxsize=256)
 def _hash_at_stamp(path, stamp):
+    return _read_hash(path)
+
+
+def _read_hash(path):
     import hashlib
     digest = hashlib.sha256()
     with open(path, "rb") as stream:

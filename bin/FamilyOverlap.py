@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+from dataclasses import replace
 
 from ExtensionFamilies import Connection, atomic_json, fingerprint, read_json
 
@@ -38,7 +39,7 @@ def read_sequence(path):
 
 
 def parse_coords(path, left, right, *, left_offset, left_tail_length,
-                 right_tail_length, edge, min_overlap=10000):
+                 right_tail_length, edge, min_overlap=10000, allow_containment=False, diagnostics=None):
     """Reference is right prefix; query is left suffix, as in old linkgap.
 
     Reject inverted overlaps. Return full sequence, zero-based half-open
@@ -46,6 +47,9 @@ def parse_coords(path, left, right, *, left_offset, left_tail_length,
     linkgap did not impose that extra threshold. Keep that distinction explicit.
     """
     matches = []
+    blocks = []
+    stats = diagnostics if diagnostics is not None else {}
+    stats.update(blocks=0, short=0, nonterminal=0, inverted=0)
     initial = left.number == right.number == 0
     with open(path) as stream:
         for line_number, line in enumerate(stream, 1):
@@ -67,21 +71,64 @@ def parse_coords(path, left, right, *, left_offset, left_tail_length,
                     raise ValueError("inconsistent coordinates or sequence identities")
             except (ValueError, IndexError) as error:
                 raise ValueError(f"Invalid MUMmer coordinates at {path}:{line_number}: {error}") from error
+            stats["blocks"] += 1
             if a > b or c > d:
+                stats["inverted"] += 1
                 continue
-            if ref_span < min_overlap or (initial and identity < 80):
+            if initial and identity < 80:
+                continue
+            blocks.append((c - 1 + left_offset, d + left_offset, a - 1, b, identity))
+            if ref_span < min_overlap:
+                stats["short"] += 1
                 continue
             left_start, left_end = c - 1 + left_offset, d + left_offset
             right_start, right_end = a - 1, b
             # Old direct connection used zero-based endpoint distance; linkgap
             # used one-based reference start <= edge. Do not silently relax it.
             allowed_right_start = edge if initial else edge - 1
-            if left.length - left_end > edge or right_start > allowed_right_start:
+            terminal = left.length-left_end <= edge and right_start <= allowed_right_start
+            contained = allow_containment and (
+                (left_start <= edge and left.length-left_end <= edge) or
+                (right_start <= edge and right.length-right_end <= edge))
+            if not terminal and not contained:
+                stats["nonterminal"] += 1
                 continue
             matches.append(Connection(
                 left.family, left.number, right.family, right.number,
                 identity, ref_span, left.length - left_end + right_start,
-                left_start, left_end, right_start, right_end))
+                left_start, left_end, right_start, right_end,
+                {"alignment_type": "containment"} if contained and not terminal else None))
+    # Chains must be monotone and nonoverlapping in BOTH sequences. Missing
+    # intervals never count as aligned support. Bound small interruptions instead
+    # of joining arbitrary repeat blocks into an invented bridge.
+    blocks.sort()
+    chains = []
+    for index, block in enumerate(blocks):
+        ls, le, rs, re, ident = block
+        weight = min(le - ls, re - rs)
+        options = [([block], weight, ident * weight)]
+        for chain, covered, score in chains:
+            prev = chain[-1]
+            lg, rg = ls - prev[1], rs - prev[3]
+            if (0 <= lg <= edge and 0 <= rg <= edge and
+                    abs(lg - rg) <= max(20, int(0.05 * max(lg, rg)))):
+                options.append((chain + [block], covered + weight, score + ident * weight))
+        # Keep the best path ending here; do not enumerate exponentially many chains.
+        best = max(options, key=lambda item: (item[1], item[2] / item[1]))
+        chains.append(best)
+        chain, covered, score = best
+        if len(chain) < 2 or covered < min_overlap:
+            continue
+        first, last = chain[0], chain[-1]
+        allowed = edge if initial else edge - 1
+        if left.length - last[1] > edge or first[2] > allowed:
+            continue
+        matches.append(Connection(left.family, left.number, right.family, right.number,
+                                  score / covered, covered, left.length - last[1] + first[2],
+                                  first[0], last[1], first[2], last[3],
+                                  {"alignment_type": "collinear_chain", "blocks": len(chain),
+                                   "unresolved_bases": sum(max(b[0]-a[1], b[2]-a[3])
+                                                           for a, b in zip(chain, chain[1:]))}))
     return matches
 
 
@@ -101,12 +148,14 @@ class MummerOverlap:
                 raise FileNotFoundError(f"Required overlap tool is unavailable: {name}")
             self.tools[name] = str(Path(executable).resolve())
         self.contract = {
-            "adapter": "family-mummer-v1", "edge": edge, "min_overlap": 10000,
+            "adapter": "family-mummer-v2", "chaining": "bounded-collinear-v1", "fallback": "full-sequence", "edge": edge, "min_overlap": 10000,
             "tail_length": self.tail_length,
             "tools": {name: {"path": path, "sha256": file_hash(path)}
                       for name, path in self.tools.items()},
         }
         self.ends = {}
+        self.validator = None
+        self.diagnostics = {}
 
     def _end(self, version, side):
         key = (version, side)
@@ -150,13 +199,54 @@ class MummerOverlap:
                 os.replace(temporary, output)
         atomic_json(receipt_file, {"identity": identity, "sha256": file_hash(output)})
 
+    def configure_boundaries(self, base, seeds):
+        from JunctionRepair import BoundaryVerifier
+        self.validator = BoundaryVerifier(base, seeds, self.directory / "junctions")
+
+    def diagnostic(self, left, right):
+        return self.diagnostics.get((left, right), {})
+
     def __call__(self, left, right):
-        left_tail, offset = self._end(left, "left")
-        right_tail, _ = self._end(right, "right")
-        # Raw alignment depends on sequence content and tools, not which endpoint
-        # search currently calls a source "primary" or "candidate". Rebind the
-        # resulting coordinates to the current family/version after cache reuse.
-        pair_id = fingerprint([left.sha256, left.length, right.sha256, right.length, self.contract])
+        stages = []
+        accepted = []
+        # An empty clipped comparison is not proof of no full-sequence overlap.
+        for full in (False, True):
+            matches, directory, stats = self._compare(left, right, full=full)
+            reasons = []
+            for candidate in matches:
+                details = dict(candidate.evidence or {})
+                details.update(stage="full" if full else "fast", adapter=self.contract["adapter"])
+                candidate = replace(candidate, evidence=details)
+                if self.validator:
+                    candidate, reason = self.validator(candidate, left, right, directory)
+                    if candidate is None:
+                        reasons.append(reason)
+                        continue
+                accepted.append(candidate)
+            stages.append({"stage": "full" if full else "fast", "blocks": stats["blocks"], "rejections": stats,
+                "candidates": len(accepted), "reason": "; ".join(sorted(set(reasons))) or (
+                    "eligible_connection" if accepted else (
+                        "non_terminal_alignment" if stats["nonterminal"] else
+                        "overlap_below_minimum" if stats["short"] else
+                        "inverted_alignment" if stats["inverted"] else "no_alignment"))})
+            if accepted or (left.length <= self.tail_length and right.length <= self.tail_length):
+                break
+        info = {"left_family": left.family, "left_version": left.number,
+                "right_family": right.family, "right_version": right.number,
+                "stages": stages, "status": "eligible" if accepted else "rejected",
+                "reason": stages[-1]["reason"]}
+        self.diagnostics[(left, right)] = info
+        return accepted
+
+    def _compare(self, left, right, *, full):
+        if full:
+            left.verify(); right.verify()
+            left_tail, right_tail, offset = read_sequence(left.path), read_sequence(right.path), 0
+        else:
+            left_tail, offset = self._end(left, "left")
+            right_tail, _ = self._end(right, "right")
+        pair_id = fingerprint([left.sha256, left.length, right.sha256, right.length,
+                               self.contract, "full" if full else "fast"])
         directory = self.directory / pair_id
         directory.mkdir(parents=True, exist_ok=True)
         paths = {}
@@ -182,8 +272,11 @@ class MummerOverlap:
         coords = directory / "alignment.coords"
         self._stage(directory, "show-coords",
                     [self.tools["show-coords"], "-TrHcl", str(filtered)], [filtered], coords)
-        return parse_coords(coords, left, right, left_offset=offset,
-                            left_tail_length=len(left_tail), right_tail_length=len(right_tail), edge=self.edge)
+        stats = {}
+        matches = parse_coords(coords, left, right, left_offset=offset,
+                               left_tail_length=len(left_tail), right_tail_length=len(right_tail),
+                               edge=self.edge, allow_containment=(full or (offset == 0 and len(right_tail) == right.length)), diagnostics=stats)
+        return matches, directory, stats
 
 
 def joined_sequence(connection, left, right):
@@ -196,5 +289,8 @@ def joined_sequence(connection, left, right):
     FamilySearch._validate_connection(connection, left, right)
     left.verify()
     right.verify()
+    if (connection.evidence or {}).get("plan_path"):
+        from JunctionRepair import load_plan, plan_sequence
+        return plan_sequence(load_plan(connection.evidence))
     a, b = read_sequence(left.path), read_sequence(right.path)
     return a[:connection.left_end] + b[connection.right_end:]

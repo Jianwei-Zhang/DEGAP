@@ -241,6 +241,8 @@ class GapFillingVisualizer:
         summary = self.gap_filling_results.get('summary', {})
 
         # 准备数据
+        from JunctionReport import render_project_junctions
+        junction_html = render_project_junctions({'events': self.gap_filling_results.get('gaps', [])})
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         total_gaps = summary.get('total_gaps', 0)
         filled_gaps = summary.get('filled_gaps', 0)
@@ -628,8 +630,16 @@ class GapFillingVisualizer:
             pointer-events: none;
             z-index: 1000;
             display: none;
-            max-width: 280px;
+            max-width: 340px;
             box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2);
+        }
+
+        .cell-subnote {
+            display: block;
+            font-size: 0.75rem;
+            font-weight: 400;
+            color: var(--ink-muted);
+            margin-top: 2px;
         }
 
         .table-link {
@@ -883,6 +893,10 @@ class GapFillingVisualizer:
             </div>
 
             <div class="card-content">
+                <p class="section-note" id="chromCoordinateNote">
+                    <span class="lang-en">Track coordinates and marker widths use the original assembly coordinate frame (1-based inclusive gaps placed at 0-based start). Filled sequence lengths, original-overlap trimming, and flank length deltas are reported in tooltips and tables.</span>
+                    <span class="lang-zh" style="display:none;">染色体轨道与标记宽度均采用原始组装坐标系（1-based 闭区间 gap 按 0-based 起点定位）；填补序列长度、原始重叠去重裁剪与末端修订净变化见悬停提示与表格。</span>
+                </p>
                 <div id="chromVisualization">
                     <!-- Will be populated by JavaScript -->
                 </div>
@@ -906,6 +920,7 @@ class GapFillingVisualizer:
                 </div>
             </div>
         </section>
+    {junction_html}
     </main>
 
     <!-- Tooltip -->
@@ -989,20 +1004,277 @@ class GapFillingVisualizer:
             }}
         }}
 
+        // Numeric & coordinate projection helpers (pure functions)
+        function toFiniteNumber(value) {{
+            if (typeof value === 'number' && Number.isFinite(value)) {{
+                return value;
+            }}
+            if (typeof value === 'string' && value.trim() !== '') {{
+                const parsed = Number(value);
+                if (Number.isFinite(parsed)) {{
+                    return parsed;
+                }}
+            }}
+            return null;
+        }}
+
+        function bilingualSpan(enHtml, zhHtml) {{
+            const enStyle = currentLang === 'zh' ? ' style="display:none;"' : '';
+            const zhStyle = currentLang === 'zh' ? '' : ' style="display:none;"';
+            return `<span class="lang-en"${{enStyle}}>${{enHtml}}</span><span class="lang-zh"${{zhStyle}}>${{zhHtml}}</span>`;
+        }}
+
         // Format number with commas
         function formatNumber(num) {{
-            return String(num).replace(/\\B(?=(\\d{{3}})+(?!\\d))/g, ",");
+            const parsed = toFiniteNumber(num);
+            if (parsed === null) {{
+                return '-';
+            }}
+            return String(parsed).replace(/\\B(?=(\\d{{3}})+(?!\\d))/g, ",");
         }}
 
         // Format BP
         function formatBP(bp) {{
-            if (Math.abs(bp) >= 1000000) {{
-                return (bp / 1000000).toFixed(2) + ' Mb';
-            }} else if (Math.abs(bp) >= 1000) {{
-                return (bp / 1000).toFixed(2) + ' Kb';
-            }} else {{
-                return bp + ' bp';
+            const num = toFiniteNumber(bp);
+            if (num === null) {{
+                return '-';
             }}
+            if (Math.abs(num) >= 1000000) {{
+                return (num / 1000000).toFixed(2) + ' Mb';
+            }} else if (Math.abs(num) >= 1000) {{
+                return (num / 1000).toFixed(2) + ' Kb';
+            }} else {{
+                return num + ' bp';
+            }}
+        }}
+
+        function formatSignedBP(bp) {{
+            const num = toFiniteNumber(bp);
+            if (num === null) {{
+                return '-';
+            }}
+            const formatted = formatBP(num);
+            return num > 0 ? '+' + formatted : formatted;
+        }}
+
+        // Original 1-based inclusive gap span: finite gap.gap_len or (gap_end - gap_start + 1)
+        function getOriginalGapLength(gap) {{
+            const explicitLen = toFiniteNumber(gap && gap.gap_len);
+            if (explicitLen !== null && explicitLen >= 0) {{
+                return explicitLen;
+            }}
+            const start = toFiniteNumber(gap && gap.gap_start);
+            const end = toFiniteNumber(gap && gap.gap_end);
+            if (start !== null && end !== null && end >= start) {{
+                return end - start + 1;
+            }}
+            return 0;
+        }}
+
+        // Bounded terminal flank delta (missing legacy junction means 0)
+        function getFlankLengthDelta(gap) {{
+            const delta = toFiniteNumber(gap && gap.junction && gap.junction.flank_length_delta);
+            return delta !== null ? delta : 0;
+        }}
+
+        // Filled sequence length (0 and negative overlap are valid numbers, never falsy-skipped)
+        function getFilledSequenceLength(gap) {{
+            const direct = toFiniteNumber(gap && gap.fill_length);
+            if (direct !== null) {{
+                return direct;
+            }}
+            const junctionGapLen = toFiniteNumber(gap && gap.junction && gap.junction.gap_length);
+            if (junctionGapLen !== null) {{
+                return junctionGapLen;
+            }}
+            return null;
+        }}
+
+        // Downstream coordinate offset added by a filled gap
+        function getFilledGapOffsetDelta(gap) {{
+            if (!gap || !gap.filled) {{
+                return 0;
+            }}
+            const originalGapLen = getOriginalGapLength(gap);
+            const fillLength = getFilledSequenceLength(gap);
+            const numericFillLen = fillLength !== null ? fillLength : 0;
+            const flankDelta = getFlankLengthDelta(gap);
+            return numericFillLen - originalGapLen + flankDelta;
+        }}
+
+        function compareGapIds(aId, bId) {{
+            const aNum = toFiniteNumber(aId);
+            const bNum = toFiniteNumber(bId);
+            if (aNum !== null && bNum !== null && aNum !== bNum) {{
+                return aNum - bNum;
+            }}
+            const aStr = String(aId ?? '');
+            const bStr = String(bId ?? '');
+            if (aStr < bStr) return -1;
+            if (aStr > bStr) return 1;
+            return 0;
+        }}
+
+        // Sort gaps by numeric genomic start, then end, then stable gap_id
+        function compareGapsGenomic(a, b) {{
+            const aStart = toFiniteNumber(a && a.gap_start);
+            const bStart = toFiniteNumber(b && b.gap_start);
+            if (aStart !== null && bStart !== null && aStart !== bStart) {{
+                return aStart - bStart;
+            }}
+            if (aStart !== null && bStart === null) return -1;
+            if (aStart === null && bStart !== null) return 1;
+            const aEnd = toFiniteNumber(a && a.gap_end);
+            const bEnd = toFiniteNumber(b && b.gap_end);
+            if (aEnd !== null && bEnd !== null && aEnd !== bEnd) {{
+                return aEnd - bEnd;
+            }}
+            return compareGapIds(a && a.gap_id, b && b.gap_id);
+        }}
+
+        // Project remaining unfilled gaps into final integrated coordinates
+        function projectFinalUnfilledGaps(gaps) {{
+            const sortedGaps = Array.isArray(gaps) ? [...gaps].sort(compareGapsGenomic) : [];
+            let positionOffset = 0;
+            const projected = [];
+            sortedGaps.forEach(gap => {{
+                if (!gap.filled) {{
+                    const start = toFiniteNumber(gap.gap_start);
+                    const end = toFiniteNumber(gap.gap_end);
+                    const safeStart = start !== null ? start : 0;
+                    const safeEnd = end !== null ? end : safeStart;
+                    projected.push({{
+                        gap,
+                        originalStart: safeStart,
+                        originalEnd: safeEnd,
+                        originalLength: getOriginalGapLength(gap),
+                        finalStart: safeStart + positionOffset,
+                        finalEnd: safeEnd + positionOffset,
+                        offset: positionOffset
+                    }});
+                }} else {{
+                    positionOffset += getFilledGapOffsetDelta(gap);
+                }}
+            }});
+            return projected;
+        }}
+
+        // Original assembly 0-based track placement (never uses final fill length as axis width)
+        function getOriginalTrackPlacement(gap, rowStart = 0, rowEnd = null) {{
+            const rawStart = toFiniteNumber(gap && gap.gap_start);
+            const start0 = rawStart !== null ? Math.max(0, rawStart - 1) : 0;
+            const span = getOriginalGapLength(gap);
+            const end0 = start0 + span;
+            if (rowEnd !== null) {{
+                if (start0 < rowStart || start0 >= rowEnd) {{
+                    return null;
+                }}
+                return {{
+                    start0,
+                    end0,
+                    relativeStart: start0 - rowStart,
+                    span,
+                    clippedSpan: Math.min(span, Math.max(0, rowEnd - start0))
+                }};
+            }}
+            return {{
+                start0,
+                end0,
+                relativeStart: start0,
+                span,
+                clippedSpan: span
+            }};
+        }}
+
+        function formatFillLengthCell(gap) {{
+            if (!gap || !gap.filled) {{
+                return {{ html: '-', className: 'num muted' }};
+            }}
+            const fillLen = getFilledSequenceLength(gap);
+            const rawFlankDelta = toFiniteNumber(gap && gap.junction && gap.junction.flank_length_delta);
+            const flankNote = (rawFlankDelta !== null && rawFlankDelta !== 0)
+                ? `<span class="cell-subnote">${{bilingualSpan(
+                    `Flank delta: ${{escapeHtml(formatSignedBP(rawFlankDelta))}}`,
+                    `末端修订变化：${{escapeHtml(formatSignedBP(rawFlankDelta))}}`
+                )}}</span>`
+                : '';
+
+            if (fillLen === null) {{
+                return {{ html: '-' + flankNote, className: 'num muted' }};
+            }}
+            if (fillLen < 0) {{
+                const trimText = escapeHtml(formatBP(Math.abs(fillLen)));
+                const trimNote = `<span class="cell-subnote">${{bilingualSpan(
+                    `Original-overlap trim (${{trimText}})`,
+                    `原始重叠去重裁剪（${{trimText}}）`
+                )}}</span>`;
+                return {{
+                    html: `${{escapeHtml(formatBP(fillLen))}}${{trimNote}}${{flankNote}}`,
+                    className: 'num'
+                }};
+            }}
+            return {{
+                html: `${{escapeHtml(formatBP(fillLen))}}${{flankNote}}`,
+                className: 'num success'
+            }};
+        }}
+
+        function buildTooltipContent(gap, chrom) {{
+            const originalSpan = getOriginalGapLength(gap);
+            const fillLen = getFilledSequenceLength(gap);
+            const rawFlankDelta = toFiniteNumber(gap && gap.junction && gap.junction.flank_length_delta);
+            const posRange = `${{escapeHtml(formatNumber(gap && gap.gap_start))}} - ${{escapeHtml(formatNumber(gap && gap.gap_end))}}`;
+
+            let content = `
+                <strong>${{escapeHtml(chrom)}}.gap${{escapeHtml(gap && gap.gap_id)}}</strong><br>
+                ${{bilingualSpan(
+                    `Status: ${{gap && gap.filled ? 'Filled' : 'Unfilled'}}`,
+                    `状态：${{gap && gap.filled ? '已填充' : '未填充'}}`
+                )}}<br>
+                ${{bilingualSpan(
+                    `Original Position (1-based): ${{posRange}}`,
+                    `原始坐标 (1-based)：${{posRange}}`
+                )}}<br>
+                ${{bilingualSpan(
+                    `Original Gap Span: ${{escapeHtml(formatBP(originalSpan))}}`,
+                    `原始 Gap 跨度：${{escapeHtml(formatBP(originalSpan))}}`
+                )}}<br>
+            `;
+
+            if (gap && gap.filled) {{
+                if (fillLen === null) {{
+                    content += `${{bilingualSpan('Filled Sequence Length: -', '填补序列长度：-')}}<br>`;
+                }} else if (fillLen < 0) {{
+                    const trimAbs = escapeHtml(formatBP(Math.abs(fillLen)));
+                    content += `${{bilingualSpan(
+                        `Original-Overlap Trimming: ${{escapeHtml(formatBP(fillLen))}} (${{trimAbs}} trimmed)`,
+                        `原始重叠去重裁剪：${{escapeHtml(formatBP(fillLen))}}（裁剪 ${{trimAbs}}）`
+                    )}}<br>`;
+                }} else {{
+                    content += `${{bilingualSpan(
+                        `Filled Sequence Length: ${{escapeHtml(formatBP(fillLen))}}`,
+                        `填补序列长度：${{escapeHtml(formatBP(fillLen))}}`
+                    )}}<br>`;
+                }}
+
+                if (rawFlankDelta !== null) {{
+                    content += `${{bilingualSpan(
+                        `Flank Length Delta: ${{escapeHtml(formatSignedBP(rawFlankDelta))}}`,
+                        `末端修订净变化：${{escapeHtml(formatSignedBP(rawFlankDelta))}}`
+                    )}}<br>`;
+                }}
+
+                if (gap.fill_type) {{
+                    content += bilingualSpan(
+                        `Type: ${{escapeHtml(gap.fill_type)}}`,
+                        `类型：${{escapeHtml(gap.fill_type)}}`
+                    );
+                }}
+            }} else {{
+                content += bilingualSpan('Filled Sequence Length: -', '填补序列长度：-');
+            }}
+
+            return content;
         }}
 
         // Populate Reads Information
@@ -1084,8 +1356,8 @@ class GapFillingVisualizer:
             chromNames.forEach(chrom => {{
                 const chromData = gapsByChrom[chrom];
 
-                // Sort gaps by gap_id
-                const sortedGaps = chromData.gaps.sort((a, b) => a.gap_id - b.gap_id);
+                // Sort gaps by numeric genomic start then stable gap_id
+                const sortedGaps = [...chromData.gaps].sort(compareGapsGenomic);
 
                 sortedGaps.forEach(gap => {{
                     const region = `${{formatNumber(gap.gap_start)}} - ${{formatNumber(gap.gap_end)}}`;
@@ -1129,8 +1401,8 @@ class GapFillingVisualizer:
             chromNames.forEach(chrom => {{
                 const chromData = gapsByChrom[chrom];
 
-                // Sort gaps by gap_id
-                const sortedGaps = chromData.gaps.sort((a, b) => a.gap_id - b.gap_id);
+                // Sort gaps by numeric genomic start then stable gap_id
+                const sortedGaps = [...chromData.gaps].sort(compareGapsGenomic);
 
                 sortedGaps.forEach(gap => {{
                     // Extended - use badge style
@@ -1151,12 +1423,10 @@ class GapFillingVisualizer:
                     // Flag column - show fill_direction (left/right/none)
                     const displayFlag = gap.fill_direction || 'none';
 
-                    const rounds = gap.filled ? gap.rounds : '-';
+                    const rounds = gap.filled && gap.rounds !== undefined && gap.rounds !== null ? gap.rounds : '-';
 
-                    // Fill length - show formatted BP if filled
-                    const hasFillLen = Boolean(gap.filled && gap.fill_length);
-                    const fillLength = hasFillLen ? formatBP(gap.fill_length) : '-';
-                    const fillLenClass = hasFillLen ? 'num success' : 'num muted';
+                    // Fill length - distinguish 0 bp, negative overlap trimming, and flank delta
+                    const fillCell = formatFillLengthCell(gap);
 
                     // Details - View link to sub-task report
                     // For filled gaps: use fill_direction, for unfilled: use 'left'
@@ -1172,7 +1442,7 @@ class GapFillingVisualizer:
                             <td>${{connectionType}}</td>
                             <td class="mono">${{escapeHtml(displayFlag)}}</td>
                             <td class="num">${{escapeHtml(rounds)}}</td>
-                            <td class="${{fillLenClass}}">${{escapeHtml(fillLength)}}</td>
+                            <td class="${{fillCell.className}}">${{fillCell.html}}</td>
                             <td>${{details}}</td>
                         </tr>
                     `;
@@ -1207,36 +1477,19 @@ class GapFillingVisualizer:
 
             chromNames.forEach(chrom => {{
                 const chromData = gapsByChrom[chrom];
+                const projected = projectFinalUnfilledGaps(chromData.gaps);
 
-                // Sort all gaps by gap_id
-                const allGaps = chromData.gaps.sort((a, b) => a.gap_id - b.gap_id);
+                projected.forEach(item => {{
+                    const region = `${{formatNumber(item.finalStart)}} - ${{formatNumber(item.finalEnd)}}`;
 
-                // Calculate position offset based on filled gaps
-                let positionOffset = 0;
-
-                allGaps.forEach(gap => {{
-                    if (!gap.filled) {{
-                        // This gap still exists in the final genome
-                        // Calculate new position by adding offset from all previous filled gaps
-                        const newStart = gap.gap_start + positionOffset;
-                        const newEnd = gap.gap_end + positionOffset;
-                        const region = `${{formatNumber(newStart)}} - ${{formatNumber(newEnd)}}`;
-
-                        html += `
-                            <tr>
-                                <td class="mono">${{escapeHtml(chrom)}}</td>
-                                <td class="num">${{escapeHtml(gap.gap_id)}}</td>
-                                <td class="num">${{escapeHtml(region)}}</td>
-                            </tr>
-                        `;
-                        rowCount++;
-                    }} else {{
-                        // This gap was filled, update offset for subsequent gaps
-                        // Offset = fill_length - original_gap_length
-                        const originalGapLen = gap.gap_end - gap.gap_start;
-                        const fillLength = gap.fill_length || 0;
-                        positionOffset += (fillLength - originalGapLen);
-                    }}
+                    html += `
+                        <tr>
+                            <td class="mono">${{escapeHtml(chrom)}}</td>
+                            <td class="num">${{escapeHtml(item.gap.gap_id)}}</td>
+                            <td class="num">${{escapeHtml(region)}}</td>
+                        </tr>
+                    `;
+                    rowCount++;
                 }});
             }});
 
@@ -1348,7 +1601,7 @@ class GapFillingVisualizer:
             headerDiv.className = 'chrom-track-header';
             headerDiv.innerHTML = `
                 <span class="chrom-track-name">${{escapeHtml(chrom)}}</span>
-                <span class="chrom-track-length">${{escapeHtml(formatBP(chromLength))}}</span>
+                <span class="chrom-track-length">${{escapeHtml(formatBP(chromLength))}} (${{bilingualSpan('original coords', '原始坐标')}})</span>
             `;
             trackDiv.appendChild(headerDiv);
 
@@ -1367,9 +1620,11 @@ class GapFillingVisualizer:
             // Calculate bar width percentage for gap positioning
             const barWidthPercent = (chromLength / maxChromLength * 100);
 
-            // Add gap markers
-            chromData.gaps.forEach((gap, index) => {{
-                addGapMarker(barContainerDiv, gap, index, chromLength || 1, chrom, null, false, barWidthPercent);
+            // Add gap markers in genomic order using original assembly coordinates
+            const sortedGaps = [...chromData.gaps].sort(compareGapsGenomic);
+            sortedGaps.forEach((gap, index) => {{
+                const placement = getOriginalTrackPlacement(gap);
+                addGapMarker(barContainerDiv, gap, index, chromLength || 1, chrom, placement, false, barWidthPercent);
             }});
 
             trackDiv.appendChild(barContainerDiv);
@@ -1379,6 +1634,7 @@ class GapFillingVisualizer:
         // Draw multi-row chromosome (for single chromosome view)
         function drawMultiRowChromosome(chrom, chromData, chromLength, trackLength, container) {{
             const numRows = Math.ceil(chromLength / trackLength);
+            const sortedGaps = [...chromData.gaps].sort(compareGapsGenomic);
 
             for (let row = 0; row < numRows; row++) {{
                 const rowStart = row * trackLength;
@@ -1394,7 +1650,7 @@ class GapFillingVisualizer:
                 headerDiv.className = 'chrom-track-header';
                 headerDiv.innerHTML = `
                     <span class="chrom-track-name">${{escapeHtml(chrom)}} (Row ${{row + 1}}/${{numRows}})</span>
-                    <span class="chrom-track-length">${{escapeHtml(formatBP(rowStart))}} - ${{escapeHtml(formatBP(rowEnd))}}</span>
+                    <span class="chrom-track-length">${{escapeHtml(formatBP(rowStart))}} - ${{escapeHtml(formatBP(rowEnd))}} (${{bilingualSpan('original', '原始坐标')}})</span>
                 `;
                 trackDiv.appendChild(headerDiv);
 
@@ -1410,12 +1666,11 @@ class GapFillingVisualizer:
 
                 barContainerDiv.appendChild(barDiv);
 
-                // Add gap markers for gaps in this row
-                chromData.gaps.forEach((gap, index) => {{
-                    if (gap.gap_start >= rowStart && gap.gap_start < rowEnd) {{
-                        // Calculate position relative to this row
-                        const relativePosition = gap.gap_start - rowStart;
-                        addGapMarker(barContainerDiv, gap, index, trackLength, chrom, relativePosition, true);
+                // Add gap markers for gaps whose 0-based original start falls in this row
+                sortedGaps.forEach((gap, index) => {{
+                    const placement = getOriginalTrackPlacement(gap, rowStart, rowEnd);
+                    if (placement !== null) {{
+                        addGapMarker(barContainerDiv, gap, index, trackLength, chrom, placement, true);
                     }}
                 }});
 
@@ -1424,42 +1679,35 @@ class GapFillingVisualizer:
             }}
         }}
 
-        // Add gap marker to a bar container
-        function addGapMarker(barContainerDiv, gap, index, chromLength, chrom, customPosition = null, useVariableWidth = false, barWidthPercent = 100) {{
+        // Add gap marker to a bar container in original assembly coordinates
+        function addGapMarker(barContainerDiv, gap, index, chromLength, chrom, placement = null, useVariableWidth = false, barWidthPercent = 100) {{
             const isTop = index % 2 === 0;
+            const resolved = placement || getOriginalTrackPlacement(gap);
 
             const markerDiv = document.createElement('div');
             markerDiv.className = `gap-marker ${{isTop ? 'top' : 'bottom'}}`;
             markerDiv.setAttribute('title', `${{chrom}} Gap ${{gap.gap_id}}: ${{gap.filled ? 'Filled' : 'Unfilled'}}`);
 
-            // Position based on gap_start (or custom position for multi-row)
-            const gapPosition = customPosition !== null ? customPosition : gap.gap_start;
+            // 0-based position on the original assembly axis
+            const axisLen = chromLength > 0 ? chromLength : 1;
+            const gapPosition = resolved.relativeStart;
 
             if (useVariableWidth) {{
-                // Multi-row view: draw gap as a region with width
-                // Use fill_length for filled gaps, gap_len for unfilled gaps
-                let gapDisplayLength;
-                if (gap.filled && gap.fill_length > 0) {{
-                    // Filled gap: use fill_length (extended length)
-                    gapDisplayLength = gap.fill_length;
-                }} else {{
-                    // Unfilled gap or direct connection (negative): use original gap_len
-                    gapDisplayLength = gap.gap_len;
-                }}
-
-                const gapWidthPercent = (gapDisplayLength / chromLength * 100);
+                // Multi-row view: always display original gap span on the original-length axis
+                const gapDisplayLength = resolved.clippedSpan;
+                const gapWidthPercent = (gapDisplayLength / axisLen * 100);
                 const minWidthPercent = 0.1; // Minimum 0.1% width to ensure visibility
                 const finalWidthPercent = Math.max(gapWidthPercent, minWidthPercent);
 
                 markerDiv.classList.add('has-width');
-                markerDiv.style.left = (gapPosition / chromLength * 100).toFixed(2) + '%';
-                markerDiv.style.width = finalWidthPercent.toFixed(2) + '%';
+                markerDiv.style.left = (gapPosition / axisLen * 100).toFixed(4) + '%';
+                markerDiv.style.width = finalWidthPercent.toFixed(4) + '%';
             }} else {{
-                // Single-row view: draw gap as a line
-                // Position gap relative to the bar's actual width, not the full container
-                const gapPositionInBar = (gapPosition / chromLength * 100);
+                // Single-row view: draw gap at 0-based original start relative to bar width
+                const clampedPos = Math.min(Math.max(gapPosition, 0), axisLen);
+                const gapPositionInBar = (clampedPos / axisLen * 100);
                 const finalPosition = gapPositionInBar * barWidthPercent / 100;
-                markerDiv.style.left = finalPosition.toFixed(2) + '%';
+                markerDiv.style.left = finalPosition.toFixed(4) + '%';
             }}
 
             // Line (extends from track to label direction)
@@ -1503,47 +1751,10 @@ class GapFillingVisualizer:
         // Show tooltip
         function showTooltip(event, gap, chrom) {{
             const tooltip = document.getElementById('tooltip');
-            const status = gap.filled ? 'Filled' : 'Unfilled';
-            const statusZh = gap.filled ? '已填充' : '未填充';
-
-            let content = `
-                <strong>${{escapeHtml(chrom)}}.gap${{escapeHtml(gap.gap_id)}}</strong><br>
-                <span class="lang-en">Status: ${{status}}</span>
-                <span class="lang-zh" style="display:none;">状态：${{statusZh}}</span><br>
-                <span class="lang-en">Position: ${{escapeHtml(formatNumber(gap.gap_start))}} - ${{escapeHtml(formatNumber(gap.gap_end))}}</span>
-                <span class="lang-zh" style="display:none;">位置：${{escapeHtml(formatNumber(gap.gap_start))}} - ${{escapeHtml(formatNumber(gap.gap_end))}}</span><br>
-                <span class="lang-en">Initial Length: ${{escapeHtml(formatBP(gap.gap_len))}}</span>
-                <span class="lang-zh" style="display:none;">初始长度：${{escapeHtml(formatBP(gap.gap_len))}}</span><br>
-            `;
-
-            // Extended length (only for filled gaps)
-            if (gap.filled && gap.fill_length > 0) {{
-                content += `
-                    <span class="lang-en">Extended Length: ${{escapeHtml(formatBP(gap.fill_length))}}</span>
-                    <span class="lang-zh" style="display:none;">延伸后长度：${{escapeHtml(formatBP(gap.fill_length))}}</span><br>
-                `;
-            }} else {{
-                content += `
-                    <span class="lang-en">Extended Length: -</span>
-                    <span class="lang-zh" style="display:none;">延伸后长度：-</span><br>
-                `;
-            }}
-
-            if (gap.filled) {{
-                content += `<span class="lang-en">Type: ${{escapeHtml(gap.fill_type)}}</span>`;
-                content += `<span class="lang-zh" style="display:none;">类型：${{escapeHtml(gap.fill_type)}}</span>`;
-            }}
-
-            tooltip.innerHTML = content;
+            tooltip.innerHTML = buildTooltipContent(gap, chrom);
             tooltip.style.display = 'block';
             tooltip.style.left = event.pageX + 10 + 'px';
             tooltip.style.top = event.pageY + 10 + 'px';
-
-            // Update language display
-            if (currentLang === 'zh') {{
-                tooltip.querySelectorAll('.lang-en').forEach(el => el.style.display = 'none');
-                tooltip.querySelectorAll('.lang-zh').forEach(el => el.style.display = '');
-            }}
         }}
 
         // Hide tooltip

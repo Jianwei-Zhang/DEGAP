@@ -1,5 +1,6 @@
 """Sequence/AGP/provenance publication for a completed family search."""
 from dataclasses import asdict
+import json
 import os
 from pathlib import Path
 import tempfile
@@ -76,7 +77,8 @@ def publish_search(search, name=None, *, unclosed_families=None):
         "status": search.status, "total_rounds": search.total_rounds,
         "total_extension_length": search.total_length,
         "final_sequence": final_file, "winner": asdict(search.winner) if search.winner else None,
-        "gap_length": None, "families": [], "components": {}, "artifacts": {},
+        "gap_length": None, "junction": None,
+        "connection_diagnostics": list(getattr(search, "checked_diagnostics", {}).values()), "families": [], "components": {}, "artifacts": {},
         "unclosed_exports": exported,
     }
     for family in search.families.values():
@@ -85,6 +87,20 @@ def publish_search(search, name=None, *, unclosed_families=None):
             "added_bases": family.added_bases, "stop_reason": family.stop_reason,
             "versions": [asdict(v) for v in family.versions],
         })
+    result["anchor_retries"] = []
+    result["anchor_backoff_requests"] = []
+    for family in search.families.values():
+        for attempt in range(1, family.attempts+1):
+            receipt = directory/"attempts"/str(search.order[family.key])/str(attempt)/"result.json"
+            if receipt.exists() and read_json(receipt).get("retry_reason"):
+                following = receipt.parent.parent/str(attempt+1)/"result.json"
+                executed = following.is_file()
+                result["anchor_backoff_requests"].append({"family": family.key, "after_attempt": attempt,
+                                                         "executed": executed, "backoff_bases": 2000})
+                if executed:
+                    result["anchor_retries"].append({"family": family.key, "attempt": attempt+1,
+                                                     "after_attempt": attempt, "backoff_bases": 2000,
+                                                     "reason": "terminal_anchor_backoff"})
     components = []
     agp = []
 
@@ -102,11 +118,28 @@ def publish_search(search, name=None, *, unclosed_families=None):
         left, right = left_family.versions[winner.left_version], right_family.versions[winner.right_version]
         sequence = joined_sequence(winner, left, right)
         final_text = f">{name}\n{sequence}\n"
-        result["gap_length"] = len(sequence) - left_family.versions[0].length - right_family.versions[0].length
-        left_id, right_id = component(left), component(right)
-        agp.append(f"{name}\t1\t{winner.left_end}\t1\tW\t{left_id}\t1\t{winner.left_end}\t+")
-        if right.length > winner.right_end:
-            agp.append(f"{name}\t{winner.left_end + 1}\t{len(sequence)}\t2\tW\t{right_id}\t{winner.right_end + 1}\t{right.length}\t+")
+        if (winner.evidence or {}).get("plan_path"):
+            from JunctionRepair import load_plan
+            plan = load_plan(winner.evidence)
+            result["junction"] = plan["summary"]
+            result["gap_length"] = plan["summary"]["gap_length"]
+            position = 0
+            for number, piece in enumerate(plan["pieces"], 1):
+                key = f"junction.part{number}"
+                full = read_sequence(piece["path"])
+                components.append(f">{key}\n{full}\n")
+                result["components"][key] = piece
+                length = piece["end"]-piece["start"]
+                agp.append(f"{name}\t{position+1}\t{position+length}\t{number}\tW\t{key}\t{piece['start']+1}\t{piece['end']}\t+")
+                position += length
+            if position != len(sequence):
+                raise ValueError("Junction composition does not reconstruct output length")
+        else:
+            result["gap_length"] = len(sequence) - left_family.versions[0].length - right_family.versions[0].length
+            left_id, right_id = component(left), component(right)
+            agp.append(f"{name}\t1\t{winner.left_end}\t1\tW\t{left_id}\t1\t{winner.left_end}\t+")
+            if right.length > winner.right_end:
+                agp.append(f"{name}\t{winner.left_end + 1}\t{len(sequence)}\t2\tW\t{right_id}\t{winner.right_end + 1}\t{right.length}\t+")
     else:
         records = []
         for key in exported:
@@ -130,12 +163,43 @@ def publish_search(search, name=None, *, unclosed_families=None):
                 f"{search.winner.right_family}/{search.winner.right_version}"]
     else:
         log += ["Not a closed gap: exported family sequences remain separate."]
+    for request in result["anchor_backoff_requests"]:
+        if not request["executed"]:
+            log.append(f"Anchor backoff requested for {request['family']} after attempt {request['after_attempt']}, but not executed before search ended; no extra round charged")
+    for retry in result["anchor_retries"]:
+        log.append(f"Anchor retry {retry['family']} attempt {retry['attempt']}: moved inward by up to {retry['backoff_bases']} bp; counted in the shared round budget")
+    for diagnostic in result["connection_diagnostics"]:
+        pair = f"{diagnostic.get('left_family')}/{diagnostic.get('left_version')} + {diagnostic.get('right_family')}/{diagnostic.get('right_version')}"
+        stages = ", ".join(f"{x.get('stage')}:{x.get('reason')}" for x in diagnostic.get("stages", []))
+        log.append(f"Connection check: {pair} | {diagnostic.get('status')} | {stages}")
+    if result["junction"]:
+        junction = result["junction"]
+        log += [f"Junction mode: {junction['mode']}", f"Gap-only length: {junction['gap_length']} bp",
+                f"Flank length delta: {junction['flank_length_delta']:+d} bp",
+                f"Original overlap trim: {junction['overlap_trim']} bp"]
+        for side, details in junction["flanks"].items():
+            log.append(f"Flank {side}: {details['status']} | proposed={details['proposed_variants']} accepted={details['accepted_variants']} protected={details['protected_variants']}")
+        for repair in junction["repairs"]:
+            log.append(f"Flank edit {repair['side']} [{repair['start0']},{repair['end0']}): {repair['status']} | {repair['reason']} | alt={repair.get('alt_reads',0)} ref={repair.get('ref_reads',0)} other={repair.get('other_reads',0)}")
     log.append(f"Final EXtendFile: {directory / final_file}")
     outputs = {
         final_file: final_text, "family-components.fa": "".join(components),
         "process.agp": "\n".join(agp) + "\n", "process.log": "\n".join(log) + "\n",
         "process.summary": "\n".join(summary) + "\n",
     }
+    if result["junction"]:
+        junction = result["junction"]
+        left0 = search.families[search.winner.left_family].versions[0].length
+        right0 = search.families[search.winner.right_family].versions[0].length
+        first = left0-junction["left_replace_bases"]
+        last = len(sequence)-(right0-junction["right_replace_bases"])
+        outputs["junction-integration.fa"] = f">{name}.junction\n{sequence[first:last]}\n"
+        outputs["junction-evidence.json"] = json.dumps(plan, indent=2, sort_keys=True)+"\n"
+        result["integration_sequence"] = "junction-integration.fa"
+    outputs["connection-diagnostics.json"] = json.dumps(result["connection_diagnostics"], indent=2, sort_keys=True)+"\n"
+    result["evidence_artifacts"] = {"Connection diagnostics / 连接诊断": "connection-diagnostics.json"}
+    if result["junction"]:
+        result["evidence_artifacts"]["Junction composition / 连接组成与修订证据"] = "junction-evidence.json"
     outputs["family-report.html"] = render_report(search, result)
     for relative, text in outputs.items():
         atomic_text(directory / relative, text)
@@ -229,6 +293,8 @@ def render_report(search, result):
             f'</div>'
         )
 
+    from JunctionReport import render_junction_report
+    junction_html = render_junction_report(result)
     notice_class = "notice notice-ok" if is_closed else "notice notice-warn"
     css = report_css()
     final_href = esc(result["final_sequence"])
@@ -255,6 +321,7 @@ def render_report(search, result):
     </div>
   </header>
 
+  {junction_html}
   <section class="metrics-grid" aria-label="Summary metrics">
     {''.join(metric_cards)}
   </section>
