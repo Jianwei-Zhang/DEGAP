@@ -26,6 +26,11 @@ from typing import Dict, List, Tuple, Any, Optional
 from datetime import datetime
 
 try:
+    from ReportStyle import esc, report_css
+except ImportError:
+    from .ReportStyle import esc, report_css
+
+try:
     from Bio import SeqIO
     HAS_BIOPYTHON = True
 except ImportError:
@@ -366,7 +371,7 @@ class Part2HTMLReportGenerator:
         if show_rounds:
             rounds_section = f"""
   <div class=\"section\">
-    <div class=\"section-title\" data-i18n-en=\"🔄 Round Details (1 vs N Check)\" data-i18n-zh=\"🔄 轮次详情（1 vs N 检查）\">🔄 Round Details (1 vs N Check)</div>
+    <div class=\"section-title\" data-i18n-en=\"Round Details (1 vs N Check)\" data-i18n-zh=\"轮次详情（1 vs N 检查）\">Round Details (1 vs N Check)</div>
     <table class=\"table\">
       <thead>
         <tr>
@@ -390,7 +395,7 @@ class Part2HTMLReportGenerator:
 
         total_rounds = fin.get('total_rounds', len(rounds))
 
-        return f"""<!DOCTYPE html>
+        html = f"""<!DOCTYPE html>
 <html lang=\"en\">
 <head>
 <meta charset=\"utf-8\">
@@ -404,7 +409,7 @@ class Part2HTMLReportGenerator:
 <div class=\"container\">
   <div class=\"header\">
     <div class=\"header-top\">
-      <h1 data-i18n-en=\"🧬 TelSeeker Part2 Report\" data-i18n-zh=\"🧬 TelSeeker Part2 报告\">🧬 TelSeeker Part2 Report</h1>
+      <h1 data-i18n-en=\"TelSeeker Part2 Report\" data-i18n-zh=\"TelSeeker Part2 报告\">TelSeeker Part2 Report</h1>
       <div class=\"language-switcher\" role=\"group\" aria-label=\"Language Switcher\">
         <button class=\"language-btn\" data-lang=\"zh\" type=\"button\" aria-label=\"切换为中文\">中文</button>
         <button class=\"language-btn active\" data-lang=\"en\" type=\"button\" aria-label=\"Switch to English\">EN</button>
@@ -412,10 +417,11 @@ class Part2HTMLReportGenerator:
     </div>
     <div class=\"sub\" data-i18n-en=\"Task: <code>{chr_end}</code> · Generated: {now}\" data-i18n-zh=\"任务：<code>{chr_end}</code> · 生成时间：{now}\">Task: <code>{chr_end}</code> · Generated: {now}</div>
     <div class=\"badges\">{status_badge}<span class=\"badge info\" data-i18n-en=\"Rounds: {total_rounds}\" data-i18n-zh=\"轮次：{total_rounds}\">Rounds: {total_rounds}</span></div>
+    <p class="muted"><span data-i18n-en="Stop reason" data-i18n-zh="停止原因">Stop reason</span>: <code>{esc(fin.get('stop_reason') or '—')}</code></p>
   </div>
 
   <div class=\"section\">
-    <div class=\"section-title\" data-i18n-en=\"📋 Initial Information\" data-i18n-zh=\"📋 初始信息\">📋 Initial Information</div>
+    <div class=\"section-title\" data-i18n-en=\"Initial Information\" data-i18n-zh=\"初始信息\">Initial Information</div>
     <table class=\"kv\">
       <tr><td data-i18n-en=\"Chromosome End\" data-i18n-zh=\"染色体端\">Chromosome End</td><td>{info.get('chr_name','N/A')}.{info.get('end_type','?')}</td></tr>
       <tr><td data-i18n-en=\"Seed Length\" data-i18n-zh=\"Seed长度\">Seed Length</td><td>{info.get('seed_length',0):,} bp</td></tr>
@@ -428,14 +434,14 @@ class Part2HTMLReportGenerator:
   </div>
 
   <div class=\"section\">
-    <div class=\"section-title\" data-i18n-en=\"🔗 Connection Overview\" data-i18n-zh=\"🔗 连接结果总览\">🔗 Connection Overview</div>
+    <div class=\"section-title\" data-i18n-en=\"Connection Overview\" data-i18n-zh=\"连接结果总览\">Connection Overview</div>
     {self._connection_overview_html()}
   </div>
 
   {rounds_section}
 
   <div class=\"section\">
-    <div class=\"section-title\" data-i18n-en=\"🧩 Connection Visualization\" data-i18n-zh=\"🧩 连接情况可视化\">🧩 Connection Visualization</div>
+    <div class=\"section-title\" data-i18n-en=\"Connection Visualization\" data-i18n-zh=\"连接情况可视化\">Connection Visualization</div>
     {self._connection_visualization_html()}
   </div>
 
@@ -446,7 +452,8 @@ class Part2HTMLReportGenerator:
 </script>
 </body>
 </html>"""
-    
+        return html.replace('<table', '<div class="table-scroll"><table').replace('</table>', '</table></div>')
+
     def _row_html(self, r: Dict) -> str:
         ext_status = r.get('extension_status')
         if ext_status == 'extended':
@@ -457,9 +464,9 @@ class Part2HTMLReportGenerator:
             status_html = ('<span data-i18n-en="Unknown" data-i18n-zh="未知">Unknown</span>')
 
         if r.get('connection_found'):
-            conn_html = ('<span data-i18n-en="✅ Found Connection" data-i18n-zh="✅ 找到连接">✅ Found Connection</span>')
+            conn_html = ('<span data-i18n-en="Found Connection" data-i18n-zh="找到连接">Found Connection</span>')
         else:
-            conn_html = ('<span data-i18n-en="❌ Not Found" data-i18n-zh="❌ 未找到">❌ Not Found</span>')
+            conn_html = ('<span data-i18n-en="Not Found" data-i18n-zh="未找到">Not Found</span>')
 
         rid = r.get('connected_read', '-')
         reads_chk = '-'
@@ -484,55 +491,37 @@ class Part2HTMLReportGenerator:
     def _status_badge(self, fin: Dict) -> str:
         if fin.get('success'):
             if fin.get('method') == 'direct':
-                return ('<span class="badge success" data-i18n-en="✅ Direct Connection Success" '
-                        'data-i18n-zh="✅ 直接连接成功">✅ Direct Connection Success</span>')
-            return ('<span class="badge success" data-i18n-en="✅ Extension Connection Success" '
-                    'data-i18n-zh="✅ 延伸连接成功">✅ Extension Connection Success</span>')
+                return ('<span class="badge success" data-i18n-en="Direct Connection Success" '
+                        'data-i18n-zh="直接连接成功">Direct Connection Success</span>')
+            return ('<span class="badge success" data-i18n-en="Extension Connection Success" '
+                    'data-i18n-zh="延伸连接成功">Extension Connection Success</span>')
         status = fin.get('status', 'failed')
         if status == 'no_extension':
-            return ('<span class="badge danger" data-i18n-en="❌ No Extension" '
-                    'data-i18n-zh="❌ 无延伸">❌ No Extension</span>')
+            return ('<span class="badge danger" data-i18n-en="No Extension" '
+                    'data-i18n-zh="无延伸">No Extension</span>')
         if status == 'max_limit_reached':
-            return ('<span class="badge warn" data-i18n-en="⚠️ Limit Reached" '
-                    'data-i18n-zh="⚠️ 达到上限">⚠️ Limit Reached</span>')
-        return ('<span class="badge danger" data-i18n-en="❌ Failed" '
-                'data-i18n-zh="❌ 失败">❌ Failed</span>')
+            return ('<span class="badge warn" data-i18n-en="Limit Reached" '
+                    'data-i18n-zh="达到上限">Limit Reached</span>')
+        return ('<span class="badge danger" data-i18n-en="Failed" '
+                'data-i18n-zh="失败">Failed</span>')
     
     def _css(self) -> str:
-        return """
-body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Inter,Helvetica,Arial,sans-serif;background:#f5f7fb;color:#2c3e50;margin:0}
-.container{max-width:1180px;margin:0 auto;padding:22px}
-.header{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;border-radius:12px;padding:20px 24px;box-shadow:0 8px 24px rgba(0,0,0,.12);margin-bottom:18px}
-.header-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap}
-.header h1{margin:0;font-size:22px}
-.header .sub{opacity:.95;font-size:13px;margin:0}
-.language-switcher{display:flex;align-items:center;gap:8px}
-.language-btn{background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.3);color:#fff;padding:6px 14px;border-radius:18px;font-size:12px;font-weight:600;cursor:pointer;transition:all .2s ease;min-width:46px}
-.language-btn:hover{background:rgba(255,255,255,0.28);transform:translateY(-1px)}
-.language-btn:active{transform:translateY(0)}
-.language-btn.active{background:#fff;color:#3498db;box-shadow:0 4px 10px rgba(0,0,0,0.15)}
-.language-btn:focus{outline:none;box-shadow:0 0 0 2px rgba(255,255,255,0.6)}
-.badges{margin-top:10px;display:flex;gap:10px;flex-wrap:wrap}
-.badge{display:inline-block;padding:6px 10px;border-radius:20px;font-weight:600;font-size:12px}
-.badge.success{background:#2ecc71}
-.badge.warn{background:#f39c12}
-.badge.danger{background:#e74c3c}
-.badge.info{background:#3498db}
-.section{background:#fff;border-radius:12px;padding:16px 18px;margin:14px 0;box-shadow:0 2px 12px rgba(0,0,0,.06)}
-.section-title{font-weight:700;margin-bottom:10px}
-.kv{width:100%;border-collapse:collapse}
-.kv td{padding:8px 10px;border-bottom:1px solid #eee}
-.kv td:first-child{width:220px;color:#34495e;font-weight:600;background:#fafbff}
-.table{width:100%;border-collapse:collapse;font-size:14px}
-.table th,.table td{padding:10px 8px;border-bottom:1px solid #eee;text-align:center}
-.table thead th{background:#34495e;color:#fff;position:sticky;top:0}
-.progress{height:10px;background:#eef2ff;border-radius:6px;overflow:hidden}
-.progress .bar{height:100%;background:#27ae60}
-.footer{color:#95a5a6;text-align:center;font-size:12px;margin:16px 0}
-.viz-placeholder{color:#7f8c8d;font-size:14px}
-.viz-error{color:#e74c3c;font-size:14px}
-"""
-    
+        return report_css("""
+.section { padding: 18px 20px; }
+.section-title { margin: -18px -20px 16px; padding: 12px 20px; }
+.table-scroll + .table-scroll { margin-top: 16px; }
+.progress { height: 8px; background: var(--surface-subtle); border-radius: 4px; overflow: hidden; }
+.progress .bar { height: 100%; background: var(--accent); }
+.viz-placeholder { color: var(--ink-muted); font-size: 14px; }
+.viz-error { color: var(--err-ink); font-size: 14px; }
+.section svg { max-width: 100%; height: auto; }
+@media (max-width: 768px) {
+  .section { padding: 14px; }
+  .section-title { margin: -14px -14px 14px; padding: 12px 14px; }
+  .kv td:first-child { width: 42%; }
+}
+""")
+
     def _js(self) -> str:
         return """
 (function(){
@@ -629,9 +618,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Inter,Helvetic
         ext_success_round = next((r for r in rounds if r.get('connection_found')), None)
         direct_rows = []
         if direct:
-            status_text = ('<span data-i18n-en="✅ Success" data-i18n-zh="✅ 成功">✅ Success</span>'
+            status_text = ('<span data-i18n-en="Success" data-i18n-zh="成功">Success</span>'
                            if direct.get('success') else
-                           '<span data-i18n-en="❌ Failed" data-i18n-zh="❌ 失败">❌ Failed</span>')
+                           '<span data-i18n-en="Failed" data-i18n-zh="失败">Failed</span>')
             idt_text = f"{direct.get('identity')}%" if 'identity' in direct else '-'
             alnlen_text = f"{direct.get('aln_length')} bp" if 'aln_length' in direct else '-'
             link_display = '-'
@@ -674,7 +663,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Inter,Helvetic
             round_no = ext_success_round.get('round')
             ext_rows.append(
                 f"<tr><td data-i18n-en=\"Extension Connection\" data-i18n-zh=\"延伸连接\">Extension Connection</td>"
-                f"<td data-i18n-en=\"✅ Success (Round {round_no})\" data-i18n-zh=\"✅ 成功(第{round_no}轮)\">✅ Success (Round {round_no})</td>"
+                f"<td data-i18n-en=\"Success (Round {round_no})\" data-i18n-zh=\"成功(第{round_no}轮)\">Success (Round {round_no})</td>"
                 f"<td>{ext_success_round.get('connected_read','-')}</td>"
                 f"<td>{idt_text}</td><td>{alnlen_text}</td><td>{link_display}</td></tr>"
             )
@@ -689,13 +678,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Inter,Helvetic
             elif fin.get('method') == 'extension' and fin.get('success'):
                 ext_rows.append(
                     "<tr><td data-i18n-en=\"Extension Connection\" data-i18n-zh=\"延伸连接\">Extension Connection</td>"
-                    "<td data-i18n-en=\"✅ Success\" data-i18n-zh=\"✅ 成功\">✅ Success</td>"
+                    "<td data-i18n-en=\"Success\" data-i18n-zh=\"成功\">Success</td>"
                     "<td colspan=4 data-i18n-en=\"See round table for details\" data-i18n-zh=\"详情见轮次表\">See round table for details</td></tr>"
                 )
             else:
                 ext_rows.append(
                     "<tr><td data-i18n-en=\"Extension Connection\" data-i18n-zh=\"延伸连接\">Extension Connection</td>"
-                    "<td data-i18n-en=\"❌ Not Successful\" data-i18n-zh=\"❌ 未成功\">❌ Not Successful</td>"
+                    "<td data-i18n-en=\"Not Successful\" data-i18n-zh=\"未成功\">Not Successful</td>"
                     "<td colspan=4>-</td></tr>"
                 )
         if fin.get('method') == 'direct':
@@ -1454,7 +1443,7 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
         final_motif_html = """
         <div class="card">
             <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-                <span data-i18n-en="📊 7. Final Genome Motif Distribution" data-i18n-zh="📊 7. 最终基因组 Motif 分布">📊 7. Final Genome Motif Distribution</span>
+                <span data-i18n-en="7. Final Genome Motif Distribution" data-i18n-zh="7. 最终基因组 Motif 分布">7. Final Genome Motif Distribution</span>
                 <select id="motif-chr-selector" class="chr-selector">
                     <option value="all" data-i18n-en="All Chromosomes" data-i18n-zh="所有染色体" selected>All Chromosomes</option>
                 </select>
@@ -1469,7 +1458,7 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
     else:
         final_motif_html = """
         <div class="card">
-            <div class="card-header" data-i18n-en="📊 7. Final Genome Motif Distribution" data-i18n-zh="📊 7. 最终基因组 Motif 分布">📊 7. Final Genome Motif Distribution</div>
+            <div class="card-header" data-i18n-en="7. Final Genome Motif Distribution" data-i18n-zh="7. 最终基因组 Motif 分布">7. Final Genome Motif Distribution</div>
             <div class="card-content"><p class="empty-state">No final motif plots available</p></div>
         </div>
         """
@@ -1481,408 +1470,30 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TelSeeker Results Visualization</title>
     <style>
-        * {{
-            box-sizing: border-box;
-        }}
-
-        body {{
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-            min-height: 100vh;
-        }}
-
-        .container {{
-            max-width: 1180px;
-            margin: 0 auto;
-        }}
-
-        .header {{
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 24px;
-            border-radius: 15px;
-            margin-bottom: 30px;
-            text-align: left;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-        }}
-
-        .header-top {{
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: 12px;
-            flex-wrap: wrap;
-        }}
-
-        .header-info {{
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }}
-
-        .header h1 {{
-            margin: 0;
-            font-size: 2.1em;
-            font-weight: 600;
-        }}
-
-        .header p {{
-            margin: 0;
-            opacity: 0.9;
-            font-size: 1.05em;
-        }}
-
-        .language-switcher {{
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-left: auto;
-            align-self: flex-start;
-        }}
-
-        .language-btn {{
-            background: rgba(255, 255, 255, 0.2);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            color: #fff;
-            padding: 6px 14px;
-            border-radius: 18px;
-            font-size: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            min-width: 46px;
-        }}
-
-        .language-btn:hover {{
-            background: rgba(255, 255, 255, 0.28);
-            transform: translateY(-1px);
-        }}
-
-        .language-btn:active {{
-            transform: translateY(0);
-        }}
-
-        .language-btn.active {{
-            background: #fff;
-            color: #3498db;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
-        }}
-
-        .language-btn:focus {{
-            outline: none;
-            box-shadow: 0 0 0 2px rgba(255,255,255,0.6);
-        }}
-
-        .stats-overview {{
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }}
-
-        .stat-card {{
-            background: white;
-            padding: 25px;
-            border-radius: 15px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-            text-align: center;
-            transition: transform 0.2s ease;
-        }}
-
-        .stat-card:hover {{
-            transform: translateY(-5px);
-        }}
-
-        .stat-value {{
-            font-size: 2.2em;
-            font-weight: bold;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }}
-
-        .stat-label {{
-            color: #666;
-            margin-top: 8px;
-            font-size: 1em;
-            font-weight: 500;
-        }}
-
-        .stat-value.positive {{
-            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }}
-
-        .stat-value.negative {{
-            background: linear-gradient(135deg, #dc3545 0%, #e74c3c 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }}
-
-        .card {{
-            background: white;
-            border-radius: 15px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-            margin-bottom: 30px;
-            overflow: hidden;
-        }}
-
-        .card-header {{
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 15px 25px;
-            font-size: 1.2em;
-            font-weight: 600;
-        }}
-
-        .card-content {{
-            padding: 25px;
-        }}
-
-        .table-container {{
-            max-height: 600px;
-            overflow-y: auto;
-            border: 1px solid #dee2e6;
-            border-radius: 10px;
-            background: white;
-            position: relative;
-        }}
-        
-        table {{
-            width: 100%;
-            border-collapse: separate;  /* Important for sticky headers */
-            border-spacing: 0;          /* Keep cell borders touching */
-        }}
-
-        th, td {{
-            padding: 15px 12px;
-            text-align: left;
-            border-bottom: 1px solid #f1f3f4;
-        }}
-
-        th, thead th {{
-            background: #f8f9fa;
-            font-weight: 600;
-            position: sticky;
-            top: 0;
-            z-index: 20;  /* ensure header stays above cells */
-            color: #495057;
-            box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1);
-        }}
-
-        tr:hover {{
-            background-color: #f8f9fa;
-        }}
-        
-        .table-container thead {{
-            position: sticky; /* enhances cross-browser behavior */
-            top: 0;
-            z-index: 15;
-        }}
-
-        .badge {{
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-weight: 600;
-            font-size: 0.9em;
-            display: inline-block;
-        }}
-
-        .badge-yes {{
-            background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
-            color: #155724;
-        }}
-
-        .badge-no {{
-            background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
-            color: #721c24;
-        }}
-
-        .badge-direct {{
-            background: linear-gradient(135deg, #cce5ff 0%, #b3d9ff 100%);
-            color: #004085;
-        }}
-
-        .badge-extension {{
-            background: linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%);
-            color: #0c5460;
-        }}
-
-        .badge-na {{
-            background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
-            color: #495057;
-        }}
-
-        .badge-selected, .badge-targeted {{
-            background: #dbeafe;
-            color: #1d4ed8;
-        }}
-
-        .badge-connected {{
-            background: #dcfce7;
-            color: #166534;
-        }}
-
-        .badge-failed {{
-            background: #ffedd5;
-            color: #9a3412;
-        }}
-
-        .badge-not-targeted {{
-            background: #e5e7eb;
-            color: #4b5563;
-        }}
-
-        .badge-manual-review {{
-            background: #ede9fe;
-            color: #6d28d9;
-        }}
-
-        .review-evidence a {{
-            margin-right: 10px;
-            white-space: nowrap;
-        }}
-
-        .chromosome-task-tracks {{
-            display: grid;
-            gap: 14px;
-            margin: 24px 0;
-        }}
-
-        .task-track {{
-            display: grid;
-            grid-template-columns: minmax(100px, 180px) 1fr;
-            align-items: center;
-            gap: 18px;
-        }}
-
-        .task-track-name {{
-            font-weight: 600;
-            color: #495057;
-            overflow-wrap: anywhere;
-        }}
-
-        .task-track-bar {{
-            position: relative;
-            height: 24px;
-            border-radius: 12px;
-            background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
-            border: 1px solid #ced4da;
-        }}
-
-        .end-marker {{
-            display: inline-block;
-            width: 18px;
-            height: 18px;
-            border-radius: 50%;
-            border: 2px solid #fff;
-            box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15);
-            vertical-align: middle;
-        }}
-
-        .task-track-bar .end-marker {{
-            position: absolute;
-            top: 50%;
-            transform: translateY(-50%);
-        }}
-
-        .task-track-bar .end-marker.left {{ left: 3px; }}
-        .task-track-bar .end-marker.right {{ right: 3px; }}
-        .end-marker.not-targeted {{ background: #9ca3af; }}
-        .end-marker.targeted {{ background: #3b82f6; }}
-        .end-marker.connected {{ background: #22c55e; }}
-        .end-marker.failed {{ background: #f97316; }}
-
-        .task-legend {{
-            display: flex;
-            flex-wrap: wrap;
-            gap: 18px;
-            color: #495057;
-        }}
-
-        .task-legend > span {{
-            display: inline-flex;
-            align-items: center;
-            gap: 7px;
-        }}
-
-
-        .empty-state {{
-            text-align: center;
-            padding: 40px 20px;
-            color: #6c757d;
-            font-style: italic;
-        }}
-
-        .chr-selector {{
-            background: rgba(255, 255, 255, 0.95);
-            border: 1px solid rgba(255, 255, 255, 0.5);
-            color: #495057;
-            padding: 6px 32px 6px 12px;
-            border-radius: 18px;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            appearance: none;
-            background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2214%22%20height%3D%228%22%20viewBox%3D%220%200%2014%208%22%20fill%3D%22none%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cpath%20d%3D%22M1%201L7%207L13%201%22%20stroke%3D%22%23495057%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%3C/svg%3E');
-            background-repeat: no-repeat;
-            background-position: right 10px center;
-            min-width: 180px;
-        }}
-
-        .chr-selector:hover {{
-            background: rgba(255, 255, 255, 1);
-            border-color: rgba(255, 255, 255, 0.7);
-            transform: translateY(-1px);
-        }}
-
-        .chr-selector:focus {{
-            outline: none;
-            box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.6);
-        }}
-
-        .motif-plot-container {{
-            text-align: center;
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 10px;
-            border: 1px solid #e9ecef;
-        }}
-
-        .motif-plot-container img {{
-            max-width: 100%;
-            height: auto;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-        }}
-
-        @media (max-width: 768px) {{
-            .header-top {{
-                flex-direction: column;
-                align-items: flex-start;
-            }}
-
-            .language-switcher {{
-                align-self: flex-start;
-                margin-left: 0;
-            }}
-
-            .stats-overview {{
-                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            }}
-
-            .task-track {{
-                grid-template-columns: 1fr;
-                gap: 6px;
-            }}
-        }}
+{report_css()}
+.review-evidence a {{ margin-right: 10px; white-space: nowrap; }}
+.chromosome-task-tracks {{ display: grid; gap: 14px; margin: 20px 0; }}
+.task-track {{ display: grid; grid-template-columns: minmax(100px,180px) minmax(0,1fr); align-items: center; gap: 18px; }}
+.task-track-name {{ font-weight: 600; color: var(--ink-secondary); overflow-wrap: anywhere; }}
+.task-track-bar {{ position: relative; height: 24px; border-radius: 12px; background: var(--surface-subtle); border: 1px solid var(--border-strong); }}
+.end-marker {{ display: inline-block; width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--border-strong); vertical-align: middle; }}
+.task-track-bar .end-marker {{ position: absolute; top: 50%; transform: translateY(-50%); }}
+.task-track-bar .end-marker.left {{ left: 3px; }}
+.task-track-bar .end-marker.right {{ right: 3px; }}
+.end-marker.not-targeted {{ background: var(--ink-muted); }}
+.end-marker.targeted {{ background: var(--accent); }}
+.end-marker.connected {{ background: var(--ok-ink); }}
+.end-marker.failed {{ background: var(--warn-ink); }}
+.task-legend {{ display: flex; flex-wrap: wrap; gap: 18px; color: var(--ink-secondary); }}
+.task-legend > span {{ display: inline-flex; align-items: center; gap: 7px; }}
+.chr-selector {{ background: var(--surface); border: 1px solid var(--border-strong); color: var(--ink); padding: 6px 10px; border-radius: var(--radius-sm); font: inherit; font-size: 13px; cursor: pointer; min-width: 160px; max-width: 100%; }}
+.chr-selector:hover {{ border-color: var(--accent); }}
+.motif-plot-container {{ text-align: center; background: var(--surface); padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); }}
+.motif-plot-container img {{ max-width: 100%; height: auto; }}
+@media (max-width: 768px) {{
+  .task-track {{ grid-template-columns: minmax(0,1fr); gap: 6px; }}
+  .card-header {{ flex-wrap: wrap; gap: 10px; }}
+}}
     </style>
 </head>
 <body>
@@ -1890,7 +1501,7 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
         <div class="header">
             <div class="header-top">
                 <div class="header-info">
-                    <h1 data-i18n-en="🧬 TelSeeker Results Visualization" data-i18n-zh="🧬 TelSeeker 可视化结果">🧬 TelSeeker Results Visualization</h1>
+                    <h1 data-i18n-en="TelSeeker Results Visualization" data-i18n-zh="TelSeeker 可视化结果">TelSeeker Results Visualization</h1>
                     <p data-i18n-en="Telomere Extension Analysis Report" data-i18n-zh="端粒延伸分析报告">Telomere Extension Analysis Report</p>
                 </div>
                 <div class="language-switcher" role="group" aria-label="Language Switcher">
@@ -1902,7 +1513,7 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
 
         <!-- Section 1: Initial manual review -->
         <div class="card">
-            <div class="card-header" data-i18n-en="🔎 1. Initial Chromosome-End Manual Review" data-i18n-zh="🔎 1. 初始染色体末端人工检查">🔎 1. Initial Chromosome-End Manual Review</div>
+            <div class="card-header" data-i18n-en="1. Initial Chromosome-End Manual Review" data-i18n-zh="1. 初始染色体末端人工检查">1. Initial Chromosome-End Manual Review</div>
             <div class="card-content">
                 {initial_review_html}
                 <div class="table-container">
@@ -1924,9 +1535,9 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
 
         <!-- Section 2: Extension Task List -->
         <div class="card">
-            <div class="card-header" data-i18n-en="📋 2. Extension Task List" data-i18n-zh="📋 2. 延伸任务列表">📋 2. Extension Task List</div>
+            <div class="card-header" data-i18n-en="2. Extension Task List" data-i18n-zh="2. 延伸任务列表">2. Extension Task List</div>
             <div class="card-content">
-                <div style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #667eea;">
+                <div style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid var(--accent);">
                     <h4 style="margin: 0 0 10px 0; color: #495057;" data-i18n-en="User-selected chromosome ends:" data-i18n-zh="用户选择的染色体端：">User-selected chromosome ends:</h4>
                     <p style="margin: 0 0 15px 0; color: #6c757d; font-size: 0.95em;" data-i18n-en="These target ends were supplied explicitly with -e/--target_ends after manual review." data-i18n-zh="这些目标端点由人工检查后通过 -e/--target_ends 明确提供。">
                         These target ends were supplied explicitly with -e/--target_ends after manual review.
@@ -1940,7 +1551,7 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
 
         <!-- Section 3: Telomeric Reads Extraction -->
         <div class="card">
-            <div class="card-header" data-i18n-en="🔍 3. Telomeric Reads Extraction" data-i18n-zh="🔍 3. 端粒 Reads 提取">🔍 3. Telomeric Reads Extraction</div>
+            <div class="card-header" data-i18n-en="3. Telomeric Reads Extraction" data-i18n-zh="3. 端粒 Reads 提取">3. Telomeric Reads Extraction</div>
             <div class="card-content">
                 <div class="stats-overview">
                     <div class="stat-card">
@@ -1967,7 +1578,7 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
 
         <!-- Section 4: Chromosome End Extension -->
         <div class="card">
-            <div class="card-header" data-i18n-en="🔗 4. Chromosome End Extension" data-i18n-zh="🔗 4. 染色体端延伸">🔗 4. Chromosome End Extension</div>
+            <div class="card-header" data-i18n-en="4. Chromosome End Extension" data-i18n-zh="4. 染色体端延伸">4. Chromosome End Extension</div>
             <div class="card-content">
                 <div class="table-container">
                     <table id="extension-table">
@@ -1992,7 +1603,7 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
 
         <!-- Section 5: Final manual review -->
         <div class="card">
-            <div class="card-header" data-i18n-en="🔎 5. Final Chromosome-End Manual Review" data-i18n-zh="🔎 5. 最终染色体末端人工检查">🔎 5. Final Chromosome-End Manual Review</div>
+            <div class="card-header" data-i18n-en="5. Final Chromosome-End Manual Review" data-i18n-zh="5. 最终染色体末端人工检查">5. Final Chromosome-End Manual Review</div>
             <div class="card-content">
                 <p data-i18n-en="Review the final chromosome-end sequences and motif plots manually. A successful extension means that a linker was produced; it is not an automatic telomere-completeness call."
                    data-i18n-zh="请人工检查最终染色体末端序列和 motif 图。延伸成功仅表示已生成 linker，不等同于自动判定端粒完整。">
@@ -2019,7 +1630,7 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
 
         <!-- Section 6: task and connection status overview -->
         <div class="card">
-            <div class="card-header" data-i18n-en="📊 6. Chromosome-End Task Status" data-i18n-zh="📊 6. 染色体末端任务状态">📊 6. Chromosome-End Task Status</div>
+            <div class="card-header" data-i18n-en="6. Chromosome-End Task Status" data-i18n-zh="6. 染色体末端任务状态">6. Chromosome-End Task Status</div>
             <div class="card-content">
                 <p data-i18n-en="This diagram shows target selection and extension connection status only. Connected does not mean telomere-complete."
                    data-i18n-zh="该图仅展示目标选择和延伸连接状态；Connected 不代表端粒完整。">
@@ -2353,7 +1964,7 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
                 badge.style.height = '24px';
                 badge.style.lineHeight = '24px';
                 badge.style.textAlign = 'center';
-                badge.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+                badge.style.background = 'var(--accent)';
                 badge.style.color = 'white';
                 badge.style.borderRadius = '50%';
                 badge.style.marginRight = '12px';

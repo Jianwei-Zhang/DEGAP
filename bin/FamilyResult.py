@@ -1,6 +1,5 @@
 """Sequence/AGP/provenance publication for a completed family search."""
 from dataclasses import asdict
-from html import escape
 import os
 from pathlib import Path
 import tempfile
@@ -8,6 +7,7 @@ import tempfile
 from ExtensionFamilies import atomic_json, fingerprint, read_json
 from FamilyOverlap import joined_sequence, read_sequence
 from FamilyTools import content_hash
+from ReportStyle import badge_html, esc, report_css, status_tone
 
 SCHEMA = "degap-family-result-v1"
 
@@ -147,40 +147,201 @@ def publish_search(search, name=None, *, unclosed_families=None):
 
 def render_report(search, result):
     """Portable evidence tables for both chains; no single-direction attribution."""
+    is_closed = search.status == "closed"
+    tone = "ok" if is_closed else status_tone(search.status)
+    if tone == "info":
+        tone = "warn"
+    state_label = ("Closed / 已闭合"
+                   if is_closed else f"Unclosed / 未闭合 ({search.status})")
+
     rows = []
     histories = []
     for family in search.families.values():
-        values = (family.key, family.direction, family.attempts, family.added_bases, family.stop_reason or "—")
-        rows.append("<tr>" + "".join(f"<td>{escape(str(v))}</td>" for v in values) + "</tr>")
+        stop_reason = family.stop_reason or "—"
+        rows.append(
+            "<tr>"
+            f'<td class="mono">{esc(family.key)}</td>'
+            f'<td>{esc(family.direction)}</td>'
+            f'<td class="num">{esc(family.attempts)}</td>'
+            f'<td class="num">{len(family.versions)}</td>'
+            f'<td class="num">{esc(family.added_bases)} bp</td>'
+            f'<td>{esc(stop_reason)}</td>'
+            "</tr>"
+        )
         for version in family.versions:
-            histories.append("<tr>" + "".join(f"<td>{escape(str(v))}</td>" for v in
-                             (family.key, version.number, version.length, version.sha256)) + "</tr>")
+            histories.append(
+                "<tr>"
+                f'<td class="mono">{esc(family.key)}</td>'
+                f'<td class="num">v{esc(version.number)}</td>'
+                f'<td class="num">{esc(version.length)} bp</td>'
+                f'<td class="hash">{esc(version.sha256)}</td>'
+                "</tr>"
+            )
+
     comparisons = []
+    candidate_count = 0
     for candidates in search.checked.values():
         for candidate in candidates:
+            candidate_count += 1
             selected = candidate == result["winner"]
-            values = (f"{candidate['left_family']}/{candidate['left_version']}",
-                      f"{candidate['right_family']}/{candidate['right_version']}",
-                      candidate["identity"], candidate["overlap"], candidate["overhang"],
-                      "Selected / 已采用" if selected else "Not selected / 未采用")
-            comparisons.append("<tr>" + "".join(f"<td>{escape(str(v))}</td>" for v in values) + "</tr>")
-    return f'''<!doctype html><html lang="en"><meta charset="utf-8">
+            row_class = ' class="row-selected"' if selected else ""
+            selection_badge = (badge_html("Selected / 已采用", "ok")
+                               if selected else badge_html("Not selected / 未采用", "muted"))
+            comparisons.append(
+                f"<tr{row_class}>"
+                f'<td class="mono">{esc(candidate["left_family"])}/{esc(candidate["left_version"])}</td>'
+                f'<td class="mono">{esc(candidate["right_family"])}/{esc(candidate["right_version"])}</td>'
+                f'<td class="num">{esc(candidate["identity"])}</td>'
+                f'<td class="num">{esc(candidate["overlap"])}</td>'
+                f'<td class="num">{esc(candidate["overhang"])}</td>'
+                f'<td>{selection_badge}</td>'
+                "</tr>"
+            )
+
+    if not rows:
+        rows.append('<tr><td colspan="6" class="empty-state">No extension families recorded / 暂无延伸家族记录</td></tr>')
+    if not comparisons:
+        comparisons.append('<tr><td colspan="6" class="empty-state">No eligible connections recorded / 暂无合格连接记录</td></tr>')
+    if not histories:
+        histories.append('<tr><td colspan="4" class="empty-state">No sequence versions recorded / 暂无序列版本记录</td></tr>')
+
+    winner = result.get("winner")
+    gap_length = result.get("gap_length")
+    metrics = [
+        ("Attempts / 总尝试轮数", str(search.total_rounds), "", ""),
+        ("Added bases / 总延伸长度", f"{search.total_length} bp", "", ""),
+        ("Families / 延伸家族", str(len(search.families)), "", ""),
+        ("Eligible pairs / 合格连接", str(candidate_count), "ok" if winner else "",
+         f'{winner["left_family"]}/{winner["left_version"]} + {winner["right_family"]}/{winner["right_version"]}' if winner else ""),
+    ]
+    if gap_length is not None:
+        metrics.append(("Gap length / 填补长度", f"{gap_length} bp", "accent", ""))
+
+    metric_cards = []
+    for label, value, value_tone, note in metrics:
+        tone_class = f" {value_tone}" if value_tone else ""
+        note_html = f'<div class="metric-note mono">{esc(note)}</div>' if note else ""
+        metric_cards.append(
+            f'<div class="metric-card">'
+            f'<div class="metric-label">{esc(label)}</div>'
+            f'<div class="metric-value{tone_class}">{esc(value)}</div>'
+            f'{note_html}'
+            f'</div>'
+        )
+
+    notice_class = "notice notice-ok" if is_closed else "notice notice-warn"
+    css = report_css()
+    final_href = esc(result["final_sequence"])
+
+    return f'''<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DEGAP family extension / 双向家族延伸</title>
-<style>body{{font:16px system-ui;max-width:1100px;margin:32px auto;padding:0 16px;color:#243043}}
-table{{border-collapse:collapse;width:100%;margin:16px 0}}th,td{{border:1px solid #cbd5e1;padding:8px;text-align:left;overflow-wrap:anywhere}}
-th{{background:#edf2f7}}.scroll{{overflow:auto}}a{{color:#0369a1}}</style>
-<h1>DEGAP family extension / 双向家族延伸</h1>
-<p>Status / 状态: <strong>{escape(search.status)}</strong> · Attempts / 总尝试轮数: {search.total_rounds}
-· Added bases / 总延伸长度: {search.total_length}</p>
-<p>Only a closed result joins both families. Unclosed sequences are exported separately.<br>
-只有闭合结果才连接两侧；未闭合时各家族序列分别导出。</p>
-<p><a href="{escape(result['final_sequence'], quote=True)}">FASTA</a> · <a href="process.agp">AGP</a> ·
-<a href="family-components.fa">AGP components / 组成序列</a> · <a href="family-result.json">Result provenance / 结果溯源</a> ·
-<a href="families.json">History and checkpoint / 历史与断点</a></p>
-<h2>Families / 延伸家族</h2><table><tr><th>Family</th><th>Direction</th><th>Attempts</th><th>Added bases</th><th>Stop reason</th></tr>{''.join(rows)}</table>
-<h2>Eligible connections / 合格连接</h2><p>Rank: identity, overlap length, endpoint overhang, fixed version order.<br>
-依次按一致性、重叠长度、端点未对齐长度和固定版本顺序选优；只采用一个结果。</p>
-<table><tr><th>Left version</th><th>Right version</th><th>Identity %</th><th>Overlap</th><th>Overhang</th><th>Selection</th></tr>{''.join(comparisons)}</table>
-<h2>Sequence history / 序列历史</h2><div class="scroll"><table><tr><th>Family</th><th>Version</th><th>Length</th><th>SHA-256</th></tr>{''.join(histories)}</table></div>
-<p>Read mappings, local assemblies and their receipts remain under attempts/ for inspection.<br>
-reads 比对、局部组装及其记录保存在 attempts/ 中，供复核。</p></html>'''
+<style>
+{css}
+</style>
+</head>
+<body>
+<main class="report-shell">
+  <header class="report-header">
+    <div class="header-top">
+      <div class="header-info">
+        <div class="report-eyebrow">DEGAP · Bidirectional Family Extension</div>
+        <h1>DEGAP family extension <span class="bilingual-zh">/ 双向家族延伸</span></h1>
+      </div>
+      <div>{badge_html(state_label, tone)}</div>
+    </div>
+  </header>
+
+  <section class="metrics-grid" aria-label="Summary metrics">
+    {''.join(metric_cards)}
+  </section>
+
+  <div class="{notice_class}" role="note">
+    <p>Only a closed result joins both families. Unclosed sequences are exported separately.</p>
+    <p>只有闭合结果才连接两侧；未闭合时各家族序列分别导出。</p>
+  </div>
+
+  <nav class="artifact-bar" aria-label="Downloadable artifacts">
+    <div class="artifact-bar-title">Artifacts and Provenance <span class="bilingual-zh">/ 输出与溯源文件</span></div>
+    <ul class="artifact-list">
+      <li><a class="artifact-link" href="{final_href}">FASTA ({final_href})</a></li>
+      <li><a class="artifact-link" href="process.agp">AGP</a></li>
+      <li><a class="artifact-link" href="family-components.fa">AGP components / 组成序列</a></li>
+      <li><a class="artifact-link" href="family-result.json">Result provenance / 结果溯源</a></li>
+      <li><a class="artifact-link" href="families.json">History and checkpoint / 历史与断点</a></li>
+    </ul>
+  </nav>
+
+  <section class="section">
+    <div class="section-header"><h2>Families <span class="bilingual-zh">/ 延伸家族</span></h2></div>
+    <div class="section-body">
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Family / 家族</th>
+              <th>Direction / 方向</th>
+              <th>Attempts / 轮数</th>
+              <th>Versions / 版本数</th>
+              <th>Added bases / 延伸长度</th>
+              <th>Stop reason / 停止原因</th>
+            </tr>
+          </thead>
+          <tbody>{''.join(rows)}</tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-header"><h2>Eligible connections <span class="bilingual-zh">/ 合格连接</span></h2></div>
+    <div class="section-body">
+      <p class="section-note">Rank: identity, overlap length, endpoint overhang, fixed version order.<br>
+      依次按一致性、重叠长度、端点未对齐长度和固定版本顺序选优；只采用一个结果。</p>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Left version / 左侧版本</th>
+              <th>Right version / 右侧版本</th>
+              <th>Identity % / 一致性</th>
+              <th>Overlap / 重叠</th>
+              <th>Overhang / 悬垂</th>
+              <th>Selection / 采用状态</th>
+            </tr>
+          </thead>
+          <tbody>{''.join(comparisons)}</tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-header"><h2>Sequence history <span class="bilingual-zh">/ 序列历史</span></h2></div>
+    <div class="section-body">
+      <div class="table-scroll scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Family / 家族</th>
+              <th>Version / 版本</th>
+              <th>Length / 长度</th>
+              <th>SHA-256</th>
+            </tr>
+          </thead>
+          <tbody>{''.join(histories)}</tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <footer class="report-footer">
+    <p>Read mappings, local assemblies and their receipts remain under <code>attempts/</code> for inspection.</p>
+    <p>reads 比对、局部组装及其记录保存在 <code>attempts/</code> 中，供复核。</p>
+  </footer>
+</main>
+</body>
+</html>'''

@@ -6,7 +6,6 @@ composition are explicit, and a joined sequence is never reconstructed twice.
 import copy
 from dataclasses import asdict
 import fcntl
-from html import escape
 import os
 from pathlib import Path
 import tempfile
@@ -21,6 +20,7 @@ from FamilyResult import atomic_text, publish_search
 from FamilyRound import SingleRound
 from FamilyTools import content_hash
 from N50Check import N50Check
+from ReportStyle import badge_html, esc, report_css, status_tone
 
 SCHEMA = "degap-ctg-families-v1"
 
@@ -438,24 +438,162 @@ def load_ctg_result(directory):
 
 
 def render_ctg_report(result):
+    scaffolds = result["scaffolds"]
+    events_data = result["events"]
+    input_contigs = result["input_contigs"]
+
     rows = []
-    for assembly in result["scaffolds"]:
-        members = "; ".join(m["id"] + "(" + m["strand"] + ")" for m in assembly["members"])
-        rows.append("<tr>" + "".join(f"<td>{escape(str(v))}</td>" for v in
-                    (assembly["scaffold_id"], assembly["length"], members)) + "</tr>")
+    for assembly in scaffolds:
+        members = "; ".join(f'{m["id"]}({m["strand"]})' for m in assembly["members"])
+        rows.append(
+            "<tr>"
+            f'<td class="mono">{esc(assembly["scaffold_id"])}</td>'
+            f'<td class="num">{esc(assembly["length"])} bp</td>'
+            f'<td class="num">{len(assembly["members"])}</td>'
+            f'<td class="mono">{esc(members)}</td>'
+            "</tr>"
+        )
+    if not rows:
+        rows.append('<tr><td colspan="4" class="empty-state">No scaffolds recorded / 暂无组装结果</td></tr>')
+
     events = []
-    for event in result["events"]:
-        link = (f'<a href="{escape(event["result_dir"], quote=True)}/family-report.html">Family evidence / 家族证据</a>'
-                if event["result_dir"] else "No candidates / 无候选")
+    closed_events = 0
+    for event in events_data:
+        event_status = event["status"]
+        if event_status == "closed":
+            closed_events += 1
+        tone = status_tone(event_status)
+        if event_status != "closed" and tone == "info":
+            tone = "warn"
+        link = (
+            f'<a class="artifact-link" href="{esc(event["result_dir"])}/family-report.html">Family evidence / 家族证据</a>'
+            if event["result_dir"] else '<span class="muted">No candidates / 无候选</span>'
+        )
         selected = event["selected"]
-        target = (selected["assembly"] + "(" + selected["strand"] + ")") if selected else "—"
-        events.append("<tr>" + "".join(f"<td>{escape(str(v))}</td>" for v in
-                      (event["number"], event["primary"], event["direction"], event["status"], target, event["total_rounds"])) + f"<td>{link}</td></tr>")
-    return f'''<!doctype html><html lang="en"><meta charset="utf-8"><title>CtgLinker family results</title>
-<style>body{{font:16px system-ui;max-width:1200px;margin:32px auto;padding:16px}}table{{border-collapse:collapse;width:100%}}td,th{{border:1px solid #cbd5e1;padding:8px;text-align:left}}th{{background:#edf2f7}}</style>
-<h1>CtgLinker families / 候选家族连接</h1><p>Original contigs / 保留输入 contig: {len(result['input_contigs'])} · Scaffolds: {len(result['scaffolds'])}</p>
-<p><a href="DG.scaffold.fa">Scaffold FASTA</a> · <a href="DG.scaffold.agp">AGP</a> · <a href="DG.scaffold.components.fa">AGP components / 组成序列</a> · <a href="ctglinker-result.json">Provenance / 溯源清单</a> · <a href="ctg-families.json">Assembly history / 组装历史</a></p>
-<p>Each endpoint search shares one budget across the primary and all candidates. Unclosed histories remain available but are not inserted into scaffolds.<br>
-每次端点搜索由主家族与全部候选共用预算；未闭合历史保留，不强行拼入 scaffold。</p>
-<h2>Scaffolds / 组装结果</h2><table><tr><th>Scaffold</th><th>Length</th><th>Original members and strands</th></tr>{''.join(rows)}</table>
-<h2>Endpoint searches / 端点搜索</h2><table><tr><th>Search</th><th>Primary</th><th>End</th><th>Status</th><th>Selected candidate</th><th>Attempts</th><th>Evidence</th></tr>{''.join(events)}</table></html>'''
+        target = f'{selected["assembly"]}({selected["strand"]})' if selected else "—"
+        target_html = f'<span class="mono">{esc(target)}</span>' if selected else '<span class="muted">—</span>'
+        events.append(
+            "<tr>"
+            f'<td class="num">{esc(event["number"])}</td>'
+            f'<td class="mono">{esc(event["primary"])}</td>'
+            f'<td>{esc(event["direction"])}</td>'
+            f'<td>{badge_html(event_status, tone)}</td>'
+            f'<td>{target_html}</td>'
+            f'<td class="num">{esc(event["total_rounds"])}</td>'
+            f'<td>{link}</td>'
+            "</tr>"
+        )
+    if not events:
+        events.append('<tr><td colspan="7" class="empty-state">No endpoint searches recorded / 暂无端点搜索记录</td></tr>')
+
+    total_rounds = result.get("total_rounds", sum(e.get("total_rounds", 0) for e in events_data))
+    metrics = [
+        ("Original contigs / 输入 contig", str(len(input_contigs)), ""),
+        ("Scaffolds / 最终 Scaffold", str(len(scaffolds)), "accent"),
+        ("Endpoint searches / 端点搜索", str(len(events_data)), ""),
+        ("Closed links / 成功连接", str(closed_events), "ok" if closed_events else ""),
+        ("Total attempts / 总尝试轮数", str(total_rounds), ""),
+    ]
+    if "total_extension_length" in result:
+        metrics.append(("Total extension / 总延伸长度", f'{result["total_extension_length"]} bp', ""))
+
+    metric_cards = []
+    for label, value, value_tone in metrics:
+        tone_class = f" {value_tone}" if value_tone else ""
+        metric_cards.append(
+            f'<div class="metric-card">'
+            f'<div class="metric-label">{esc(label)}</div>'
+            f'<div class="metric-value{tone_class}">{esc(value)}</div>'
+            f'</div>'
+        )
+
+    header_badge = ""
+    if result.get("status"):
+        header_badge = f'<div>{badge_html(result["status"], status_tone(result["status"]))}</div>'
+
+    css = report_css()
+    return f'''<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CtgLinker family results / 候选家族连接</title>
+<style>
+{css}
+</style>
+</head>
+<body>
+<main class="report-shell">
+  <header class="report-header">
+    <div class="header-top">
+      <div class="header-info">
+        <div class="report-eyebrow">DEGAP · CtgLinker Extension Families</div>
+        <h1>CtgLinker families <span class="bilingual-zh">/ 候选家族连接</span></h1>
+      </div>
+      {header_badge}
+    </div>
+  </header>
+
+  <section class="metrics-grid metrics-grid-six" aria-label="Summary metrics">
+    {''.join(metric_cards)}
+  </section>
+
+  <div class="notice notice-neutral" role="note">
+    <p>Each endpoint search shares one budget across the primary and all candidates. Unclosed histories remain available but are not inserted into scaffolds.</p>
+    <p>每次端点搜索由主家族与全部候选共用预算；未闭合历史保留，不强行拼入 scaffold。</p>
+  </div>
+
+  <nav class="artifact-bar" aria-label="Downloadable artifacts">
+    <div class="artifact-bar-title">Artifacts and Provenance <span class="bilingual-zh">/ 输出与溯源文件</span></div>
+    <ul class="artifact-list">
+      <li><a class="artifact-link" href="DG.scaffold.fa">Scaffold FASTA</a></li>
+      <li><a class="artifact-link" href="DG.scaffold.agp">AGP</a></li>
+      <li><a class="artifact-link" href="DG.scaffold.components.fa">AGP components / 组成序列</a></li>
+      <li><a class="artifact-link" href="ctglinker-result.json">Provenance / 溯源清单</a></li>
+      <li><a class="artifact-link" href="ctg-families.json">Assembly history / 组装历史</a></li>
+    </ul>
+  </nav>
+
+  <section class="section">
+    <div class="section-header"><h2>Scaffolds <span class="bilingual-zh">/ 组装结果</span></h2></div>
+    <div class="section-body">
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Scaffold</th>
+              <th>Length / 长度</th>
+              <th>Members / 成员数</th>
+              <th>Original members and strands / 原始 contig 及方向</th>
+            </tr>
+          </thead>
+          <tbody>{''.join(rows)}</tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-header"><h2>Endpoint searches <span class="bilingual-zh">/ 端点搜索</span></h2></div>
+    <div class="section-body">
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Search / 编号</th>
+              <th>Primary / 主序列</th>
+              <th>End / 端点</th>
+              <th>Status / 状态</th>
+              <th>Selected candidate / 选用候选</th>
+              <th>Attempts / 尝试轮数</th>
+              <th>Evidence / 证据</th>
+            </tr>
+          </thead>
+          <tbody>{''.join(events)}</tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</main>
+</body>
+</html>'''

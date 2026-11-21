@@ -25,6 +25,11 @@ import sys
 from pathlib import Path
 from datetime import datetime
 
+try:
+    from ReportStyle import esc, report_css
+except ImportError:
+    from .ReportStyle import esc, report_css
+
 
 class GapFillingVisualizer:
     """生成 gap filling 结果的可视化报告"""
@@ -237,12 +242,403 @@ class GapFillingVisualizer:
 
         # 准备数据
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        total_gaps = summary.get('total_gaps', 0)
+        filled_gaps = summary.get('filled_gaps', 0)
+        fill_rate = summary.get('fill_rate', '0%')
+        chrom_count = len(self.gaps_by_chrom)
+
+        bp_metric_html = ""
+        if self.integration_config:
+            stats = self.integration_config.get('stats', {})
+            total_bp_added = getattr(self, 'total_bp_added', stats.get('total_bp_added', 0))
+            bp_metric_html = f"""
+            <div class="metric-card">
+                <div class="metric-label">
+                    <span class="lang-en">Net Length Change</span>
+                    <span class="lang-zh" style="display:none;">净长度变化</span>
+                </div>
+                <div class="metric-value accent">{esc(self._format_bp(total_bp_added))}</div>
+            </div>"""
 
         # 准备 JavaScript 数据
         js_summary = json.dumps(summary, indent=2)
         js_gaps_by_chrom = json.dumps(self.gaps_by_chrom, indent=2, default=str)
         js_preprocessing_config = json.dumps(self.preprocessing_config if self.preprocessing_config else {}, indent=2)
         js_integration_config = json.dumps(self.integration_config if self.integration_config else {}, indent=2)
+
+        extra_css = """
+        .table-toggle-container {
+            position: sticky;
+            bottom: 0;
+            width: 100%;
+            display: flex;
+            justify-content: flex-end;
+            padding: 8px 10px;
+            background: rgba(255, 255, 255, 0.96);
+            border-top: 1px solid var(--border);
+        }
+
+        .table-toggle-btn {
+            background: var(--surface);
+            color: var(--accent);
+            border: 1px solid var(--accent-border);
+            border-radius: var(--radius-sm);
+            padding: 5px 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.15s ease, border-color 0.15s ease;
+        }
+
+        .table-toggle-btn:hover {
+            background: var(--accent-soft);
+            border-color: var(--accent);
+        }
+
+        .chrom-filter-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-left: 6px;
+            padding: 2px 5px;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.72rem;
+            color: var(--ink-muted);
+            position: relative;
+            user-select: none;
+            vertical-align: middle;
+        }
+
+        .chrom-filter-icon:hover {
+            color: var(--ink);
+            background: var(--surface);
+            border-color: var(--border-strong);
+        }
+
+        .chrom-filter-menu {
+            display: none;
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            background: var(--surface);
+            border: 1px solid var(--border-strong);
+            border-radius: var(--radius-sm);
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
+            z-index: 1000;
+            min-width: 160px;
+            max-height: 280px;
+            overflow-y: auto;
+            text-align: left;
+        }
+
+        .chrom-filter-menu.show {
+            display: block;
+        }
+
+        .chrom-filter-item {
+            padding: 7px 12px;
+            cursor: pointer;
+            font-size: 0.84rem;
+            font-weight: 400;
+            color: var(--ink);
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+        }
+
+        .chrom-filter-item:last-child {
+            border-bottom: none;
+        }
+
+        .chrom-filter-item:hover {
+            background: var(--surface-subtle);
+        }
+
+        .chrom-filter-item.active {
+            background: var(--accent-soft);
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        .success {
+            color: var(--ok-ink);
+            font-weight: 600;
+        }
+
+        .failed {
+            color: var(--err-ink);
+            font-weight: 600;
+        }
+
+        .chrom-selector {
+            background-color: var(--surface);
+            border: 1px solid var(--border-strong);
+            color: var(--ink);
+            padding: 6px 32px 6px 12px;
+            border-radius: var(--radius-sm);
+            font-size: 0.84rem;
+            font-weight: 500;
+            cursor: pointer;
+            appearance: none;
+            background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2212%22%20height%3D%227%22%20viewBox%3D%220%200%2012%207%22%20fill%3D%22none%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cpath%20d%3D%22M1%201L6%206L11%201%22%20stroke%3D%22%23334155%22%20stroke-width%3D%221.6%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%3C/svg%3E');
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            min-width: 180px;
+        }
+
+        .chrom-selector:hover {
+            border-color: var(--accent);
+        }
+
+        .track-control-bar {
+            display: none;
+            padding: 12px 20px;
+            background: var(--surface-subtle);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .track-control-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex-wrap: wrap;
+        }
+
+        .track-control-label {
+            font-weight: 600;
+            font-size: 0.84rem;
+            color: var(--ink-secondary);
+            min-width: 110px;
+        }
+
+        .track-control-value {
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: var(--accent);
+            font-variant-numeric: tabular-nums;
+            min-width: 90px;
+            text-align: right;
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            height: 6px;
+            background: var(--border-strong);
+            border-radius: 3px;
+            flex: 1;
+            min-width: 160px;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            background: var(--accent);
+            border: 2px solid var(--surface);
+            border-radius: 50%;
+            box-shadow: 0 0 0 1px var(--accent);
+            cursor: pointer;
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            background: var(--accent);
+            border: 2px solid var(--surface);
+            border-radius: 50%;
+            box-shadow: 0 0 0 1px var(--accent);
+            cursor: pointer;
+        }
+
+        #chromVisualization {
+            margin: 8px 0 12px;
+            min-height: 120px;
+        }
+
+        .chrom-track {
+            margin-bottom: 24px;
+            padding-bottom: 18px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .chrom-track:last-child {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+
+        .chrom-track-multirow {
+            margin-bottom: 16px;
+            padding-bottom: 14px;
+        }
+
+        .chrom-track-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 12px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+
+        .chrom-track-name {
+            font-family: var(--font-mono);
+            font-weight: 600;
+            font-size: 0.88rem;
+            color: var(--ink);
+            overflow-wrap: anywhere;
+        }
+
+        .chrom-track-length {
+            font-size: 0.82rem;
+            color: var(--ink-muted);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .chrom-track-bar-container {
+            position: relative;
+            height: 74px;
+            padding: 24px 0;
+        }
+
+        .chrom-track-bar {
+            position: relative;
+            height: 16px;
+            background: #e2e8f0;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+        }
+
+        .gap-marker {
+            position: absolute;
+            transform: translateX(-50%);
+            cursor: pointer;
+        }
+
+        .gap-marker.top {
+            top: 0;
+            height: 50%;
+        }
+
+        .gap-marker.bottom {
+            top: 25%;
+            height: 50%;
+        }
+
+        .gap-marker-line {
+            width: 2px;
+            height: 100%;
+            margin: 0 auto;
+        }
+
+        .gap-marker.has-width {
+            transform: none;
+        }
+
+        .gap-marker.has-width .gap-marker-line {
+            width: 100%;
+            margin: 0;
+        }
+
+        .gap-marker.has-width .gap-marker-label {
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .gap-marker-line.filled {
+            background: #15803d;
+        }
+
+        .gap-marker-line.unfilled {
+            background: #b91c1c;
+        }
+
+        .gap-marker-label {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            font-family: var(--font-mono);
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+            cursor: pointer;
+        }
+
+        .gap-marker-label.top {
+            bottom: 100%;
+            margin-bottom: 3px;
+        }
+
+        .gap-marker-label.bottom {
+            top: 100%;
+            margin-top: 3px;
+        }
+
+        .gap-marker-label.filled {
+            color: #166534;
+        }
+
+        .gap-marker-label.unfilled {
+            color: #991b1b;
+        }
+
+        .gap-marker:hover .gap-marker-label {
+            text-decoration: underline;
+        }
+
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-top: 16px;
+            padding: 12px 14px;
+            background: var(--surface-subtle);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-size: 0.84rem;
+            color: var(--ink-secondary);
+        }
+
+        .legend-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .legend-color {
+            width: 22px;
+            height: 12px;
+            border-radius: 3px;
+            border: 1px solid rgba(15, 23, 42, 0.15);
+            flex-shrink: 0;
+        }
+
+        .tooltip {
+            position: absolute;
+            background: #0f172a;
+            color: #f8fafc;
+            border: 1px solid #334155;
+            padding: 9px 12px;
+            border-radius: var(--radius-sm);
+            font-size: 0.78rem;
+            line-height: 1.5;
+            pointer-events: none;
+            z-index: 1000;
+            display: none;
+            max-width: 280px;
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2);
+        }
+
+        .table-link {
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        """
+
+        css = report_css(extra_css)
 
         html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -251,641 +647,86 @@ class GapFillingVisualizer:
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AutoGapfiller - Gap Filling Report</title>
     <style>
-        * {{
-            box-sizing: border-box;
-        }}
-
-        body {{
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-            min-height: 100vh;
-        }}
-
-        .container {{
-            max-width: 1180px;
-            margin: 0 auto;
-        }}
-
-        .header {{
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 24px;
-            border-radius: 15px;
-            margin-bottom: 30px;
-            text-align: left;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-        }}
-
-        .header-top {{
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: 12px;
-            flex-wrap: wrap;
-        }}
-
-        .header-info {{
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }}
-
-        .header h1 {{
-            margin: 0;
-            font-size: 2.1em;
-            font-weight: 600;
-        }}
-
-        .header p {{
-            margin: 0;
-            opacity: 0.9;
-            font-size: 1.05em;
-        }}
-
-        .language-switcher {{
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-left: auto;
-            align-self: flex-start;
-        }}
-
-        .language-btn {{
-            background: rgba(255, 255, 255, 0.2);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            color: #fff;
-            padding: 6px 14px;
-            border-radius: 18px;
-            font-size: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            min-width: 46px;
-        }}
-
-        .language-btn:hover {{
-            background: rgba(255, 255, 255, 0.28);
-            transform: translateY(-1px);
-        }}
-
-        .language-btn:active {{
-            transform: translateY(0);
-        }}
-
-        .language-btn.active {{
-            background: #fff;
-            color: #667eea;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
-        }}
-
-        .language-btn:focus {{
-            outline: none;
-            box-shadow: 0 0 0 2px rgba(255,255,255,0.6);
-        }}
-
-        .card {{
-            background: white;
-            border-radius: 15px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-            margin-bottom: 30px;
-            overflow: hidden;
-        }}
-
-        .card-header {{
-            background: linear-gradient(135deg, #7889e0 0%, #9d87cc 100%);
-            color: #fff;
-            padding: 15px 25px;
-            font-size: 1.2em;
-            font-weight: 600;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid #e9ecef;
-        }}
-
-        .card-content {{
-            padding: 25px;
-        }}
-
-        .table-container {{
-            max-height: 400px;
-            overflow-y: auto;
-            border: 1px solid #dee2e6;
-            border-radius: 10px;
-            background: white;
-            margin-bottom: 20px;
-        }}
-
-        .table-container-limited {{
-            max-height: 400px;
-            overflow-y: auto;
-            border: 1px solid #dee2e6;
-            border-radius: 10px;
-            background: white;
-            position: relative;
-        }}
-
-        .table-container-limited.expanded {{
-            max-height: none;
-            overflow-y: visible;
-        }}
-
-        .table-toggle-container {{
-            position: sticky;
-            bottom: 0;
-            width: 100%;
-            display: flex;
-            justify-content: flex-end;
-            padding: 6px 8px;
-            background: linear-gradient(180deg, rgba(255,255,255,0), rgba(255,255,255,0.95));
-            border-top: 1px solid #e9ecef;
-        }}
-
-        .table-toggle-btn {{
-            background: #667eea;
-            color: #fff;
-            border: none;
-            border-radius: 16px;
-            padding: 6px 12px;
-            font-size: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-        }}
-
-        .table-toggle-btn:hover {{
-            background: #5a6fd8;
-        }}
-
-        table {{
-            width: 100%;
-            border-collapse: collapse;
-        }}
-
-        /* Key-Value table style (like TelSeeker) */
-        .kv {{
-            width: 100%;
-            border-collapse: collapse;
-        }}
-
-        .kv td {{
-            padding: 8px 10px;
-            border-bottom: 1px solid #eee;
-        }}
-
-        .kv td:first-child {{
-            width: 220px;
-            color: #34495e;
-            font-weight: 600;
-            background: #fafbff;
-        }}
-
-        thead {{
-            position: sticky;
-            top: 0;
-            background: #f8f9fa;
-            z-index: 10;
-        }}
-
-        .table-container-limited thead, .table-container thead {{
-            position: sticky;
-            top: 0;
-            z-index: 15;
-        }}
-
-        th {{
-            padding: 12px;
-            text-align: left;
-            font-weight: 600;
-            color: #495057;
-            border-bottom: 2px solid #dee2e6;
-        }}
-
-        td {{
-            padding: 10px 12px;
-            border-bottom: 1px solid #dee2e6;
-        }}
-
-        tr:hover {{
-            background: #f8f9fa;
-        }}
-
-        .badge {{
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-weight: 600;
-            font-size: 0.9em;
-            display: inline-block;
-        }}
-
-        .badge-yes {{
-            background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
-            color: #155724;
-        }}
-
-        .badge-no {{
-            background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
-            color: #721c24;
-        }}
-
-        .badge-direct {{
-            background: linear-gradient(135deg, #cce5ff 0%, #b3d9ff 100%);
-            color: #004085;
-        }}
-
-        .badge-extension {{
-            background: linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%);
-            color: #0c5460;
-        }}
-
-        .badge-na {{
-            background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
-            color: #495057;
-        }}
-
-        .chrom-filter-icon {{
-            display: inline-block;
-            margin-left: 6px;
-            cursor: pointer;
-            font-size: 0.75em;
-            color: #adb5bd;
-            position: relative;
-            user-select: none;
-            vertical-align: middle;
-        }}
-
-        .chrom-filter-icon:hover {{
-            color: #495057;
-        }}
-
-        .chrom-filter-menu {{
-            display: none;
-            position: absolute;
-            top: 100%;
-            left: 0;
-            background: white;
-            border: 1px solid #dee2e6;
-            border-radius: 6px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            z-index: 1000;
-            min-width: 150px;
-            max-height: 300px;
-            overflow-y: auto;
-            margin-top: 4px;
-        }}
-
-        .chrom-filter-menu.show {{
-            display: block;
-        }}
-
-        .chrom-filter-item {{
-            padding: 8px 12px;
-            cursor: pointer;
-            font-size: 0.9em;
-            font-weight: normal;
-            color: #495057;
-            border-bottom: 1px solid #f0f1f3;
-        }}
-
-        .chrom-filter-item:last-child {{
-            border-bottom: none;
-        }}
-
-        .chrom-filter-item:hover {{
-            background: #f8f9fa;
-        }}
-
-        .chrom-filter-item.active {{
-            background: #e7f1ff;
-            color: #0056b3;
-            font-weight: 600;
-        }}
-
-        .success {{
-            color: #28a745;
-            font-weight: 600;
-        }}
-
-        .failed {{
-            color: #dc3545;
-            font-weight: 600;
-        }}
-
-        .fill-type-stats {{
-            margin-top: 20px;
-        }}
-
-        .fill-type-stats h3 {{
-            margin-top: 0;
-            color: #495057;
-        }}
-
-        .stat-item {{
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 10px;
-            background: #f8f9fa;
-            border-radius: 8px;
-            margin: 8px 0;
-        }}
-
-        .stat-icon {{
-            font-size: 1.5em;
-        }}
-
-        .view-btn {{
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 6px 16px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.9em;
-            font-weight: 500;
-            transition: all 0.3s ease;
-            box-shadow: 0 2px 4px rgba(102, 126, 234, 0.2);
-        }}
-
-        .view-btn:hover {{
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
-        }}
-
-        .view-btn:active {{
-            transform: translateY(0);
-        }}
-
-        .chrom-selector {{
-            background: rgba(255, 255, 255, 0.95);
-            border: 1px solid rgba(255, 255, 255, 0.5);
-            color: #495057;
-            padding: 6px 32px 6px 12px;
-            border-radius: 18px;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            appearance: none;
-            background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2214%22%20height%3D%228%22%20viewBox%3D%220%200%2014%208%22%20fill%3D%22none%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cpath%20d%3D%22M1%201L7%207L13%201%22%20stroke%3D%22%23495057%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%3C/svg%3E');
-            background-repeat: no-repeat;
-            background-position: right 10px center;
-            min-width: 180px;
-        }}
-
-        .chrom-selector:hover {{
-            background: rgba(255, 255, 255, 1);
-            border-color: rgba(255, 255, 255, 0.7);
-            transform: translateY(-1px);
-        }}
-
-        .chrom-selector:focus {{
-            outline: none;
-            box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.6);
-        }}
-
-        .chrom-selector option {{
-            background: white;
-            color: #495057;
-        }}
-
-        #chromVisualization {{
-            margin: 20px 0;
-            min-height: 300px;
-        }}
-
-        .chrom-track {{
-            margin-bottom: 40px;
-            padding-bottom: 30px;
-            border-bottom: 2px solid #dee2e6;
-        }}
-
-        .chrom-track:last-child {{
-            border-bottom: none;
-        }}
-
-        .chrom-track-multirow {{
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 1px solid #e9ecef;
-        }}
-
-        .chrom-track-multirow:last-child {{
-            border-bottom: none;
-        }}
-
-        .chrom-track-header {{
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-            padding: 0 10px;
-        }}
-
-        .chrom-track-name {{
-            font-weight: 600;
-            font-size: 16px;
-            color: #495057;
-        }}
-
-        .chrom-track-length {{
-            font-size: 14px;
-            color: #6c757d;
-        }}
-
-        /* Track length slider styling */
-        input[type="range"] {{
-            -webkit-appearance: none;
-            appearance: none;
-            height: 6px;
-            background: #d3d3d3;
-            border-radius: 3px;
-            outline: none;
-        }}
-
-        input[type="range"]::-webkit-slider-thumb {{
-            -webkit-appearance: none;
-            appearance: none;
-            width: 18px;
-            height: 18px;
-            background: #28a745;
-            border-radius: 50%;
-            cursor: pointer;
-        }}
-
-        input[type="range"]::-moz-range-thumb {{
-            width: 18px;
-            height: 18px;
-            background: #28a745;
-            border-radius: 50%;
-            cursor: pointer;
-            border: none;
-        }}
-
-        .chrom-track-bar-container {{
-            position: relative;
-            height: 80px;
-            padding: 20px 0;
-        }}
-
-        .chrom-track-bar {{
-            position: relative;
-            height: 20px;
-            background: linear-gradient(to bottom, #d0d5dd 0%, #e9ecef 50%, #d0d5dd 100%);
-            border-radius: 10px;
-            box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
-        }}
-
-        .gap-marker {{
-            position: absolute;
-            transform: translateX(-50%);
-            cursor: pointer;
-        }}
-
-        .gap-marker.top {{
-            top: 0;
-            height: 50%;
-        }}
-
-        .gap-marker.bottom {{
-            top: 25%;
-            height: 50%;
-        }}
-
-        /* Gap marker line - default fixed width for single-row view */
-        .gap-marker-line {{
-            width: 2px;
-            height: 100%;
-            margin: 0 auto;
-        }}
-
-        /* Gap region - variable width for multi-row view */
-        .gap-marker.has-width {{
-            transform: none;
-        }}
-
-        .gap-marker.has-width .gap-marker-line {{
-            width: 100%;
-            margin: 0;
-        }}
-
-        .gap-marker.has-width .gap-marker-label {{
-            left: 50%;
-            transform: translateX(-50%);
-        }}
-
-        .gap-marker-line.filled {{
-            background: #28a745;
-        }}
-
-        .gap-marker-line.unfilled {{
-            background: #dc3545;
-        }}
-
-        .gap-marker-label {{
-            position: absolute;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 11px;
-            font-weight: 600;
-            white-space: nowrap;
-            cursor: pointer;
-        }}
-
-        .gap-marker-label.top {{
-            bottom: 100%;
-            margin-bottom: 4px;
-        }}
-
-        .gap-marker-label.bottom {{
-            top: 100%;
-            margin-top: 4px;
-        }}
-
-        .gap-marker-label.filled {{
-            color: #28a745;
-        }}
-
-        .gap-marker-label.unfilled {{
-            color: #dc3545;
-        }}
-
-        .gap-marker:hover .gap-marker-label {{
-            font-weight: 700;
-        }}
-
-        .legend {{
-            display: flex;
-            gap: 20px;
-            margin-top: 20px;
-            padding: 15px;
-            background: #f8f9fa;
-            border-radius: 8px;
-        }}
-
-        .legend-item {{
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }}
-
-        .legend-color {{
-            width: 30px;
-            height: 20px;
-            border-radius: 4px;
-        }}
-
-        .tooltip {{
-            position: absolute;
-            background: rgba(0, 0, 0, 0.9);
-            color: white;
-            padding: 8px 12px;
-            border-radius: 6px;
-            font-size: 12px;
-            pointer-events: none;
-            z-index: 1000;
-            display: none;
-        }}
+{css}
     </style>
 </head>
 <body>
-    <div class="container">
+    <main class="container">
         <!-- Header -->
-        <div class="header">
+        <header class="header">
             <div class="header-top">
                 <div class="header-info">
-                    <h1>🧬 AutoGapfiller</h1>
+                    <div class="report-eyebrow">DEGAP · AutoGapfiller</div>
+                    <h1>AutoGapfiller</h1>
                     <p class="lang-en">Gap Filling Visualization Report</p>
                     <p class="lang-zh" style="display:none;">Gap 填充可视化报告</p>
-                    <p style="opacity: 0.8; font-size: 0.95em;">{current_time}</p>
                 </div>
-                <div class="language-switcher">
-                    <button class="language-btn active" onclick="switchLanguage('en')">EN</button>
-                    <button class="language-btn" onclick="switchLanguage('zh')">中文</button>
+                <div class="language-switcher" role="group" aria-label="Language Switcher">
+                    <button type="button" class="language-btn active" data-lang="en" aria-pressed="true" onclick="switchLanguage('en')">EN</button>
+                    <button type="button" class="language-btn" data-lang="zh" aria-pressed="false" onclick="switchLanguage('zh')">中文</button>
                 </div>
             </div>
-        </div>
+            <div class="header-meta">
+                <span>
+                    <span class="lang-en">Generated:</span>
+                    <span class="lang-zh" style="display:none;">生成时间：</span>
+                    <strong class="num">{esc(current_time)}</strong>
+                </span>
+            </div>
+        </header>
+
+        <!-- Summary Metrics -->
+        <section class="metrics-grid" aria-label="Summary overview">
+            <div class="metric-card">
+                <div class="metric-label">
+                    <span class="lang-en">Total Gaps</span>
+                    <span class="lang-zh" style="display:none;">Gap 总数</span>
+                </div>
+                <div class="metric-value">{esc(total_gaps)}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">
+                    <span class="lang-en">Filled Gaps</span>
+                    <span class="lang-zh" style="display:none;">已填充 Gap</span>
+                </div>
+                <div class="metric-value ok">{esc(filled_gaps)}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">
+                    <span class="lang-en">Fill Rate</span>
+                    <span class="lang-zh" style="display:none;">填充率</span>
+                </div>
+                <div class="metric-value accent">{esc(fill_rate)}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">
+                    <span class="lang-en">Chromosomes</span>
+                    <span class="lang-zh" style="display:none;">涉及染色体</span>
+                </div>
+                <div class="metric-value">{chrom_count}</div>
+            </div>{bp_metric_html}
+        </section>
 
         <!-- Reads Information Card -->
-        <div class="card">
+        <section class="card">
             <div class="card-header">
-                <span class="lang-en">📊 Reads Information</span>
-                <span class="lang-zh" style="display:none;">📊 Reads 信息</span>
+                <span class="lang-en">Reads Information</span>
+                <span class="lang-zh" style="display:none;">Reads 信息</span>
             </div>
             <div class="card-content">
-                <table class="kv" id="readsInfoTable">
-                    <!-- Will be populated by JavaScript -->
-                </table>
+                <div class="table-scroll">
+                    <table class="kv" id="readsInfoTable">
+                        <!-- Will be populated by JavaScript -->
+                    </table>
+                </div>
             </div>
-        </div>
+        </section>
 
         <!-- Initial Genome Overview Card -->
-        <div class="card">
+        <section class="card">
             <div class="card-header">
-                <span class="lang-en">📊 Initial Genome Overview</span>
-                <span class="lang-zh" style="display:none;">📊 初始基因组概览</span>
+                <span class="lang-en">Initial Genome Overview</span>
+                <span class="lang-zh" style="display:none;">初始基因组概览</span>
             </div>
             <div class="card-content">
                 <div id="initial-table-container" class="table-container-limited">
@@ -894,14 +735,14 @@ class GapFillingVisualizer:
                             <tr>
                                 <th class="lang-en">
                                     Chromosome
-                                    <span class="chrom-filter-icon" onclick="toggleFilterMenu('initial', event)">
+                                    <span class="chrom-filter-icon" tabindex="0" role="button" aria-label="Filter chromosome" onclick="toggleFilterMenu('initial', event)" onkeydown="if(event.key==='Enter'||event.key===' '){{event.preventDefault();toggleFilterMenu('initial', event);}}">
                                         ▼
                                         <div id="initial-chrom-filter" class="chrom-filter-menu"></div>
                                     </span>
                                 </th>
                                 <th class="lang-zh" style="display:none;">
                                     染色体
-                                    <span class="chrom-filter-icon" onclick="toggleFilterMenu('initial', event)">
+                                    <span class="chrom-filter-icon" tabindex="0" role="button" aria-label="筛选染色体" onclick="toggleFilterMenu('initial', event)" onkeydown="if(event.key==='Enter'||event.key===' '){{event.preventDefault();toggleFilterMenu('initial', event);}}">
                                         ▼
                                         <div id="initial-chrom-filter-zh" class="chrom-filter-menu"></div>
                                     </span>
@@ -917,17 +758,17 @@ class GapFillingVisualizer:
                         </tbody>
                     </table>
                     <div class="table-toggle-container">
-                        <button id="initial-toggle-btn" class="table-toggle-btn" onclick="toggleTableExpand('initial')"><span class="lang-en">Expand</span><span class="lang-zh" style="display:none;">展开</span></button>
+                        <button type="button" id="initial-toggle-btn" class="table-toggle-btn" onclick="toggleTableExpand('initial')"><span class="lang-en">Expand</span><span class="lang-zh" style="display:none;">展开</span></button>
                     </div>
                 </div>
             </div>
-        </div>
+        </section>
 
         <!-- Gap Filling Tasks Card -->
-        <div class="card">
+        <section class="card">
             <div class="card-header">
-                <span class="lang-en">🔧 Gap Filling Tasks</span>
-                <span class="lang-zh" style="display:none;">🔧 Gap 填充任务</span>
+                <span class="lang-en">Gap Filling Tasks</span>
+                <span class="lang-zh" style="display:none;">Gap 填充任务</span>
             </div>
             <div class="card-content">
                 <div id="tasks-table-container" class="table-container-limited">
@@ -936,14 +777,14 @@ class GapFillingVisualizer:
                             <tr>
                                 <th class="lang-en">
                                     Chromosome
-                                    <span class="chrom-filter-icon" onclick="toggleFilterMenu('tasks', event)">
+                                    <span class="chrom-filter-icon" tabindex="0" role="button" aria-label="Filter chromosome" onclick="toggleFilterMenu('tasks', event)" onkeydown="if(event.key==='Enter'||event.key===' '){{event.preventDefault();toggleFilterMenu('tasks', event);}}">
                                         ▼
                                         <div id="tasks-chrom-filter" class="chrom-filter-menu"></div>
                                     </span>
                                 </th>
                                 <th class="lang-zh" style="display:none;">
                                     染色体
-                                    <span class="chrom-filter-icon" onclick="toggleFilterMenu('tasks', event)">
+                                    <span class="chrom-filter-icon" tabindex="0" role="button" aria-label="筛选染色体" onclick="toggleFilterMenu('tasks', event)" onkeydown="if(event.key==='Enter'||event.key===' '){{event.preventDefault();toggleFilterMenu('tasks', event);}}">
                                         ▼
                                         <div id="tasks-chrom-filter-zh" class="chrom-filter-menu"></div>
                                     </span>
@@ -969,17 +810,17 @@ class GapFillingVisualizer:
                         </tbody>
                     </table>
                     <div class="table-toggle-container">
-                        <button id="tasks-toggle-btn" class="table-toggle-btn" onclick="toggleTableExpand('tasks')"><span class="lang-en">Expand</span><span class="lang-zh" style="display:none;">展开</span></button>
+                        <button type="button" id="tasks-toggle-btn" class="table-toggle-btn" onclick="toggleTableExpand('tasks')"><span class="lang-en">Expand</span><span class="lang-zh" style="display:none;">展开</span></button>
                     </div>
                 </div>
             </div>
-        </div>
+        </section>
 
         <!-- Final Integrated Genome Card -->
-        <div class="card">
+        <section class="card">
             <div class="card-header">
-                <span class="lang-en">✅ Final Integrated Genome</span>
-                <span class="lang-zh" style="display:none;">✅ 最终整合基因组</span>
+                <span class="lang-en">Final Integrated Genome</span>
+                <span class="lang-zh" style="display:none;">最终整合基因组</span>
             </div>
             <div class="card-content">
                 <div id="final-table-container" class="table-container-limited">
@@ -988,14 +829,14 @@ class GapFillingVisualizer:
                             <tr>
                                 <th class="lang-en">
                                     Chromosome
-                                    <span class="chrom-filter-icon" onclick="toggleFilterMenu('final', event)">
+                                    <span class="chrom-filter-icon" tabindex="0" role="button" aria-label="Filter chromosome" onclick="toggleFilterMenu('final', event)" onkeydown="if(event.key==='Enter'||event.key===' '){{event.preventDefault();toggleFilterMenu('final', event);}}">
                                         ▼
                                         <div id="final-chrom-filter" class="chrom-filter-menu"></div>
                                     </span>
                                 </th>
                                 <th class="lang-zh" style="display:none;">
                                     染色体
-                                    <span class="chrom-filter-icon" onclick="toggleFilterMenu('final', event)">
+                                    <span class="chrom-filter-icon" tabindex="0" role="button" aria-label="筛选染色体" onclick="toggleFilterMenu('final', event)" onkeydown="if(event.key==='Enter'||event.key===' '){{event.preventDefault();toggleFilterMenu('final', event);}}">
                                         ▼
                                         <div id="final-chrom-filter-zh" class="chrom-filter-menu"></div>
                                     </span>
@@ -1011,33 +852,33 @@ class GapFillingVisualizer:
                         </tbody>
                     </table>
                     <div class="table-toggle-container">
-                        <button id="final-toggle-btn" class="table-toggle-btn" onclick="toggleTableExpand('final')"><span class="lang-en">Expand</span><span class="lang-zh" style="display:none;">展开</span></button>
+                        <button type="button" id="final-toggle-btn" class="table-toggle-btn" onclick="toggleTableExpand('final')"><span class="lang-en">Expand</span><span class="lang-zh" style="display:none;">展开</span></button>
                     </div>
                 </div>
             </div>
-        </div>
+        </section>
 
         <!-- Chromosome Visualization Card -->
-        <div class="card">
+        <section class="card">
             <div class="card-header">
-                <span class="lang-en">🧬 Chromosome Visualization</span>
-                <span class="lang-zh" style="display:none;">🧬 染色体可视化</span>
-                <select id="chromSelect" class="chrom-selector" onchange="filterChromosome()">
+                <span class="lang-en">Chromosome Visualization</span>
+                <span class="lang-zh" style="display:none;">染色体可视化</span>
+                <select id="chromSelect" class="chrom-selector" aria-label="Select chromosome" onchange="filterChromosome()">
                     <option value="all" class="lang-en">All Chromosomes</option>
                     <option value="all" class="lang-zh" style="display:none;">所有染色体</option>
                 </select>
             </div>
 
             <!-- Track Length Control (only visible for single chromosome) -->
-            <div id="trackLengthControl" style="display: none; padding: 15px 20px; background: #f8f9fa; border-bottom: 1px solid #e0e0e0;">
-                <div style="display: flex; align-items: center; gap: 15px;">
-                    <label style="font-weight: 600; color: #495057; min-width: 120px;">
+            <div id="trackLengthControl" class="track-control-bar">
+                <div class="track-control-row">
+                    <label for="trackLengthSlider" class="track-control-label">
                         <span class="lang-en">Track Length:</span>
-                        <span class="lang-zh" style="display:none;">轨道长度:</span>
+                        <span class="lang-zh" style="display:none;">轨道长度：</span>
                     </label>
                     <input type="range" id="trackLengthSlider" min="1000000" max="300000000" step="1000000"
-                           style="flex: 1;" oninput="updateTrackLength()">
-                    <span id="trackLengthValue" style="font-weight: 600; color: #28a745; min-width: 100px; text-align: right;">50.00 Mb</span>
+                           oninput="updateTrackLength()">
+                    <span id="trackLengthValue" class="track-control-value">50.00 Mb</span>
                 </div>
             </div>
 
@@ -1048,27 +889,27 @@ class GapFillingVisualizer:
 
                 <div class="legend">
                     <div class="legend-item">
-                        <span class="legend-color" style="background: #e9ecef;"></span>
+                        <span class="legend-color" style="background: #e2e8f0;"></span>
                         <span class="lang-en">Normal sequence</span>
                         <span class="lang-zh" style="display:none;">正常序列</span>
                     </div>
                     <div class="legend-item">
-                        <span class="legend-color" style="background: #28a745;"></span>
+                        <span class="legend-color" style="background: #15803d;"></span>
                         <span class="lang-en">Filled gap</span>
                         <span class="lang-zh" style="display:none;">已填充 gap</span>
                     </div>
                     <div class="legend-item">
-                        <span class="legend-color" style="background: #dc3545;"></span>
+                        <span class="legend-color" style="background: #b91c1c;"></span>
                         <span class="lang-en">Unfilled gap</span>
                         <span class="lang-zh" style="display:none;">未填充 gap</span>
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
+        </section>
+    </main>
 
     <!-- Tooltip -->
-    <div class="tooltip" id="tooltip"></div>
+    <div class="tooltip" id="tooltip" role="tooltip"></div>
 
     <script>
         // Data from Python
@@ -1080,15 +921,26 @@ class GapFillingVisualizer:
         // Current language
         let currentLang = 'en';
 
+        function escapeHtml(value) {{
+            return String(value ?? '')
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#039;');
+        }}
+
         // Language switching
         function switchLanguage(lang) {{
             currentLang = lang;
+            document.documentElement.setAttribute('lang', lang === 'zh' ? 'zh-CN' : 'en');
 
             // Update button states
             document.querySelectorAll('.language-btn').forEach(btn => {{
-                btn.classList.remove('active');
+                const isActive = btn.getAttribute('data-lang') === lang;
+                btn.classList.toggle('active', isActive);
+                btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
             }});
-            event.target.classList.add('active');
 
             // Show/hide elements
             if (lang === 'en') {{
@@ -1097,6 +949,23 @@ class GapFillingVisualizer:
             }} else {{
                 document.querySelectorAll('.lang-en').forEach(el => el.style.display = 'none');
                 document.querySelectorAll('.lang-zh').forEach(el => el.style.display = '');
+            }}
+
+            // Update data-i18n nodes in dynamic rows
+            document.querySelectorAll('[data-i18n-en]').forEach(el => {{
+                const val = el.getAttribute('data-i18n-' + lang);
+                if (val !== null) {{
+                    el.textContent = val;
+                }}
+            }});
+
+            // Update chromosome selector default option
+            const chromSelect = document.getElementById('chromSelect');
+            if (chromSelect) {{
+                const allOpt = chromSelect.querySelector('option[value="all"]');
+                if (allOpt) {{
+                    allOpt.textContent = lang === 'zh' ? '所有染色体' : 'All Chromosomes';
+                }}
             }}
         }}
 
@@ -1122,7 +991,7 @@ class GapFillingVisualizer:
 
         // Format number with commas
         function formatNumber(num) {{
-            return num.toString().replace(/\\B(?=(\\d{{3}})+(?!\\d))/g, ",");
+            return String(num).replace(/\\B(?=(\\d{{3}})+(?!\\d))/g, ",");
         }}
 
         // Format BP
@@ -1141,21 +1010,22 @@ class GapFillingVisualizer:
             const table = document.getElementById('readsInfoTable');
 
             if (!preprocessingConfig || Object.keys(preprocessingConfig).length === 0) {{
-                table.innerHTML = '<tr><td colspan="2" style="color: #6c757d; text-align: center;">No reads information available</td></tr>';
+                table.innerHTML = '<tr><td colspan="2" class="empty-state"><span class="lang-en">No reads information available</span><span class="lang-zh" style="display:none;">暂无 Reads 信息</span></td></tr>';
                 return;
             }}
 
-            const dataType = preprocessingConfig.data_type || 'unknown';
+            const dataType = String(preprocessingConfig.data_type || 'unknown');
             const hifiStats = preprocessingConfig.hifi_stats || {{}};
             const ontStats = preprocessingConfig.ont_stats || {{}};
 
             let html = '';
 
             // Data Type
+            const displayType = dataType.charAt(0).toUpperCase() + dataType.slice(1);
             html += `
                 <tr>
                     <td><span class="lang-en">Data Type</span><span class="lang-zh" style="display:none;">数据类型</span></td>
-                    <td>${{dataType.charAt(0).toUpperCase() + dataType.slice(1)}}</td>
+                    <td>${{escapeHtml(displayType)}}</td>
                 </tr>
             `;
 
@@ -1164,11 +1034,11 @@ class GapFillingVisualizer:
                 html += `
                     <tr>
                         <td>HiFi Reads</td>
-                        <td>${{formatNumber(hifiStats.Number || hifiStats.NumSeqs || 0)}} reads</td>
+                        <td class="num">${{escapeHtml(formatNumber(hifiStats.Number || hifiStats.NumSeqs || 0))}} reads</td>
                     </tr>
                     <tr>
                         <td>HiFi Max Length</td>
-                        <td>${{formatNumber(hifiStats.MaxLength || 0)}} bp</td>
+                        <td class="num">${{escapeHtml(formatNumber(hifiStats.MaxLength || 0))}} bp</td>
                     </tr>
                 `;
             }}
@@ -1178,11 +1048,11 @@ class GapFillingVisualizer:
                 html += `
                     <tr>
                         <td>ONT Reads</td>
-                        <td>${{formatNumber(ontStats.Number || ontStats.NumSeqs || 0)}} reads</td>
+                        <td class="num">${{escapeHtml(formatNumber(ontStats.Number || ontStats.NumSeqs || 0))}} reads</td>
                     </tr>
                     <tr>
                         <td>ONT Max Length</td>
-                        <td>${{formatNumber(ontStats.MaxLength || 0)}} bp</td>
+                        <td class="num">${{escapeHtml(formatNumber(ontStats.MaxLength || 0))}} bp</td>
                     </tr>
                 `;
             }}
@@ -1193,7 +1063,7 @@ class GapFillingVisualizer:
                 html += `
                     <tr>
                         <td><span class="lang-en">Seed Length</span><span class="lang-zh" style="display:none;">Seed 长度</span></td>
-                        <td>${{formatNumber(seedLength)}} bp</td>
+                        <td class="num">${{escapeHtml(formatNumber(seedLength))}} bp</td>
                     </tr>
                 `;
             }}
@@ -1222,14 +1092,18 @@ class GapFillingVisualizer:
 
                     html += `
                         <tr>
-                            <td>${{chrom}}</td>
-                            <td>${{gap.gap_id}}</td>
-                            <td>${{region}}</td>
+                            <td class="mono">${{escapeHtml(chrom)}}</td>
+                            <td class="num">${{escapeHtml(gap.gap_id)}}</td>
+                            <td class="num">${{escapeHtml(region)}}</td>
                         </tr>
                     `;
                     rowCount++;
                 }});
             }});
+
+            if (rowCount === 0) {{
+                html = '<tr><td colspan="3" class="empty-state"><span class="lang-en">No initial gaps recorded</span><span class="lang-zh" style="display:none;">暂无初始 Gap 记录</span></td></tr>';
+            }}
 
             tbody.innerHTML = html;
 
@@ -1280,30 +1154,35 @@ class GapFillingVisualizer:
                     const rounds = gap.filled ? gap.rounds : '-';
 
                     // Fill length - show formatted BP if filled
-                    const fillLength = gap.filled && gap.fill_length ?
-                        formatBP(gap.fill_length) : '-';
+                    const hasFillLen = Boolean(gap.filled && gap.fill_length);
+                    const fillLength = hasFillLen ? formatBP(gap.fill_length) : '-';
+                    const fillLenClass = hasFillLen ? 'num success' : 'num muted';
 
                     // Details - View link to sub-task report
                     // For filled gaps: use fill_direction, for unfilled: use 'left'
                     const linkFlag = gap.report_direction || (gap.filled && gap.fill_direction ? gap.fill_direction : 'left');
                     const reportFile = `${{chrom}}.${{gap.gap_id}}.${{linkFlag}}.html`;
-                    const details = `<a href="${{reportFile}}" target="_blank" title="View details for ${{chrom}} Gap ${{gap.gap_id}}" data-i18n-en="View" data-i18n-zh="查看">View</a>`;
+                    const details = `<a class="table-link" href="${{escapeHtml(reportFile)}}" target="_blank" rel="noopener" title="View details for ${{escapeHtml(chrom)}} Gap ${{escapeHtml(gap.gap_id)}}" data-i18n-en="View" data-i18n-zh="查看">View</a>`;
 
                     html += `
                         <tr>
-                            <td>${{chrom}}</td>
-                            <td>${{gap.gap_id}}</td>
+                            <td class="mono">${{escapeHtml(chrom)}}</td>
+                            <td class="num">${{escapeHtml(gap.gap_id)}}</td>
                             <td>${{extended}}</td>
                             <td>${{connectionType}}</td>
-                            <td>${{displayFlag}}</td>
-                            <td>${{rounds}}</td>
-                            <td class="success">${{fillLength}}</td>
+                            <td class="mono">${{escapeHtml(displayFlag)}}</td>
+                            <td class="num">${{escapeHtml(rounds)}}</td>
+                            <td class="${{fillLenClass}}">${{escapeHtml(fillLength)}}</td>
                             <td>${{details}}</td>
                         </tr>
                     `;
                     rowCount++;
                 }});
             }});
+
+            if (rowCount === 0) {{
+                html = '<tr><td colspan="8" class="empty-state"><span class="lang-en">No gap filling tasks recorded</span><span class="lang-zh" style="display:none;">暂无 Gap 填充任务记录</span></td></tr>';
+            }}
 
             tbody.innerHTML = html;
 
@@ -1345,9 +1224,9 @@ class GapFillingVisualizer:
 
                         html += `
                             <tr>
-                                <td>${{chrom}}</td>
-                                <td>${{gap.gap_id}}</td>
-                                <td>${{region}}</td>
+                                <td class="mono">${{escapeHtml(chrom)}}</td>
+                                <td class="num">${{escapeHtml(gap.gap_id)}}</td>
+                                <td class="num">${{escapeHtml(region)}}</td>
                             </tr>
                         `;
                         rowCount++;
@@ -1363,7 +1242,7 @@ class GapFillingVisualizer:
 
             // If no unfilled gaps, show a message
             if (html === '') {{
-                html = '<tr><td colspan="3" style="text-align: center; color: #28a745; font-weight: 600;"><span data-i18n-en="🎉 All gaps have been filled!" data-i18n-zh="🎉 所有 gaps 已填充！">🎉 All gaps have been filled!</span></td></tr>';
+                html = '<tr><td colspan="3" class="empty-state success"><span data-i18n-en="All gaps have been filled." data-i18n-zh="所有 gaps 已填充。">All gaps have been filled.</span></td></tr>';
             }}
 
             tbody.innerHTML = html;
@@ -1380,13 +1259,13 @@ class GapFillingVisualizer:
         // Populate Chromosome Selector
         function populateChromSelector() {{
             const select = document.getElementById('chromSelect');
-            let selectHtml = '<option value="all">All Chromosomes</option>';
+            let selectHtml = `<option value="all">${{currentLang === 'zh' ? '所有染色体' : 'All Chromosomes'}}</option>`;
 
             // Sort chromosomes
             const chromNames = Object.keys(gapsByChrom).sort();
 
             chromNames.forEach(chrom => {{
-                selectHtml += `<option value="${{chrom}}">${{chrom}}</option>`;
+                selectHtml += `<option value="${{escapeHtml(chrom)}}">${{escapeHtml(chrom)}}</option>`;
             }});
 
             select.innerHTML = selectHtml;
@@ -1404,9 +1283,14 @@ class GapFillingVisualizer:
                 ? Object.keys(gapsByChrom).sort()
                 : [selectedChrom];
 
+            if (chromNames.length === 0) {{
+                container.innerHTML = '<div class="empty-state"><span class="lang-en">No chromosomes to display</span><span class="lang-zh" style="display:none;">暂无可显示的染色体</span></div>';
+                return;
+            }}
+
             // Show/hide track length control
             const trackLengthControl = document.getElementById('trackLengthControl');
-            if (selectedChrom !== 'all') {{
+            if (selectedChrom !== 'all' && gapsByChrom[selectedChrom]) {{
                 trackLengthControl.style.display = 'block';
                 const chromData = gapsByChrom[selectedChrom];
                 const chromLength = chromData.length;
@@ -1431,6 +1315,7 @@ class GapFillingVisualizer:
             let maxChromLength = 0;
             chromNames.forEach(chrom => {{
                 const chromData = gapsByChrom[chrom];
+                if (!chromData) return;
                 const chromLength = chromData.length;
                 if (chromLength > maxChromLength) {{
                     maxChromLength = chromLength;
@@ -1439,6 +1324,7 @@ class GapFillingVisualizer:
 
             chromNames.forEach(chrom => {{
                 const chromData = gapsByChrom[chrom];
+                if (!chromData) return;
                 const chromLength = chromData.length;
 
                 // Multi-row view for single chromosome
@@ -1446,7 +1332,7 @@ class GapFillingVisualizer:
                     drawMultiRowChromosome(chrom, chromData, chromLength, currentTrackLength, container);
                 }} else {{
                     // Single row view for all chromosomes
-                    drawSingleRowChromosome(chrom, chromData, chromLength, maxChromLength, container);
+                    drawSingleRowChromosome(chrom, chromData, chromLength, maxChromLength || 1, container);
                 }}
             }});
         }}
@@ -1461,8 +1347,8 @@ class GapFillingVisualizer:
             const headerDiv = document.createElement('div');
             headerDiv.className = 'chrom-track-header';
             headerDiv.innerHTML = `
-                <span class="chrom-track-name">${{chrom}}</span>
-                <span class="chrom-track-length">${{formatBP(chromLength)}}</span>
+                <span class="chrom-track-name">${{escapeHtml(chrom)}}</span>
+                <span class="chrom-track-length">${{escapeHtml(formatBP(chromLength))}}</span>
             `;
             trackDiv.appendChild(headerDiv);
 
@@ -1483,7 +1369,7 @@ class GapFillingVisualizer:
 
             // Add gap markers
             chromData.gaps.forEach((gap, index) => {{
-                addGapMarker(barContainerDiv, gap, index, chromLength, chrom, null, false, barWidthPercent);
+                addGapMarker(barContainerDiv, gap, index, chromLength || 1, chrom, null, false, barWidthPercent);
             }});
 
             trackDiv.appendChild(barContainerDiv);
@@ -1507,8 +1393,8 @@ class GapFillingVisualizer:
                 const headerDiv = document.createElement('div');
                 headerDiv.className = 'chrom-track-header';
                 headerDiv.innerHTML = `
-                    <span class="chrom-track-name">${{chrom}} (Row ${{row + 1}}/${{numRows}})</span>
-                    <span class="chrom-track-length">${{formatBP(rowStart)}} - ${{formatBP(rowEnd)}}</span>
+                    <span class="chrom-track-name">${{escapeHtml(chrom)}} (Row ${{row + 1}}/${{numRows}})</span>
+                    <span class="chrom-track-length">${{escapeHtml(formatBP(rowStart))}} - ${{escapeHtml(formatBP(rowEnd))}}</span>
                 `;
                 trackDiv.appendChild(headerDiv);
 
@@ -1544,6 +1430,7 @@ class GapFillingVisualizer:
 
             const markerDiv = document.createElement('div');
             markerDiv.className = `gap-marker ${{isTop ? 'top' : 'bottom'}}`;
+            markerDiv.setAttribute('title', `${{chrom}} Gap ${{gap.gap_id}}: ${{gap.filled ? 'Filled' : 'Unfilled'}}`);
 
             // Position based on gap_start (or custom position for multi-row)
             const gapPosition = customPosition !== null ? customPosition : gap.gap_start;
@@ -1620,31 +1507,31 @@ class GapFillingVisualizer:
             const statusZh = gap.filled ? '已填充' : '未填充';
 
             let content = `
-                <strong>${{chrom}}.gap${{gap.gap_id}}</strong><br>
+                <strong>${{escapeHtml(chrom)}}.gap${{escapeHtml(gap.gap_id)}}</strong><br>
                 <span class="lang-en">Status: ${{status}}</span>
-                <span class="lang-zh" style="display:none;">状态: ${{statusZh}}</span><br>
-                <span class="lang-en">Position: ${{formatNumber(gap.gap_start)}} - ${{formatNumber(gap.gap_end)}}</span>
-                <span class="lang-zh" style="display:none;">位置: ${{formatNumber(gap.gap_start)}} - ${{formatNumber(gap.gap_end)}}</span><br>
-                <span class="lang-en">Initial Length: ${{formatBP(gap.gap_len)}}</span>
-                <span class="lang-zh" style="display:none;">初始长度: ${{formatBP(gap.gap_len)}}</span><br>
+                <span class="lang-zh" style="display:none;">状态：${{statusZh}}</span><br>
+                <span class="lang-en">Position: ${{escapeHtml(formatNumber(gap.gap_start))}} - ${{escapeHtml(formatNumber(gap.gap_end))}}</span>
+                <span class="lang-zh" style="display:none;">位置：${{escapeHtml(formatNumber(gap.gap_start))}} - ${{escapeHtml(formatNumber(gap.gap_end))}}</span><br>
+                <span class="lang-en">Initial Length: ${{escapeHtml(formatBP(gap.gap_len))}}</span>
+                <span class="lang-zh" style="display:none;">初始长度：${{escapeHtml(formatBP(gap.gap_len))}}</span><br>
             `;
 
             // Extended length (only for filled gaps)
             if (gap.filled && gap.fill_length > 0) {{
                 content += `
-                    <span class="lang-en">Extended Length: ${{formatBP(gap.fill_length)}}</span>
-                    <span class="lang-zh" style="display:none;">延伸后长度: ${{formatBP(gap.fill_length)}}</span><br>
+                    <span class="lang-en">Extended Length: ${{escapeHtml(formatBP(gap.fill_length))}}</span>
+                    <span class="lang-zh" style="display:none;">延伸后长度：${{escapeHtml(formatBP(gap.fill_length))}}</span><br>
                 `;
             }} else {{
                 content += `
                     <span class="lang-en">Extended Length: -</span>
-                    <span class="lang-zh" style="display:none;">延伸后长度: -</span><br>
+                    <span class="lang-zh" style="display:none;">延伸后长度：-</span><br>
                 `;
             }}
 
             if (gap.filled) {{
-                content += `<span class="lang-en">Type: ${{gap.fill_type}}</span>`;
-                content += `<span class="lang-zh" style="display:none;">类型: ${{gap.fill_type}}</span>`;
+                content += `<span class="lang-en">Type: ${{escapeHtml(gap.fill_type)}}</span>`;
+                content += `<span class="lang-zh" style="display:none;">类型：${{escapeHtml(gap.fill_type)}}</span>`;
             }}
 
             tooltip.innerHTML = content;
@@ -1679,26 +1566,38 @@ class GapFillingVisualizer:
             final: 'all'
         }};
 
+        function buildFilterMenu(container, tableType, allLabel, chromNames) {{
+            container.innerHTML = '';
+            const allItem = document.createElement('div');
+            allItem.className = 'chrom-filter-item active';
+            allItem.textContent = allLabel;
+            allItem.addEventListener('click', (e) => {{
+                e.stopPropagation();
+                selectChrom(tableType, 'all');
+            }});
+            container.appendChild(allItem);
+
+            chromNames.forEach(chrom => {{
+                const item = document.createElement('div');
+                item.className = 'chrom-filter-item';
+                item.textContent = chrom;
+                item.addEventListener('click', (e) => {{
+                    e.stopPropagation();
+                    selectChrom(tableType, chrom);
+                }});
+                container.appendChild(item);
+            }});
+        }}
+
         function initChromFilters() {{
             const chromNames = Object.keys(gapsByChrom).sort();
 
             // Initialize filters for all three tables
             ['initial', 'tasks', 'final'].forEach(tableType => {{
-                // English filter
                 const containerEn = document.getElementById(`${{tableType}}-chrom-filter`);
-                let htmlEn = '<div class="chrom-filter-item active" onclick="selectChrom(\\'${{tableType}}\\', \\'all\\')">All</div>';
-                chromNames.forEach(chrom => {{
-                    htmlEn += `<div class="chrom-filter-item" onclick="selectChrom('${{tableType}}', '${{chrom}}')">${{chrom}}</div>`;
-                }});
-                containerEn.innerHTML = htmlEn;
-
-                // Chinese filter
                 const containerZh = document.getElementById(`${{tableType}}-chrom-filter-zh`);
-                let htmlZh = '<div class="chrom-filter-item active" onclick="selectChrom(\\'${{tableType}}\\', \\'all\\')">全部</div>';
-                chromNames.forEach(chrom => {{
-                    htmlZh += `<div class="chrom-filter-item" onclick="selectChrom('${{tableType}}', '${{chrom}}')">${{chrom}}</div>`;
-                }});
-                containerZh.innerHTML = htmlZh;
+                buildFilterMenu(containerEn, tableType, 'All', chromNames);
+                buildFilterMenu(containerZh, tableType, '全部', chromNames);
             }});
         }}
 
