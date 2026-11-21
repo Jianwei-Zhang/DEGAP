@@ -86,7 +86,7 @@ The `environment.yml` file declares Python, core Python packages (Biopython, Pys
 
 **Supported Read Files:**
 - `--hifi`: HiFi reads file(s), supports one or more files (formats: `.fa`, `.fq`, `.fa.gz`, `.fq.gz`, `.fasta`, `.fastq`)
-- `--ont`: ONT reads file(s), supports one or more files (formats: `.fa`, `.fq`, `.fa.gz`, `.fq.gz`, `.fasta`, `.fastq`)
+- `--ont`: one or more ONT read files. Use original `.fq` / `.fastq` (optionally `.gz`) for ONT-only assembly, including mixed-mode ONT-only fallback. ONT FASTA is supported only as supplementary mixed `--ul` input when HiFi remains available.
 
 **Note:** At least one of `--hifi` or `--ont` must be provided.
 You can provide multiple files directly, for example:
@@ -137,7 +137,7 @@ python bin/DEGAP.py --mode gapfiller \
     --seqleft ./path/gapLeftSequence.fasta \
     --seqright ./path/gapRightSequence.fasta \
     --hifi ./path/HiFiReads.fa \
-    --ont ./path/ONTReads.fa \
+    --ont ./path/ONTReads.fq.gz \
     --out ./path/Output \
     --MaximumExtensionRound 25 \
     --kmer_filter \
@@ -156,7 +156,7 @@ Designed for assemblies with gaps. Links contigs and fills gaps by elongating ed
 python bin/DEGAP.py --mode ctglinker \
     --ctgseq ./path/contigs.fasta \
     --hifi ./path/HiFiReads.fa \
-    --ont ./path/ONTReads.fa \
+    --ont ./path/ONTReads.fq.gz \
     --out ./path/Output \
     --MaximumExtensionRound 25 \
     --kmer_filter \
@@ -185,7 +185,7 @@ python bin/DEGAP.py --mode telseeker \
     --motif TTAGGG \
     -e Chr01.L Chr01.R \
     --hifi ./path/HiFiReads.fa \
-    --ont ./path/ONTReads.fa \
+    --ont ./path/ONTReads.fq.gz \
     --out ./path/Output \
     --work 4 \
     --tel-n 100 \
@@ -288,7 +288,7 @@ python bin/DEGAP.py --mode telseeker_ctg \
     --ctg ./path/chr2.R.ctg.fa R \
     --motif TTAGGG \
     --hifi ./path/HiFiReads.fa \
-    --ont ./path/ONTReads.fa \
+    --ont ./path/ONTReads.fq.gz \
     --out ./path/TelSeekerCtgOut \
     --work 4 \
     --tel-n 100 \
@@ -325,7 +325,7 @@ Automated pipeline for whole-genome gap filling. Automatically detects gaps and 
 python bin/AutoGapfiller.py \
     --genome ./path/genome.fasta \
     --hifi ./path/HiFiReads.fa \
-    --ont ./path/ONTReads.fa \
+    --ont ./path/ONTReads.fq.gz \
     --out ./path/Output \
     --work 4 \
     --MaximumExtensionRound 25 \

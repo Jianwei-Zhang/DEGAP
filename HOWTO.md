@@ -206,7 +206,7 @@ for an old task and leave its results intact.
    - Best for high-accuracy gap filling with HiFi reads
    - Lower computational requirements
 
-2. **ONT-only mode**: Provide only `--ont` parameter (one or more files)
+2. **ONT-only mode**: Provide only `--ont` with original FASTQ/FASTQ.gz files containing genuine qualities (one or more files)
    - Suitable when only ONT reads are available
    - Good for long-range gap filling
 
@@ -231,7 +231,7 @@ for an old task and leave its results intact.
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `--hifi` | HiFi reads file(s), supports one or more files (.fa/.fq/.fa.gz/.fq.gz/.fasta/.fastq) | None |
-| `--ont` | ONT reads file(s), supports one or more files (.fa/.fq/.fa.gz/.fq.gz/.fasta/.fastq) | None |
+| `--ont` | ONT reads; original FASTQ(.gz) required for ONT-only assembly, including mixed→ONT-only fallback; multiple files supported | None |
 | `--seqleft` | Left flanking sequence (GapFiller) | None |
 | `--seqright` | Right flanking sequence (GapFiller) | None |
 | `--ctgseq` | Input contigs (CtgLinker) | None |
@@ -356,7 +356,7 @@ The `--kmer_filter` parameter is a switch to enable k-mer based read filtering, 
 | Parameter | Description |
 |-----------|-------------|
 | `--hifi` | HiFi reads file(s) (FASTA/FASTQ, .gz supported; multiple files supported) |
-| `--ont` | ONT reads file(s) (FASTA/FASTQ, .gz supported; multiple files supported) |
+| `--ont` | ONT reads; original FASTQ(.gz) required for ONT-only assembly; FASTA only as mixed `--ul` supplementary input |
 
 **Common Parameters:**
 
