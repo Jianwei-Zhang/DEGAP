@@ -96,6 +96,19 @@ GapFiller 管理两个家族。AutoGapfiller 每个 gap 创建一个双向任务
 
 ## 实施记录
 
-1. 2026-11-21：先落设计与验收文档。代码尚未切换到新算法。
+1. 2026-11-21：先落设计与验收文档（`2a1064a`）。
+2. 2026-11-21：新增 `bin/ExtensionFamilies.py` 与 `bin/FamilyOverlap.py`，实现独立于旧 CLI 的家族调度、共享预算、不可变版本记录、阶段恢复和真实 MUMmer 闭合适配。**现有入口尚未切换**，不能据此认为四个模式已完成。
+   - `tests/test_extension_families.py`：31 项，覆盖左右/多候选调度、冻结侧、历史闭合、预算、唯一候选择优、单端目标、断点和产物损坏。
+   - `tests/test_family_overlap.py`：11 项，包含本机真实 MUMmer 双向连接、L3/R2 胜过错误 R3、工具阶段中断后复用、损坏阶段拒绝；受控拼接与已知完整序列完全一致。
+   - 验证命令（DEGAP 仓库根目录）：`python3 -m unittest discover -s tests -p 'test_*.py'`；本次 79 项通过（42 新增、37 既有），无跳过。真实 MUMmer 测试在工具缺失时会跳过，届时不能声称完成真实工具验证。
+   - 本次未运行真实 reads 的 minimap2/局部组装流水线，未验证客户数据或填补率提升。
+
+### 下一阶段接入要点
+
+- 从现有单轮流程接入 reads 搜索和局部组装；延后固定 `terminalSeq` 闭合，改由家族调度器统一比较。
+- 已发现旧 `FindExtensionReads` 有把工具异常转换为 `initializationError` 等 note 的路径，另有外部命令失败后继续的路径；接入时必须明确区分工具故障和正常没有延伸，不得直接把所有 note 当作家族耗尽。
+- 旧 `OutputSequence`、日志、AGP 和可视化都假设单侧固定终点，需要同步适配；在这些契约接通前不切换生产入口。
+- 第零代旧直连要求 identity >=80%；后续旧 `linkgap` 没有额外 identity 下限。新 MUMmer 适配明确保留这一区别，均要求至少 10 kb 重叠，并按已确认的 identity 优先顺序选唯一结果。
+- 旧单侧任务隔离、AutoGapfiller 单任务、CtgLinker 候选完整 contig 重建、TelSeeker 单端适配及用户文档仍待完成。
 
 后续每阶段更新本节与验收勾选，只根据实际验证结果勾选，不以设计或窄范围测试替代端到端证据。
