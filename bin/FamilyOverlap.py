@@ -153,7 +153,10 @@ class MummerOverlap:
     def __call__(self, left, right):
         left_tail, offset = self._end(left, "left")
         right_tail, _ = self._end(right, "right")
-        pair_id = fingerprint([left.__dict__, right.__dict__, self.contract])
+        # Raw alignment depends on sequence content and tools, not which endpoint
+        # search currently calls a source "primary" or "candidate". Rebind the
+        # resulting coordinates to the current family/version after cache reuse.
+        pair_id = fingerprint([left.sha256, left.length, right.sha256, right.length, self.contract])
         directory = self.directory / pair_id
         directory.mkdir(parents=True, exist_ok=True)
         paths = {}

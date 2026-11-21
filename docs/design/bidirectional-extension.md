@@ -1,6 +1,6 @@
 # 双向历史家族延伸
 
-状态：设计已确认，实施中。本文描述目标行为，不代表所有入口已启用。
+状态：已实现并通过分支验收。普通 gap 与 CtgLinker 使用历史家族机制，TelSeeker 保持单端目标并复用底层。
 
 确认日期：2026-11-21。实施分支：`feat/bidirectional-gap-extension`。
 
@@ -66,6 +66,17 @@ GapFiller 管理两个家族。AutoGapfiller 每个 gap 创建一个双向任务
 
 必须保存候选原始 contig/端点身份、方向和完整序列来源。当前端点库保存完整 contig/scaffold 及反向互补候选；比对时截取的端点片段不得当作完整 contig。闭合结果应正确重建完整序列、AGP 和已用 contig 信息。候选序列或连接上下文改变后，不复用陈旧结果。
 
+#### CtgLinker 接入约定
+
+保留现有 N50Check 的 N 分割、seed 长度过滤和最长未放置 contig 起点规则，但不继续用旧单侧 `roundResult`、字符串状态标记和“再补完整候选”的拼接方式。新状态机直接消费家族结果：
+
+- 优先继续未完成的组装体，否则选择最长未放置 contig；对当前组装体左右外端交替进行连接搜索。
+- 每次外端搜索以当前完整组装体为主家族，其余可用 contig/已完成 scaffold 的正向、反向互补为候选家族。禁止与自身或共享原始 contig 的候选连接。
+- 连接成功后以选中的历史版本及完整坐标拼接一次，移除已吸收候选，沿候选的另一外端继续；没有连接时冻结该外端，延伸历史保留，但不把未确认连接的候选或伸长序列强行加入 scaffold。
+- 端点搜索之间共享内容相同、方向和 reads 历史及参数相同的单轮计算结果。缓存复用仍作为当前家族的一次逻辑尝试计入该搜索的预算，不放大预算。
+- 所有原始 contig 的归属及方向显式记录；AGP 对未改动区间沿用原组成区间，对局部组装后的累计序列使用真实快照组成序列，不能把修订后的碱基冒称为原始 contig。
+- 项目断点保存当前组装池、外端状态、待完成的端点搜索和吸收记录；最终校验所有保留输入 contig 恰好归属一个 scaffold，并从导出的 AGP/组成序列重建 FASTA。
+
 ### TelSeeker
 
 复用单轮延伸和家族状态机制，但没有真实对侧时仍为单端任务，保留端粒检测及停止条件。不得将当前兼容字段 `terminalSeq=initialSeq` 当作真实对侧进行自闭合。
@@ -88,11 +99,11 @@ GapFiller 管理两个家族。AutoGapfiller 每个 gap 创建一个双向任务
 - [x] 独立 reads 历史、共享只读输入、版本对不重复检查。
 - [x] 断点恢复、执行中断、内容损坏和输入变化处理；恢复不重复扣预算。
 - [x] GapFiller 真实单轮工具调用接入；保留必要历史，正确输出序列/AGP/日志。
-- [ ] AutoGapfiller 单任务生成、执行、汇总及可视化兼容。
-- [ ] CtgLinker 多候选延伸/共享预算/完整 contig 重建及已用端点追踪。
-- [ ] TelSeeker 统一底层且没有伪对侧闭合；既有端粒测试通过。
+- [x] AutoGapfiller 单任务生成、执行、汇总及可视化兼容。
+- [x] CtgLinker 多候选延伸/共享预算/完整 contig 重建及已用端点追踪。
+- [x] TelSeeker 统一底层且没有伪对侧闭合；既有端粒测试通过。
 - [x] `--flag` 忽略提示、CLI 帮助和使用文档同步。
-- [ ] 定向单元与集成测试通过，现有回归测试通过；区分受控测试和真实数据成效。
+- [x] 定向单元与集成测试通过，现有回归测试通过；区分受控测试和真实数据成效。
 
 ## 实施记录
 
@@ -114,11 +125,37 @@ GapFiller 管理两个家族。AutoGapfiller 每个 gap 创建一个双向任务
    - 真实工具验证使用本机已有 GRT 环境（包含 pysam/hifiasm），无安装/修改环境。60 kb 合成已知序列的 reads 经过 minimap2、samtools、hifiasm、MUMmer，通过公开 GapFiller 类入口完成两侧延伸和闭合，结果逐碱基一致。此为受控 HiFi 工具链证据，不是客户数据、ONT/mixed 全流程或成效基准。
    - 系统 Python 缺少 pysam，不适合运行新单轮集成测试；应使用已具备依赖的环境。GRT 当前没有 seqkit，因此尚未实跑 DEGAP.py 的完整 reads 预处理入口（CLI 兼容/旧目录拒绝已测）。
 
-### 下一阶段接入要点
+4. 2026-11-21：CtgLinker 多候选接入已编写，TelSeeker 单端适配推进中，统一终验尚未完成。
+   - `FamilyCtgLinker.py` 接管公开入口，以明确的成员/方向/序列区间组成代替旧 `roundResult` 推断；项目 checkpoint 保存端点搜索与待消费结果。检查器和报告读取新结果清单。
+   - CtgLinker 阶段已有一次 129 项全套测试通过的中间证据，含受控 HiFi 公开入口、多候选延伸与精确序列/AGP 重建；此后新增修改尚未统一回归，不能将该计数作为当前树最终验收。
+   - `SingleRound` 加入跨端点搜索的内容身份缓存；原始 MUMmer 比对缓存与家族标签分离，解析时绑定当前家族，避免同一序列换角色后重复计算。
+   - `FamilyTelomere.py` 已编写单家族适配，`TelomereExtender` 已改为共享调度器，不再每轮清空 used/last reads。端粒检测仍是独立成功条件，无伪对侧、自闭合或反向家族。
+   - TelSeeker 新增检测阶段收据，终止轮增长计入预算；检查器严格路径区分工具故障与无连接，复用已完成 MUMmer 阶段。接入时发现并修正右端 1-based 坐标切片偏移，以及容差内未比对尾部的拼接问题，已补精确序列测试用例，待终验。
+   - 按用户要求，中间只做必要轻量检查，完整回归及真实工具链在各模式接入完成后统一运行。新增测试不因已写入就视为通过。
 
-- CtgLinker 仍使用旧单侧 GapFiller 路径。接入多候选家族时，需要更新 `_extract_used_contigs_from_gapfiller`、`setGapFiller` 及最终 scaffold 拼接，不能伪造旧 `roundResult` 或只替换调用。当前 `_create_edge_library` 写出的是完整序列及 RC 候选，保持身份和方向，防止旧重建逻辑再次补入整个候选造成重复。
-- TelSeekerPart2 的单端循环以及 TelSeekerCtg 调用尚未切换，需复用新单轮/家族状态、保持端粒判定与单端输出，禁止 `terminalSeq=initialSeq` 自闭合。
-- 需完成 AutoGapfiller 从实际 CLI 任务执行到最终基因组整合的受控验证，以及 ONT/mixed 的针对性接入验证。
-- 第零代旧直连要求 identity >=80%；后续旧 `linkgap` 没有额外 identity 下限。适配保持这一区别，均要求至少 10 kb 重叠。
+5. 2026-11-21：完成消费者接入并统一验收。
+   - TelSeeker/TelSeekerCtg 结果清单、报告和新旧目录预检已接入。单端主流程不会用旧 summary 存在性绕过家族验证；已有家族跳过重复第零轮检查。TelSeekerCtg 的 status.tsv 必须有输入/参数契约和内容收据才可复用；正常停止可发布，工具错误保留待恢复状态，不缓存为最终失败。
+   - 首轮统一运行 150 项，仅 AutoGapfiller 完整 CLI 测试失败。端到端测试暴露并修复两处消费者问题：执行队列未收集新的 bidirectional 任务，以及整合时把 gap 的 1-based 坐标直接用于 Python 切片。增加执行队列断言及边界/内部替换的精确序列测试。
+   - 补充 AutoGapfiller 整体重跑复用、CtgLinker 完整 CLI、TelSeekerCtg 完整 CLI/已完成任务恢复验证。真实工具测试对 HiFi、ONT、mixed 的已知合成序列结果逐碱基比较，不以日志成功代替序列正确性。
+   - 默认清理路径原会删除准备好的 reads/分块，破坏跨家族与恢复复用；新路径明确保留这些输入以及历史和阶段收据，CLI 帮助和文档同步说明。
+   - 测试只使用已有 GRT 环境，缺少的 seqkit 和 GNU parallel 放在 `/tmp/degap-family-validation-tools`。下载分别核对发布资产 SHA-256 和 Ubuntu 软件包索引 SHA-256，仅解包使用，未安装到共享环境。
 
-后续每阶段更新本节与验收勾选，只根据实际验证结果勾选，不以设计或窄范围测试替代端到端证据。
+### 最终验收记录
+
+- 统一测试：**152 项全部通过，无跳过**，用时 179.876 秒。日志：`/tmp/degap-family-final-regression.log`；受控 CLI 产物保存在 `/tmp/degap-family-final-fixtures`（本机验证位置，不随仓库分发）。
+- 从 CGAT 工作区运行的命令：
+
+  ```bash
+  PATH=/tmp/degap-family-validation-tools:$PATH \
+    DEGAP_VALIDATION_ARTIFACTS=/tmp/degap-family-final-fixtures \
+    PYTHONWARNINGS=ignore \
+    micromamba run -n GRT python -m unittest discover -s DEGAP2.0/tests -p 'test_*.py'
+  ```
+
+  在其他机器上需先提供 BioPython/pysam 等 Python 依赖及 seqkit、GNU parallel、minimap2、samtools、hifiasm、MUMmer 工具；缺少真实工具导致的测试跳过不等于完成工具链验收。
+- `test_family_cli.py` 覆盖真实 HiFi/ONT/mixed gap CLI、默认清理级别保留恢复输入、HiFi 重跑阶段复用、CtgLinker CLI/完整 scaffold 与组成校验、AutoGapfiller 单任务执行到最终基因组及报告/重跑、TelSeeker 真实单端延伸、TelSeekerCtg 完整 CLI 与收据恢复。
+- `test_extension_families.py` / `test_family_overlap.py` 覆盖历史配对、冻结侧继续、唯一择优、共享预算与损坏/中断恢复；`test_family_round.py` / `test_family_results.py` 覆盖单轮隔离和阶段复用、结果/AGP、消费者坐标和任务队列；`test_family_ctglinker.py` / `test_family_telomere.py` 覆盖候选方向/吸收/重建、单端检测与新结果报告。既有端粒 tests 同时通过。
+
+- 真实 reads 工具链验证使用受控合成数据，不是客户数据验收，也不代表已经证明错误率下降或填补率提升。
+- 保留第零代 identity >=80% 与后续旧 `linkgap` 没有额外 identity 下限的区别，均要求至少 10 kb 重叠。
+- 本次只在 DEGAP 功能分支提交/推送，不发布版本、不更新 CGAT 捆绑运行时，也不合入 DEGAP 主分支。

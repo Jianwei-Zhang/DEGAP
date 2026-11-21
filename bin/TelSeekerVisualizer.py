@@ -112,6 +112,11 @@ class TelSeekerPart2LogParser:
     
     def _parse_main_log(self):
         """解析 extension/extension.log 中的参数配置"""
+        if (self.extension_dir / 'telomere-result.json').exists():
+            from FamilyTelomere import load_telomere_result
+            self.family_result = load_telomere_result(self.extension_dir)
+            self.config.update(self.family_result['config'])
+            return
         defaults = {
             'max_rounds': 30,  # Updated default value to match new unified parameter
             'max_extension_length': 1000000,
@@ -138,6 +143,9 @@ class TelSeekerPart2LogParser:
                 self.config[k] = v
     
     def _parse_rounds(self):
+        if getattr(self, 'family_result', None):
+            self.rounds_data = self.family_result['rounds']
+            return
         if not self.extension_dir.exists():
             return
         round_dirs = sorted([d for d in self.extension_dir.iterdir() if d.is_dir() and d.name.startswith('round')],
@@ -200,6 +208,14 @@ class TelSeekerPart2LogParser:
             self.rounds_data.append(rdata)
     
     def _parse_summary(self):
+        if getattr(self, 'family_result', None):
+            result = self.family_result['result']
+            self.summary_info.update(total_rounds=result['rounds'],
+                                     total_extension_length=result['total_extension_length'],
+                                     stop_reason=result['stop_reason'],
+                                     connection_found=result['success'],
+                                     connected_read_id=(result.get('connection_info') or {}).get('read_id'))
+            return
         summary_file = self.extension_dir / 'extension.summary'
         if not summary_file.exists():
             return
@@ -216,7 +232,7 @@ class TelSeekerPart2LogParser:
     
     def _parse_final_info(self):
         ext_success = self.summary_info.get('connection_found', False)
-        direct_success = self.direct_check.get('success', False)
+        direct_success = self.direct_check.get('success', False) and not getattr(self, 'family_result', None)
         
         self.final_info['success'] = bool(direct_success or ext_success)
         self.final_info['method'] = 'direct' if direct_success else ('extension' if ext_success else 'none')

@@ -27,9 +27,10 @@ def _state(obj, excluded=()):
 
 
 class SingleRound:
-    def __init__(self, base, *, context):
+    def __init__(self, base, *, context, shared_cache=None):
         self.base = base
         self.context = context
+        self.shared_cache = Path(shared_cache) if shared_cache is not None else None
 
     def _elongation(self, family, directory):
         base = copy.copy(self.base)
@@ -76,12 +77,29 @@ class SingleRound:
         return state
 
     def __call__(self, family, directory):
+        if self.shared_cache is None:
+            return self._execute(family, Path(directory))
+        # Opposite endpoints do not affect a single extension attempt. Reuse its
+        # work across endpoint searches, but keep each search's budget independent.
+        identity = fingerprint({"context": self.context, "input_sha256": family.current.sha256,
+                                "direction": family.direction, "version": family.current.number,
+                                "attempt": family.attempts, "used_reads": sorted(family.used_reads),
+                                "last_reads": sorted(family.last_reads)})
+        cache = self.shared_cache / identity
+        cache.mkdir(parents=True, exist_ok=True)
+        import fcntl
+        with (cache / "stage.lock").open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            atomic_json(Path(directory) / "shared-stage.json", {"identity": identity, "directory": str(cache.resolve())})
+            return self._execute(family, cache, identity=identity)
+
+    def _execute(self, family, directory, identity=None):
         from GapFillerClass import InputSequence, OutputSequence
         from FindExtensionReads import FindExtensionReads
         from FindExtensionContigs import FindExtensionContigs
 
         directory = Path(directory)
-        identity = fingerprint({"context": self.context, "family": asdict(family)})
+        identity = identity or fingerprint({"context": self.context, "family": asdict(family)})
 
         def find_reads(work):
             elongation = self._elongation(family, work)

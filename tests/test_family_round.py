@@ -132,6 +132,19 @@ class SingleRoundTests(unittest.TestCase):
         result = self.run_adapter()
         self.assertEqual(Path(result.sequence_path).read_text().splitlines()[1], "ACGT" * 10 + "AAAAA")
 
+    def test_identical_extension_is_shared_across_endpoint_searches(self):
+        self.runner = SingleRound(self.base, context={"fixture": 1}, shared_cache=self.root / "shared")
+        first = self.run_adapter()
+        copied_seed = self.root / "copied.fa"
+        copied_seed.write_bytes(self.seed.read_bytes())
+        other = Family("other-candidate", "rightward", [Version.capture("other-candidate", 0, copied_seed)], attempts=1)
+        self.attempt = self.root / "second-search-attempt"
+        self.attempt.mkdir()
+        second = self.run_adapter(other)
+        self.assertEqual(first, second)
+        self.assertEqual(self.calls, ["reads", "assembly"])
+        self.assertTrue((self.attempt / "shared-stage.json").exists())
+
     def test_completed_reads_and_assembly_stages_reused(self):
         result = self.run_adapter()
         again = self.run_adapter()

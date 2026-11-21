@@ -152,6 +152,17 @@ class RealMummerTests(unittest.TestCase):
         with patch.object(FamilyOverlap.subprocess, "run", side_effect=AssertionError("unexpected rerun")):
             self.assertEqual(self.overlap(left, right), matches)
 
+    def test_alignment_reused_when_identical_sequences_change_family_labels(self):
+        left = Version.capture("primary", 1, self.write("extendedL", self.truth[:31000]))
+        right = Version.capture("candidate0", 1, self.write("extendedR", self.truth[-31000:]))
+        first = self.overlap(left, right)
+        with patch.object(FamilyOverlap.subprocess, "run", side_effect=AssertionError("unnecessary remapping")):
+            second = self.overlap(replace(left, family="candidate2"), replace(right, family="primary"))
+        self.assertEqual(len(first), len(second))
+        self.assertEqual(second[0].left_family, "candidate2")
+        self.assertEqual(second[0].right_family, "primary")
+        self.assertEqual(second[0].identity, first[0].identity)
+
     def test_corrupt_completed_stage_is_not_silently_reused_or_overwritten(self):
         left = Version.capture("L", 1, self.write("extendedL", self.truth[:31000]))
         right = Version.capture("R", 1, self.write("extendedR", self.truth[-31000:]))

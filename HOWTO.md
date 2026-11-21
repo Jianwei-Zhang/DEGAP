@@ -330,7 +330,7 @@ The `--kmer_filter` parameter is a switch to enable k-mer based read filtering, 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `-t, --thread` | Number of threads | 20 |
-| `--remove` | Cleanup level (1/2/3) | 2 |
+| `--remove` | Legacy cleanup level; family histories, prepared reads and verified stages are retained | 2 |
 
 ### Advanced Parameters
 
@@ -377,7 +377,7 @@ The `--kmer_filter` parameter is a switch to enable k-mer based read filtering, 
 | `--filterDepthHifi` | HiFi depth filtering threshold | None |
 | `--filterDepthOnt` | ONT depth filtering threshold | None |
 | `--edge` | Edge length for misassembly detection | 500 |
-| `--remove` | File cleanup level (1/2/3) | 2 |
+| `--remove` | Legacy cleanup level; family recovery inputs and histories are retained | 2 |
 
 ## Usage Examples
 
@@ -678,44 +678,41 @@ when the legacy `--remove` option is supplied.
 
 ### CtgLinker Output Structure
 
-```
+```text
 output_directory/
-├── DG.scaffold.fa                  # Final scaffold sequences (main result)
-├── DG.scaffold.log                 # Assembly statistics (N50, etc.)
-├── DG.scaffold.agp                 # AGP format scaffold assembly
-├── DG.project.fa                   # All project sequences
-├── DG.agp.path.txt                 # AGP path information
-├── Genome.inputCtg.fa              # Processed input contigs
-├── Genome.inputCtg.log             # Input contigs statistics
-├── used.txt                        # Contig usage tracking
-├── unplaced.txt                    # Unplaced contigs list
-├── project/                        # Project-by-project results
-│   ├── DG1/                       # Project 1
-│   │   ├── DG1.fa                 # Project sequence
-│   │   ├── DG1.log                # Project log
-│   │   ├── DG1.agp                # Project AGP
-│   │   ├── DG1.agp.path.txt       # AGP path
-│   │   ├── DG1.used.txt           # Used contigs
-│   │   ├── DG1.input.log          # Input log
-│   │   └── data/                  # Project data
-│   │       ├── terminalCtg.fa     # Terminal contigs
-│   │       ├── left/              # Left extension
-│   │       │   └── process/       # Extension rounds
-│   │       └── right/             # Right extension
-│   │           └── process/       # Extension rounds
-│   ├── DG2/                       # Project 2
-│   └── ...
-├── hifi_reads_part/                # Split HiFi reads (if preprocessing done)
-├── ont_reads_part/                 # Split ONT reads (if preprocessing done)
-└── Genome.inputCtg.usefullReads.*  # Filtered reads (if depth filtering enabled)
+├── DG.scaffold.fa                  # Final scaffolds; unjoined contigs retained
+├── DG.scaffold.log                 # Assembly statistics
+├── DG.scaffold.agp                 # Reconstruction coordinates
+├── DG.scaffold.components.fa       # Actual sequence components used by AGP
+├── DG.project.fa                   # Joined assembly snapshots
+├── Genome.inputCtg.fa              # N-split/length-filtered input contigs
+├── Genome.inputCtg.log             # Input statistics
+├── used.txt / unplaced.txt         # Original-contig membership tracking
+├── ctg-families.json               # Project checkpoint / pending endpoint search
+├── ctglinker-result.json           # Verified artifacts and assembly history
+├── ctglinker-family-report.html    # Links to endpoint histories and evidence
+├── ctg-sources/                    # Immutable input components and RC views
+├── ctg-assemblies/                 # Composed scaffold snapshots
+├── shared-extension-stages/        # Reusable read-selection/assembly stages
+└── project/
+    └── endpoint-000001/            # One budget shared by all participating families
+        ├── families.json           # Primary + candidate forward/RC histories
+        ├── attempts/              # Isolated family attempts and stage receipts
+        ├── family-result.json     # Single winner or explicit unclosed status
+        └── family-report.html     # Historical version comparisons
 ```
 
-**Key Output Files:**
-- `DG.scaffold.fa`: Final scaffold sequences (main result)
-- `DG.scaffold.log`: Assembly statistics including N50, total length, number of scaffolds
-- `DG.scaffold.agp`: AGP format file describing scaffold assembly
-- `DG.project.fa`: All intermediate project sequences
-- `project/DG*/DG*.fa`: Individual project sequences for each linking iteration
+A candidate can continue when the primary stops, and vice versa. A successful
+search selects one best overlap across the current comparison frontier. Closed
+assemblies record original membership and orientation, so a contig cannot be
+consumed twice. A failed search keeps its history without forcing an unconfirmed
+join into the final scaffold. Identical verified extension work can be reused
+across searches; it still consumes a logical attempt in the receiving search.
+
+Rerun the same command to resume new-format checkpoints. Old single-sided output
+is not imported; use a new output directory. `--remove` does not delete histories
+required for family recovery. To reconstruct the final FASTA from AGP, use the
+exported `DG.scaffold.components.fa`, not the original unextended input sequences.
 
 ### TelSeeker Output Structure
 
@@ -734,7 +731,10 @@ output_directory/
 │   │   ├── linker.fa              # Final linker sequence
 │   │   ├── direct.check/          # Direct connection check
 │   │   ├── extension/             # Extension results
-│   │   │   └── round*/            # Round-by-round extension
+│   │   │   ├── families.json      # Single real endpoint and shared round state
+│   │   │   ├── attempts/0/        # Attempts with read/assembly/detection receipts
+│   │   │   ├── telomere-result.json # Verified result used by reports
+│   │   │   └── telomere-alignments/ # Reusable telomeric-read alignments
 │   │   └── workspace/             # Working files
 │   ├── Chr01.Right/               # Job for Chr01 right end
 │   └── ...
@@ -850,7 +850,7 @@ output_directory/
 **Disk Space**:
 - Temporary files can be large
 - Estimate: `Disk = genome_size × 10-20`
-- Use `--remove 3` to minimize disk usage
+- Family recovery keeps prepared reads, historical sequences and verified stages at every `--remove` level. Plan disk capacity for these retained files; archive or delete a finished workspace only when recovery is no longer needed.
 
 ### TelSeeker Performance Tips
 

@@ -138,6 +138,11 @@ python bin/DEGAP.py --mode gapfiller \
     -t 20
 ```
 
+Family workflows retain prepared reads, indices, historical sequences and verified
+stages even with `--remove 1` or `--remove 2`, because they are required for safe
+resume and reuse. Delete an entire finished workspace only when its histories and
+recovery are no longer needed.
+
 ### CtgLinker Mode
 Designed for assemblies with gaps. Links contigs and fills gaps by elongating edges.
 
@@ -151,6 +156,19 @@ python bin/DEGAP.py --mode ctglinker \
     --kmer_filter \
     -t 20
 ```
+
+For each outer-end search, the current assembly and all eligible candidate
+endpoints (including reverse complements) extend as separate families. Every new
+version is checked against the opposite history; only the best eligible connection
+is consumed. The round and added-length limits cover **all families in that search**,
+not each candidate separately or the entire project. A stopped family remains an
+overlap target. An input contig cannot be used twice in a scaffold.
+
+Rerunning the same command resumes `ctg-families.json` and the per-endpoint family
+checkpoints. Changed inputs or legacy single-sided output require a new directory.
+`DG.scaffold.agp` reconstructs `DG.scaffold.fa` from `DG.scaffold.components.fa`,
+including actual extended snapshots. See `ctglinker-family-report.html` and
+`ctglinker-result.json` for selected versions, orientation and original membership.
 
 ### TelSeeker Mode
 Designed for telomere extension and chromosome-level assembly.
@@ -244,6 +262,14 @@ python bin/DEGAP.py --mode telseeker \
     --tel-mm 1 \
     --MaximumExtensionRound 25
 ```
+
+Telomere extension uses the same persistent single-round engine, but keeps **one
+real endpoint family**: success still requires connection to a telomeric read,
+not overlap with its own initial seed. Failed attempts count toward the round
+limit, and the successful terminal round contributes to added length. New-format
+extension checkpoints resume with the same inputs and limits; old single-sided
+extension directories must not be reused. The per-end `extension/telomere-result.json`
+records verified results and round evidence for reports.
 
 ### TelSeeker Ctg Mode
 Designed for extending selected contig endpoints without preparing a split genome

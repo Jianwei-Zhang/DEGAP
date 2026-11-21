@@ -46,7 +46,7 @@ def load_result(directory):
     return result
 
 
-def publish_search(search, name=None):
+def publish_search(search, name=None, *, unclosed_families=None):
     """Export one joined sequence, or separate unclosed family sequences.
 
     AGP components are actual exported cumulative sequences, not invented reads
@@ -56,13 +56,17 @@ def publish_search(search, name=None):
     if search.status == "running" or search.pending:
         raise ValueError("Cannot publish an incomplete family search")
     directory = search.directory
+    exported = list(search.families) if unclosed_families is None else list(unclosed_families)
+    if not exported or len(exported) != len(set(exported)) or any(key not in search.families for key in exported):
+        raise ValueError("Invalid unclosed-family export selection")
     name = name or directory.name
     if not name or Path(name).name != name or any(c.isspace() for c in name):
         raise ValueError("Result name must be a single whitespace-free filename component")
     result_file = directory / "family-result.json"
     if result_file.exists():
         result = load_result(directory)
-        if result["search_contract"] != search.contract_id or result["status"] != search.status:
+        if (result["search_contract"] != search.contract_id or result["status"] != search.status or
+                result.get("unclosed_exports", list(search.families)) != exported):
             raise ValueError("Published result belongs to a different search")
         return result
 
@@ -73,6 +77,7 @@ def publish_search(search, name=None):
         "total_extension_length": search.total_length,
         "final_sequence": final_file, "winner": asdict(search.winner) if search.winner else None,
         "gap_length": None, "families": [], "components": {}, "artifacts": {},
+        "unclosed_exports": exported,
     }
     for family in search.families.values():
         result["families"].append({
@@ -104,7 +109,8 @@ def publish_search(search, name=None):
             agp.append(f"{name}\t{winner.left_end + 1}\t{len(sequence)}\t2\tW\t{right_id}\t{winner.right_end + 1}\t{right.length}\t+")
     else:
         records = []
-        for family in search.families.values():
+        for key in exported:
+            family = search.families[key]
             version = family.current
             key = component(version)
             record_id = f"{name}.family{search.order[family.key]}.{search.status}"

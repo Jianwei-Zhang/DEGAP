@@ -274,6 +274,36 @@ class TelSeekerContractTests(unittest.TestCase):
             self.assertEqual(rows[0]["status"], "failed")
             self.assertEqual(rows[0]["stop_reason"], "no_tel_reads")
 
+    def test_telseeker_ctg_status_reuse_requires_verified_receipt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ctg = root / "ctg.fa"
+            ctg.write_text(">ctg1\n" + "ACGT" * 200 + "\n")
+            runner = TelSeekerCtg(self.make_telseeker_ctg_parameter(root, [(str(ctg), "L")]), [41, 20, False])
+            runner._prepare_task_inputs()
+            runner.part1_dir.mkdir()
+            (runner.part1_dir / "Global.left.telo.reads.fa").write_text("")
+            (runner.part1_dir / "Global.right.telo.reads.fa").write_text("")
+            runner._classify_tel_read_availability()
+            task = runner.tasks[0]
+            self.assertEqual(runner._read_existing_status(task)["stop_reason"], "no_tel_reads")
+            runner.MaximumExtensionRound = 999
+            with self.assertRaisesRegex(ValueError, "contract"):
+                runner._read_existing_status(task)
+
+    def test_telseeker_ctg_corrupt_status_is_not_cached_success(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ctg = root / "ctg.fa"
+            ctg.write_text(">ctg1\nACGT\n")
+            runner = TelSeekerCtg(self.make_telseeker_ctg_parameter(root, [(str(ctg), "L")]), [41, 20, False])
+            runner._prepare_task_inputs()
+            runner._write_failure(runner.tasks[0], "no_tel_reads")
+            status = Path(runner.tasks[0]["job_dir"]) / "result" / "status.tsv"
+            status.write_text("forged success")
+            with self.assertRaisesRegex(ValueError, "artifact"):
+                runner._read_existing_status(runner.tasks[0])
+
     def test_parse_linker_info_reads_extension_metadata(self):
         with tempfile.TemporaryDirectory() as tmp:
             info_file = Path(tmp) / "linker.info"

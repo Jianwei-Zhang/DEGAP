@@ -404,8 +404,10 @@ class GapFillingAnalyzer:
         # 替换区域的起始和结束位置（包含 seqleft 和 seqright）
         # seqleft 的起始位置 = gap_start - left_len
         # seqright 的结束位置 = gap_end + right_len
-        replace_start = gap_start - left_len
-        replace_end = gap_end + right_len
+        # GapDetector stores 1-based inclusive genomic coordinates. The
+        # integrator slices Python strings using 0-based inclusive endpoints.
+        replace_start = gap_start - 1 - left_len
+        replace_end = gap_end - 1 + right_len
 
         # 组合结果
         return {
@@ -676,7 +678,14 @@ class JobExecutor:
         for gap_key in sorted(jobs_by_gap.keys()):
             gap_jobs = jobs_by_gap[gap_key]
 
-            # 先添加 left 任务
+            if 'bidirectional' in gap_jobs:
+                job = gap_jobs['bidirectional']
+                if not self._is_job_completed(job):
+                    self.job_list.append({'job': job, 'gap_key': gap_key,
+                                          'has_right': False, 'right_job': None})
+                continue
+
+            # Legacy job configurations remain readable/executable.
             if 'left' in gap_jobs:
                 left_job = gap_jobs['left']
                 # 检查是否已经完成
@@ -933,7 +942,10 @@ class JobExecutor:
         total_jobs = self._collect_jobs()
 
         if total_jobs == 0:
-            print("\nNo jobs to execute!")
+            print("\nNo jobs to execute; collecting verified existing results.")
+            analyzer = GapFillingAnalyzer(self.main_output_dir)
+            analyzer.analyze_all_gaps(self.job_config.get('jobs', []))
+            analyzer.save_to_json(self.gap_filling_dir / 'gap_filling_results.json')
             return {
                 'total_jobs': 0,
                 'completed': 0,
@@ -943,7 +955,7 @@ class JobExecutor:
 
         print(f"\n{'='*60}")
         print(f"Starting parallel execution (workers={self.workers})")
-        print(f"Strategy: For each gap, LEFT must complete before RIGHT can start")
+        print(f"Strategy: One bidirectional family search per gap (legacy left/right jobs remain readable)")
         print(f"{'='*60}\n")
 
         # 按 gap 组织任务
@@ -970,14 +982,19 @@ class JobExecutor:
 
             # 初始化：提交所有 left 任务
             print(f"\n{'='*60}")
-            print(f"Submitting initial LEFT tasks...")
+            print(f"Submitting gap tasks...")
             print(f"{'='*60}\n")
 
             for gap_key, gap_jobs in jobs_by_gap.items():
                 gap_status[gap_key] = {'left_done': False, 'left_success': False}
 
-                if 'left' in gap_jobs:
-                    # 有 left 任务，提交执行
+                if 'bidirectional' in gap_jobs:
+                    job_info = gap_jobs['bidirectional']
+                    print(f"  → Submitting: {job_info['job']['job_name']}")
+                    future = executor.submit(self._run_single_job, job_info)
+                    active_futures[future] = job_info
+                elif 'left' in gap_jobs:
+                    # Legacy left job, submitted before its right fallback
                     job_info = gap_jobs['left']
                     print(f"  → Submitting: {job_info['job']['job_name']}")
                     future = executor.submit(self._run_single_job, job_info)

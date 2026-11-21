@@ -228,7 +228,7 @@ def usage():
 	print ("\nBasic Options:")
 	print ("-o | --out ./path/               Output directory")
 	print ("-t | --thread num                Number of threads (default: 20)")
-	print ("--remove 1|2|3                   File cleanup level (default: 2)")
+	print ("--remove 1|2|3                   Legacy cleanup level; family recovery files are retained (default: 2)")
 	print ("                                 1: only keep final result")
 	print ("                                 2: keep every round basic result")
 	print ("                                 3: keep all files")
@@ -255,8 +255,8 @@ def usage():
 	print ("\nMode Options:")
 	print ("--mode gapfiller|ctglinker|telseeker|telseeker_ctg")
 	print ("\nResume Options:")
-	print ("--resume num                     Resume from specified round (e.g.: --resume 118)")
-	print ("--resume_auto                    Automatically resume from last interrupted round")
+	print ("--resume num                     Unsupported legacy single-sided round selection")
+	print ("--resume_auto                    Resume verified family state (also automatic on rerun)")
 	print ("\n=== MODE SPECIFIC PARAMETERS ===")
 	print ("\ngapfiller mode:")
 	print ("\t--seqleft sequence_file      Sequence before GAP (FASTA format)")
@@ -304,7 +304,7 @@ def getoptions():
 	parser.add_argument('--ont', nargs='+', help='ONT reads file(s) (FASTA/FASTQ format, multiple files supported)')
 
 	parser.add_argument('--remove', type=int, default=2,
-	                   help='1: only keep final result; 2: keep every round basic result; 3: keep all files')
+	                   help='Legacy cleanup level (1/2/3); family histories, prepared reads and verified stages are always retained')
 	parser.add_argument('--edge', type=int, default=500, help='Edge Controller set max Edge length')
 	parser.add_argument('--filterDepthHifi', type=float, default=None, help='Filter HiFi reads by mapped depth. if num==0.3 means: mapped HiFi reads on depth>=0.3*avgdepth and depth<=(2-0.3)*avgdepth will be filtered')
 	parser.add_argument('--filterDepthOnt', type=float, default=None, help='Filter ONT reads by mapped depth. if num==0.2 means: mapped ONT reads on depth>=0.2*avgdepth and depth<=(2-0.2)*avgdepth will be filtered')
@@ -365,13 +365,20 @@ def getoptions():
 	for limit in (args.MaximumExtensionRound, args.MaximumExtensionLength):
 		if limit is not None and limit < 0:
 			parser.error("Extension limits must be nonnegative")
-	if args.mode == 'gapfiller':
+	if args.mode in ('gapfiller', 'ctglinker', 'telseeker', 'telseeker_ctg'):
 		if args.resume is not None:
 			parser.error("Single-sided --resume ROUND is unsupported; rerun the same command to resume family state")
 		if args.out:
 			from FamilyGap import reject_legacy_output
 			try:
-				reject_legacy_output(args.out)
+				if args.mode in ('telseeker', 'telseeker_ctg'):
+					from FamilyTelomere import reject_legacy_telomere_project
+					reject_legacy_telomere_project(args.out)
+				elif args.mode == 'ctglinker':
+					from FamilyCtgLinker import reject_legacy_ctg_output
+					reject_legacy_ctg_output(args.out)
+				else:
+					reject_legacy_output(args.out)
 			except ValueError as error:
 				parser.error(str(error))
 
@@ -541,9 +548,6 @@ def getoptions():
 			if ctg_end.upper() not in ["L", "R"]:
 				print(f"--ctg endpoint must be L or R: {ctg_file} {ctg_end}")
 				sys.exit()
-		if args.resume is not None or args.resume_auto:
-			print("telseeker_ctg mode does not support --resume or --resume_auto in v1")
-			sys.exit()
 		if args.filterDepthHifi is not None or args.filterDepthOnt is not None:
 			print("telseeker_ctg mode does not support --filterDepthHifi or --filterDepthOnt in v1")
 			sys.exit()
@@ -1402,6 +1406,8 @@ elif parameter[0] == "ctglinker":
         print(f"CtgLinker check completed: {len(check_result['valid_scaffolds'])} valid scaffolds")
         
     except Exception as e:
+        if os.path.exists(os.path.join(parameter[4], "ctglinker-result.json")):
+            raise
         print(f"Error running CtgLinker check: {e}")
         print("Continuing with visualization...")
         check_result = None
@@ -1419,6 +1425,8 @@ elif parameter[0] == "ctglinker":
         print(f"Please open in browser: {report_path}")
         
     except Exception as e:
+        if os.path.exists(os.path.join(parameter[4], "ctglinker-result.json")):
+            raise
         print(f"Error generating CtgLinker visualization report: {e}")
         print("Continuing execution...")
 elif parameter[0] == "telseeker":
@@ -1456,27 +1464,9 @@ elif parameter[0] == "telseeker_ctg":
     from TelSeekerCtg import TelSeekerCtg
     telseeker_ctg = TelSeekerCtg(parameter, kparameters)
     telseeker_ctg.run()
-# 清理预处理文件（当 --remove=1 或 --remove=2 时）
-if parameter[1] in [1, 2] and parameter[0] != "telseeker_ctg":
-    import shutil
-    out_dir = parameter[4]
-    cleanup_dirs = [
-        os.path.join(out_dir, 'processed_reads'),
-        os.path.join(out_dir, 'hifi_reads_part'),
-        os.path.join(out_dir, 'ont_reads_part'),
-    ]
-    for d in cleanup_dirs:
-        if os.path.exists(d) or os.path.islink(d):
-            # 跳过软链接，不删除
-            if os.path.islink(d):
-                continue
-            try:
-                if os.path.isdir(d):
-                    shutil.rmtree(d)
-                else:
-                    os.remove(d)
-                print(f"Cleaned up: {d}")
-            except Exception as e:
-                print(f"Warning: Failed to clean up {d}: {e}")
+# Prepared reads/parts and their indices are part of the verified recovery
+# contract and are shared by all families. Do not delete them after publication.
+if parameter[1] in [1, 2]:
+    print("Family recovery: retaining prepared reads, indices, histories and verified stages despite --remove.")
 
 print('welldone')

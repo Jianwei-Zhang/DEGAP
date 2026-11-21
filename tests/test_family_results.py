@@ -99,13 +99,22 @@ class FamilyResultTests(unittest.TestCase):
         result = publish_search(self.search())
         gap = {"chromosome": "chr1", "gap_id": "gap1", "left": None, "right": None,
                "bidirectional": {"job_dir": self.job, "job_name": self.job.name},
-               "gap_info": {"start": 8, "end": 12, "left_len": 8, "right_len": 8, "gap_len": 4}}
+               "gap_info": {"start": 9, "end": 12, "left_len": 8, "right_len": 8, "gap_len": 4}}
         analyzer = GapFillingAnalyzer(self.root)
         analyzed = analyzer._analyze_single_gap(gap)
         self.assertTrue(analyzed["filled"])
         self.assertEqual((analyzed["fill_direction"], analyzed["report_direction"]), ("bidirectional", "bidirectional"))
         self.assertEqual((analyzed["rounds"], analyzed["fill_length"]), (0, -4))
         self.assertEqual(analyzed["final_sequence_file"], str(self.job / result["final_sequence"]))
+        self.assertEqual((analyzed["replace_start"], analyzed["replace_end"]), (0, 19))
+        from AutoGapfillerPart4 import GenomeIntegrator
+        integrator = GenomeIntegrator.__new__(GenomeIntegrator)
+        original = "AAAACCCC" + "N" * 4 + "CCCCGGGG"
+        filled = (self.job / result["final_sequence"]).read_text().splitlines()[1]
+        self.assertEqual(integrator._build_new_sequence(original, [analyzed], "chr1"), filled)
+        internal = dict(analyzed, replace_start=2, replace_end=21)
+        self.assertEqual(integrator._build_new_sequence("TT" + original + "AA", [internal], "chr1"),
+                         "TT" + filled + "AA")
 
     def test_auto_job_generation_creates_one_job_without_flag(self):
         manager = JobManager.__new__(JobManager)
@@ -122,6 +131,15 @@ class FamilyResultTests(unittest.TestCase):
         script = (Path(job["job_dir"]) / "run.sh").read_text()
         self.assertNotIn("--flag", script)
         self.assertIn("--MaximumExtensionRound 10", script)
+        from AutoGapfillerPart3 import JobExecutor
+        executor = JobExecutor.__new__(JobExecutor)
+        executor.job_config = {"jobs": manager.job_dirs}
+        executor.job_list = []
+        executor.workers = 1
+        with patch.object(executor, "_is_job_completed", return_value=False):
+            self.assertEqual(executor._collect_jobs(), 1)
+        self.assertEqual(executor.job_list[0]["job"]["direction"], "bidirectional")
+        self.assertFalse(executor.job_list[0]["has_right"])
 
     def test_auto_report_rebases_family_artifact_links(self):
         publish_search(self.search(False))
