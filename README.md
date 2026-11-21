@@ -108,7 +108,7 @@ See [HOWTO.md](HOWTO.md) for budget boundaries, historical-pair selection, ONT q
 
 - **Practical Users' Guide**: [HOWTO.md](HOWTO.md) — full parameter tables, mode workflows, output layouts, and troubleshooting.
 - **Design Notes**: [docs/design/bidirectional-extension.md](docs/design/bidirectional-extension.md), [docs/design/report-presentation.md](docs/design/report-presentation.md)
-- **Expanded validation**: [SSH 180 test matrix and remaining ONT plan](docs/validation/2026-11-22-ssh180-expanded-matrix.md) — fixed gaps, workflow modes, shared limits, and negative cases.
+- **Expanded validation**: [SSH 180 expanded real-read matrix](docs/validation/2026-11-22-ssh180-expanded-matrix.md) — 39 workloads across fixed gaps, workflow modes, shared limits, and negative cases.
 - **New-data validation**: [SSH 180: two masked HiFi gaps closed](docs/validation/2026-11-22-ssh180-new-dataset.md) — measured gap-only comparisons and ONT suitability limits.
 - **Earlier Validation Records**: [docs/validation/2026-11-21-ssh180-real-ont.md](docs/validation/2026-11-21-ssh180-real-ont.md), [docs/validation/2026-11-21-ont-quality-repair.md](docs/validation/2026-11-21-ont-quality-repair.md)
 - **Historical v1 Guide**: [v1/README.md](v1/README.md)

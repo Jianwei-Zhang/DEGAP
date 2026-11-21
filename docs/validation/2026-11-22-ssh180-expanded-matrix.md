@@ -4,15 +4,16 @@
 
 ## 当前结论
 
-在[两个 20 kb 用例](2026-11-22-ssh180-new-dataset.md)之后，新增 **29 个独立命令用例**，覆盖 GapFiller、AutoGapfiller、CtgLinker、k-mer 开关、预算边界和单侧停止后继续。29 个用例的流程及恢复检查均通过；这不等于 29 个缺口全部闭合。
+在[两个 20 kb 用例](2026-11-22-ssh180-new-dataset.md)之后，先完成 29 个命令用例并提交 docs（`0fe4afe`），再按已记录计划增加 10 个 Klebsiella ONT 用例。当前共 **39 个独立命令用例、47 次家族搜索**，覆盖 GapFiller、AutoGapfiller、CtgLinker、k-mer 开关、预算边界和单侧停止后继续。流程及恢复检查全部通过，**不等于所有缺口闭合**。
 
 - HiFi：9 个固定位置/长度的单 gap 全部闭合；3 个 k-mer 开启对照也闭合且序列与对应关闭版本相同。
 - AutoGapfiller：HiFi 的 3 个 gap 全部填补；低覆盖 ONT 的 3 个 gap 全部未闭合。
 - CtgLinker：3 条 contig（中间一条反向输入）连接成一条 scaffold，原始成员无丢失、无重复。
 - 共享预算与冻结侧：3 个边界用例按预期停止；2 个缺少单侧支持的用例保留停止侧，另一侧继续尝试，没有立即整体失败。
-- ONT：官方 Salmonella demo 的 9 个固定 gap 均未闭合。相对比较参考的 aligned-span 深度约 4.29×，本轮所有 local-assembly primary GFA 均没有序列段；不能把流程正常退出当作生物学成功。
+- ONT Salmonella：9 个固定 gap 均未闭合，AutoGapfiller 为 0/3。aligned-span 深度约 4.29×，该数据的所有 local-assembly primary GFA 均没有序列段。
+- ONT Klebsiella：另一套约 69.99× 的 R10.4.1 数据，单 gap 为 **1/9** 闭合，AutoGapfiller 为 **1/3**。闭合的 5 kb gap 与独立比较参考逐碱基一致；同一用例还证明左侧停止后右侧仍继续并完成闭合。
 
-本轮 HiFi 仍是同一批 reads 组装基线上的人工缺口，不是天然 gap 或独立真值准确率评估。ONT demo 和 LT2 比较参考的菌株一致性未证实，二者差异也不能直接计为测序错误。成功、正常未闭合、工具失败和验证脚本失败分开记录。
+本轮仍以人工缺口为主：HiFi 使用同 reads 组装基线；Salmonella 与 LT2 比较参考的菌株一致性未证实；Klebsiella 使用同名菌株的独立参考，但没有证明培养物逐碱基一致。均不能据此推断天然 gap 填补率或真实错误率。成功、正常未闭合、工具失败和验证脚本失败分开记录。
 
 ## 设计与可复查位置
 
@@ -57,7 +58,7 @@
 
 ### k-mer 开关对照
 
-在 mid 的 5/20/50 kb 三个位置长度组合上增加 `--kmer_filter`，作业 `43009641`–`43009643`。三例的最终序列 SHA-256 与关闭版本分别一致，轮次和新增长度也一致。作业同时在不同计算节点运行，没有重复性能采样，因此不据耗时宣称 k-mer 加速比。
+在 mid 的 5/20/50 kb 三个位置长度组合上增加 `--kmer_filter`，作业 `43009641`–`43009643`。三例的序列内容 SHA-256（不含 FASTA 标题）与关闭版本分别一致，轮次和新增长度也一致。作业同时在不同计算节点运行，没有重复性能采样，因此不据耗时宣称 k-mer 加速比。
 
 ## 共享限制与冻结侧
 
@@ -129,9 +130,37 @@
 
 ONT 准备作业 `43009766` 因验证脚本错误地假设参考文件只有一条记录而失败，在开始填补前终止。修正为显式选择 `NC_003197.2` 后，准备作业 `43009771` 完成；没有改 DEGAP 或放宽连接阈值。失败日志保留。
 
+## ONT Klebsiella：独立参考与高覆盖数据
+
+这一步按 `0fe4afe` 中已记录的计划推进，没有根据填补结果重新选择位置或调低阈值。数据来自 ENA `ERR12342517`（项目 `PRJEB51164`），样本标题标注 **Klebsiella pneumoniae MGH 78578、R10.4.1、Dorado rerio**；比较参考为同名菌株染色体 `CP000647.1`。原始文件来源和 ENA 返回字段保存在 `evidence/klebs-provenance.json`。
+
+- 68,001 条 / 417,332,669 bp；read 长度 77–118,540 bp，median 1,993 bp，N50 18,185 bp。R10.4.1 信息来自 ENA 样本元数据，归档 FASTQ header 没有保留 basecaller 模型字段。
+- 压缩文件大小 398,270,970 bytes，与 ENA 发布值一致；MD5 为 `79ead1062963c391cddd039bff4416b1`。下载首次超时后断点续传，校验完整文件后才传输和启动计算。
+- FASTQ SHA-256：`d4773c25a66799cc57a3334af17366128b0d9b714912dbbf99978f8c08612c19`；参考 FASTA SHA-256：`46e3434aeb1c561b086c12e18bb264be8a4cb437567fd01e8fbec75339d054de`。两者均核对本地与 SSH 180 端的 hash。
+- 参考长 5,315,120 bp。MAPQ≥20 primary alignment 覆盖参考全部位置，aligned-span 深度 **69.9927×**；9 个预定 gap 区域的相应深度为 **42.09–75.98×**。这是跨度统计，不能代替精确碱基深度。
+- 准备作业 `43010107` 成功；9 个单 gap 作业如下。输入、预算、flank 和 k-mer 设置与预定计划一致。
+
+| Case | Donau job | 状态 | 总尝试 | 左右合计新增 |
+| --- | --- | --- | ---: | ---: |
+| `klebs-q1-5k` | `43010125` | `closed` | 2 | 21,176 bp |
+| `klebs-q1-20k` | `43010126` | `exhausted` | 5 | 102,276 bp |
+| `klebs-q1-50k` | `43010127` | `exhausted` | 6 | 115,342 bp |
+| `klebs-mid-5k` | `43010128` | `exhausted` | 3 | 23,839 bp |
+| `klebs-mid-20k` | `43010129` | `exhausted` | 3 | 20,481 bp |
+| `klebs-mid-50k` | `43010130` | `exhausted` | 6 | 159,200 bp |
+| `klebs-q3-5k` | `43010131` | `exhausted` | 8 | 216,325 bp |
+| `klebs-q3-20k` | `43010132` | `exhausted` | 8 | 223,818 bp |
+| `klebs-q3-50k` | `43010133` | `exhausted` | 2 | 0 bp |
+
+**闭合用例 `klebs-q1-5k`** 的参考坐标为 `[1326280, 1331280)`：L 第一次没有产生可延伸 contig，正常停止并固定在 L0；R 第一次延伸 21,176 bp，最终采用 **L0 + R1**。填入 5,000 bp 与比较参考完全一致，MAPQ 60、gap 两侧 flank 也完全保留，整个 125,000 bp 窗口逐碱基一致。它验证的是这一固定用例，不代表所有 ONT gap 都能如此填补。
+
+**AutoGapfiller（`43010134`）**：在完整比较参考上遮蔽 q1 5 kb、mid 20 kb、q3 50 kb，检测到 3 个任务；仅 q1 闭合，另两个仍 `exhausted`。闭合 gap 的 5,000 bp 也与参考完全一致；最终保留 70,000 个 N。没有把未闭合家族的延伸序列强行插入基因组，整合结果重建及恢复检查通过。未填补的 gap 不报告“填入序列准确率”。
+
+这组数据共执行 50 次 local ONT hifiasm 调用，28 次在至少一个 primary GFA 中产生序列段；每次输入为 **1–49 条选中的原始 reads**，均使用恢复的真实 FASTQ 质量，无显式工具错误。因此本组负结果不能继续只用“全局覆盖低”或“组装器从未产生 contig”解释：局部 read 支持、当前延伸路径及闭合条件都需要进一步分析。这里没有为得到更高闭合数而改算法、重选 gap 或追加参数试错。
+
 ## 已通过的检查与证据
 
-29 个用例均验证输入/源码 hash、结果 manifest、家族历史、共享计数、AGP 重建和完成后的恢复不重复计算。CtgLinker 另验证原始成员；AutoGapfiller 另验证检测数量、状态传递和全基因组替换。正常未闭合和预算停止按其实际状态接受，不要求每个 case 都 `closed`。
+39 个用例均验证输入/源码 hash、结果 manifest、家族历史、共享计数、AGP 重建和完成后的恢复不重复计算。CtgLinker 另验证原始成员；AutoGapfiller 另验证检测数量、状态传递和全基因组替换。正常未闭合和预算停止按其实际状态接受，不要求每个 case 都 `closed`。
 
 完整运行输出、reads、GFA/BAM 不加入 Git。逐用例结果在远端 `evidence/<case>.validation.json`，坐标投影结果在 `evidence/<case>.assessment.json`。本地只读证据：
 
@@ -141,15 +170,40 @@ ONT 准备作业 `43009766` 因验证脚本错误地假设参考文件只有一�
 | `hifi-assessments.tar.gz` | `a79d02db45e5bd16d7dececdcd61c053e3fc7de74befaf5bfdf47855a221a084` |
 | `supplementary-evidence.tar.gz` | `5d09789155f0c18d7924c6e1c6135fa6eae47a3dfe1804136d8e3fbb69ac9452` |
 
-测试源码从前轮已验证目录只读复用；逐文件 hash 位于 `evidence/source-files.sha256.json`，对应提交 `c85007b`。没有新修改算法、工具版本、HTML 模板或客户数据。本轮不重复此前 181 项全回归，先做必要的结果及评估器轻量检查；最终检查随新增 ONT 阶段统一汇总。
+最终统一审计作业 **`43010165`** 成功，另完成归档后的本地静态核对：
 
-## 下一阶段：先记录计划，再推进
+- 39 个命令用例、47 次家族搜索全部完成，没有跳过；39 个计算作业和最终审计均复核为 `SUCCEEDED`。包括预期的未闭合和预算停止，不把这些状态改写为 `closed`。
+- 核对 35 个运行时代码文件；共计算 343 个去重路径的文件内容 hash；所有已有 primary-peer 历史组合、候选唯一排名、冻结侧停止后的对侧执行顺序均通过。
+- **60 份实际 HTML** 的数据/离线资源检查通过，**288 个静态 artifact 链接**均可解析到文件；三个 AutoGapfiller 全局报告的嵌入 summary 与 JSON 一致，3 段内嵌 JS 的 `node --check` 通过。
+- 在恢复之后重新从 gap 替换记录及家族最终序列重建 3 个 AutoGapfiller 基因组，均与实际输出逐碱基一致。
+- 9 个 CIGAR/cs 轻量检查通过；原始侧翼变化与 gap 内序列分别核算，Klebsiella Auto 两个未填补项明确为 `unfilled_not_assessed`。本次未启动浏览器，不宣称完成视觉验收。
 
-- [x] 先提交本文件，固定以上已完成设计、负结果及评估边界。
-- [ ] 下载并通过 ENA 发布 MD5/字节数核验 `ERR12342517`：Klebsiella pneumoniae MGH 78578，R10.4.1 / Dorado rerio，68,001 reads / 417,332,669 bp，压缩文件 398,270,970 bytes。下载尚在进行，不把 `.part` 当作输入。
-- [ ] 使用同名菌株独立参考 `CP000647.1`；先核对实际 read 长度、参考覆盖和 gap 邻域深度，记录 provenance。与参考存在的样本差异不自动称为 assembly error。
-- [ ] 在参考固定 1/4、1/2、3/4 位置交叉 5/20/50 kb，预先锁定 60 kb flank、共享 12 次 / 300 kb、4 threads；不移动 gap 或为成功调低阈值。
-- [ ] 增加该数据的 AutoGapfiller 三 gap 场景，核对 gap-only 序列、原始 flank 变化、质量恢复、共享历史和重跑复用；成功与未闭合均报告。
-- [ ] 所有新增用例终止并核验后，更新本文件及最终证据清单，再提交当前分支。
+测试源码从前轮已验证目录只读复用，对应提交 `c85007b`。本轮没有改算法、工具版本、HTML 模板或客户数据，故没有为纯数据扩展重复运行此前的 181 项全回归。核心证据为：
 
-若下载未完成或输入完整性/来源无法确认，停在该数据准备阶段，不用模拟 reads 替代实测、不把已有 HiFi 成功包装成 ONT 成功。
+```text
+evidence/final-audit.json
+evidence/expanded-summary.json
+evidence/ont-assembly-diagnostics.json
+evidence/final-scheduler-audit.txt
+evidence/final-report-syntax-checks.json
+evidence/final-extra-report-checks.json
+scripts/assess.py
+scripts/test_assessment.py
+scripts/final_audit.py
+scripts/inspect_ont_assemblies.py
+```
+
+[仓库内机器可读摘要](2026-11-22-expanded-summary.json)包含全部 39 个 job ID、状态、共享计数、组装结果及 gap-only 指标。最终证据归档保留在远端任务目录和本地 `/tmp/degap-expanded-20261122/expanded-final-evidence.tar.gz`，SHA-256：`d50301fb214dbb35cc439a16669de0f532f09319d918eb9a3fddec7a9ab5b7ae`。原始 reads 和完整运行目录仍留在远端，不加入 Git。
+
+## 本轮计划完成情况
+
+- [x] 先提交 docs（`0fe4afe`），记录 29 个已有用例和剩余 ONT 计划。
+- [x] `ERR12342517` 完整下载，通过 ENA 字节数/MD5 和传输 SHA-256 核验。
+- [x] 使用 `CP000647.1`，保留参考来源、read 长度、全局和预定 gap 邻域的深度证据。
+- [x] 完成预先固定的 1/4、1/2、3/4 × 5/20/50 kb 矩阵，没有移动位置或调整阈值。
+- [x] 完成该数据 AutoGapfiller 三 gap 场景，核对真实质量、历史/预算、gap-only 序列、原始 flank 变化及恢复复用。
+- [x] 所有新增用例终止后统一审计、回写文档与证据摘要，再提交当前分支。
+
+## 仍未由本轮证明的事项
+
+这不是新旧版本对照、天然 gap 填补率评估或有重复采样的性能基准。未新增真实同一样本的 HiFi+ONT mixed 对照，也未用细菌数据冒充 TelSeeker 端粒验证。ONT 高覆盖矩阵仍有 8/9 个单 gap 未闭合，且部分闭合会改动原 flank；这些是后续算法分析的重点，本轮保留原始证据，没有用参数试错隐藏它们。

@@ -1,0 +1,1948 @@
+{
+  "source_commit": "c85007b036455f9a02ffeaec271723f21ccdcdc6",
+  "workload_count": 39,
+  "family_searches_verified": 47,
+  "all_mechanical_checks_passed": true,
+  "audit_checks": {
+    "input_and_source_hashes": true,
+    "all_primary_peer_historical_pairs": true,
+    "global_single_best_candidate": true,
+    "actual_html_matches_manifests": true,
+    "offline_reports": true,
+    "static_artifact_links_resolve": true,
+    "auto_integration_reconstructed_after_resume": true,
+    "freeze_ordering": true,
+    "kmer_on_off_identical_sequences": true
+  },
+  "html_files_verified": 60,
+  "local_report_links_verified": 288,
+  "datasets": {
+    "salmonella": {
+      "reads": 7238,
+      "bases": 24192101,
+      "min_length": 101,
+      "max_length": 10715,
+      "median_length": 3304,
+      "models": [
+        "dna_r10.4.1_e8.2_400bps_hac@v4.2.0"
+      ],
+      "reference_length": 4857450,
+      "reference_id": "NC_003197.2",
+      "mapq20_primary_mapped_reads": 6739,
+      "reference_covered_fraction": 0.8972825247815212,
+      "aligned_span_depth": 4.2947863590978805,
+      "weighted_mapping_identity": 0.9612218276127346,
+      "windows": [
+        {
+          "case": "ont-q1-1k",
+          "gap_start0": 1213862,
+          "gap_end0": 1214862,
+          "flank_window_aligned_span_depth": 4.095099173553719,
+          "gap_aligned_span_depth": 6.186,
+          "reads_spanning_gap_plus_10kb_each_side": 0
+        },
+        {
+          "case": "ont-q1-5k",
+          "gap_start0": 1211862,
+          "gap_end0": 1216862,
+          "flank_window_aligned_span_depth": 4.072304,
+          "gap_aligned_span_depth": 2.6202,
+          "reads_spanning_gap_plus_10kb_each_side": 0
+        },
+        {
+          "case": "ont-q1-20k",
+          "gap_start0": 1204362,
+          "gap_end0": 1224362,
+          "flank_window_aligned_span_depth": 4.03955,
+          "gap_aligned_span_depth": 1.5818,
+          "reads_spanning_gap_plus_10kb_each_side": 0
+        },
+        {
+          "case": "ont-mid-1k",
+          "gap_start0": 2428225,
+          "gap_end0": 2429225,
+          "flank_window_aligned_span_depth": 4.379694214876033,
+          "gap_aligned_span_depth": 4.812,
+          "reads_spanning_gap_plus_10kb_each_side": 0
+        },
+        {
+          "case": "ont-mid-5k",
+          "gap_start0": 2426225,
+          "gap_end0": 2431225,
+          "flank_window_aligned_span_depth": 4.378896,
+          "gap_aligned_span_depth": 4.2924,
+          "reads_spanning_gap_plus_10kb_each_side": 0
+        },
+        {
+          "case": "ont-mid-20k",
+          "gap_start0": 2418725,
+          "gap_end0": 2438725,
+          "flank_window_aligned_span_depth": 4.350657142857143,
+          "gap_aligned_span_depth": 3.6574,
+          "reads_spanning_gap_plus_10kb_each_side": 0
+        },
+        {
+          "case": "ont-q3-1k",
+          "gap_start0": 3642587,
+          "gap_end0": 3643587,
+          "flank_window_aligned_span_depth": 4.14998347107438,
+          "gap_aligned_span_depth": 1.666,
+          "reads_spanning_gap_plus_10kb_each_side": 0
+        },
+        {
+          "case": "ont-q3-5k",
+          "gap_start0": 3640587,
+          "gap_end0": 3645587,
+          "flank_window_aligned_span_depth": 4.205176,
+          "gap_aligned_span_depth": 2.0638,
+          "reads_spanning_gap_plus_10kb_each_side": 0
+        },
+        {
+          "case": "ont-q3-20k",
+          "gap_start0": 3633087,
+          "gap_end0": 3653087,
+          "flank_window_aligned_span_depth": 4.280271428571429,
+          "gap_aligned_span_depth": 2.77315,
+          "reads_spanning_gap_plus_10kb_each_side": 0
+        }
+      ]
+    },
+    "klebs": {
+      "run_accession": "ERR12342517",
+      "reads": 68001,
+      "bases": 417332669,
+      "min_length": 77,
+      "max_length": 118540,
+      "median_length": 1993,
+      "n50": 18185,
+      "quality_ascii_min": 34,
+      "quality_ascii_max": 83,
+      "models": [],
+      "header_examples": [
+        "ERR12342517.1 0024a013-061b-48d5-978a-7ca8b0640f09",
+        "ERR12342517.2 01e0e52d-24a5-4fac-9cc8-fc6f4e009bc2",
+        "ERR12342517.3 0357f4a1-0e9f-4869-9a45-f684ffa0ca4f"
+      ],
+      "reference_id": "ENA|CP000647|CP000647.1",
+      "reference_length": 5315120,
+      "mapq20_primary_reads": 51586,
+      "reference_covered_fraction": 1.0,
+      "aligned_span_depth": 69.9927173798522,
+      "weighted_mapping_identity": 0.9743490156227836,
+      "windows": [
+        {
+          "case": "klebs-q1-5k",
+          "gap_start0": 1326280,
+          "gap_end0": 1331280,
+          "gap_aligned_span_depth": 73.5586,
+          "flank_window_aligned_span_depth": 65.632584,
+          "reads_spanning_gap_plus_10kb_each_side": 10
+        },
+        {
+          "case": "klebs-q1-20k",
+          "gap_start0": 1318780,
+          "gap_end0": 1338780,
+          "gap_aligned_span_depth": 73.33205,
+          "flank_window_aligned_span_depth": 66.21223571428571,
+          "reads_spanning_gap_plus_10kb_each_side": 2
+        },
+        {
+          "case": "klebs-q1-50k",
+          "gap_start0": 1303780,
+          "gap_end0": 1353780,
+          "gap_aligned_span_depth": 66.25494,
+          "flank_window_aligned_span_depth": 67.12530588235295,
+          "reads_spanning_gap_plus_10kb_each_side": 0
+        },
+        {
+          "case": "klebs-mid-5k",
+          "gap_start0": 2655060,
+          "gap_end0": 2660060,
+          "gap_aligned_span_depth": 42.0856,
+          "flank_window_aligned_span_depth": 61.235856,
+          "reads_spanning_gap_plus_10kb_each_side": 5
+        },
+        {
+          "case": "klebs-mid-20k",
+          "gap_start0": 2647560,
+          "gap_end0": 2667560,
+          "gap_aligned_span_depth": 45.91745,
+          "flank_window_aligned_span_depth": 61.52017142857143,
+          "reads_spanning_gap_plus_10kb_each_side": 4
+        },
+        {
+          "case": "klebs-mid-50k",
+          "gap_start0": 2632560,
+          "gap_end0": 2682560,
+          "gap_aligned_span_depth": 53.29884,
+          "flank_window_aligned_span_depth": 62.061564705882354,
+          "reads_spanning_gap_plus_10kb_each_side": 1
+        },
+        {
+          "case": "klebs-q3-5k",
+          "gap_start0": 3983840,
+          "gap_end0": 3988840,
+          "gap_aligned_span_depth": 75.5178,
+          "flank_window_aligned_span_depth": 73.369752,
+          "reads_spanning_gap_plus_10kb_each_side": 15
+        },
+        {
+          "case": "klebs-q3-20k",
+          "gap_start0": 3976340,
+          "gap_end0": 3996340,
+          "gap_aligned_span_depth": 75.98175,
+          "flank_window_aligned_span_depth": 74.34764285714286,
+          "reads_spanning_gap_plus_10kb_each_side": 5
+        },
+        {
+          "case": "klebs-q3-50k",
+          "gap_start0": 3961340,
+          "gap_end0": 4011340,
+          "gap_aligned_span_depth": 71.5845,
+          "flank_window_aligned_span_depth": 75.74862941176471,
+          "reads_spanning_gap_plus_10kb_each_side": 1
+        }
+      ],
+      "reads_sha256": "d4773c25a66799cc57a3334af17366128b0d9b714912dbbf99978f8c08612c19",
+      "reference_sha256": "46e3434aeb1c561b086c12e18bb264be8a4cb437567fd01e8fbec75339d054de",
+      "ena_size_md5_verified": true
+    }
+  },
+  "workloads": [
+    {
+      "case": "hifi-q1-5k",
+      "job_id": "43009632",
+      "mode": "gap",
+      "read_type": "hifi",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 20.749,
+      "status": "closed",
+      "total_rounds": 1,
+      "total_extension_length": 18150,
+      "winner": {
+        "identity": 99.67,
+        "left_end": 78150,
+        "left_family": "L",
+        "left_start": 65000,
+        "left_version": 1,
+        "overhang": 0,
+        "overlap": 13150,
+        "right_end": 13150,
+        "right_family": "R",
+        "right_start": 0,
+        "right_version": 0
+      },
+      "gap_length": 5000,
+      "assembler": {
+        "invocations": 1,
+        "gfas": 3,
+        "nonempty_gfas": 2,
+        "explicit_errors": 0
+      },
+      "gap_assessments": [
+        {
+          "name": "gap",
+          "status": "assessed",
+          "expected_length": 5000,
+          "recovered_length": 5000,
+          "length_delta": 0,
+          "exact_match": true,
+          "gap_edit_counts": {
+            "substitutions": 0,
+            "inserted_bases": 0,
+            "deleted_bases": 0
+          },
+          "identity": 1.0,
+          "query_coverage": 1.0,
+          "reference_coverage": 1.0,
+          "mapq": 60
+        }
+      ],
+      "non_gap_edits": {
+        "original_region0": {
+          "substitutions": 0,
+          "inserted_bases": 0,
+          "deleted_bases": 0
+        },
+        "original_region1": {
+          "substitutions": 6,
+          "inserted_bases": 19,
+          "deleted_bases": 19
+        }
+      }
+    },
+    {
+      "case": "hifi-q1-20k",
+      "job_id": "43009633",
+      "mode": "gap",
+      "read_type": "hifi",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 54.316,
+      "status": "closed",
+      "total_rounds": 4,
+      "total_extension_length": 40731,
+      "winner": {
+        "identity": 99.74,
+        "left_end": 86767,
+        "left_family": "L",
+        "left_start": 66485,
+        "left_version": 2,
+        "overhang": 457,
+        "overlap": 20261,
+        "right_end": 20500,
+        "right_family": "R",
+        "right_start": 239,
+        "right_version": 2
+      },
+      "gap_length": 20013,
+      "assembler": {
+        "invocations": 4,
+        "gfas": 12,
+        "nonempty_gfas": 8,
+        "explicit_errors": 0
+      },
+      "gap_assessments": [
+        {
+          "name": "gap",
+          "status": "assessed",
+          "expected_length": 20000,
+          "recovered_length": 19990,
+          "length_delta": -10,
+          "exact_match": false,
+          "gap_edit_counts": {
+            "substitutions": 27,
+            "inserted_bases": 0,
+            "deleted_bases": 10
+          },
+          "identity": 0.99815,
+          "query_coverage": 1.0,
+          "reference_coverage": 1.0,
+          "mapq": 60
+        }
+      ],
+      "non_gap_edits": {
+        "original_region0": {
+          "substitutions": 0,
+          "inserted_bases": 0,
+          "deleted_bases": 0
+        },
+        "original_region1": {
+          "substitutions": 10,
+          "inserted_bases": 27,
+          "deleted_bases": 4
+        }
+      }
+    },
+    {
+      "case": "hifi-q1-50k",
+      "job_id": "43009634",
+      "mode": "gap",
+      "read_type": "hifi",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 54.855,
+      "status": "closed",
+      "total_rounds": 5,
+      "total_extension_length": 60036,
+      "winner": {
+        "identity": 99.78,
+        "left_end": 103464,
+        "left_family": "L",
+        "left_start": 93453,
+        "left_version": 3,
+        "overhang": 0,
+        "overlap": 10008,
+        "right_end": 10008,
+        "right_family": "R",
+        "right_start": 0,
+        "right_version": 2
+      },
+      "gap_length": 50028,
+      "assembler": {
+        "invocations": 5,
+        "gfas": 15,
+        "nonempty_gfas": 12,
+        "explicit_errors": 0
+      },
+      "gap_assessments": [
+        {
+          "name": "gap",
+          "status": "assessed",
+          "expected_length": 50000,
+          "recovered_length": 50028,
+          "length_delta": 28,
+          "exact_match": false,
+          "gap_edit_counts": {
+            "substitutions": 61,
+            "inserted_bases": 41,
+            "deleted_bases": 13
+          },
+          "identity": 0.9977018844547471,
+          "query_coverage": 1.0,
+          "reference_coverage": 1.0,
+          "mapq": 60
+        }
+      ],
+      "non_gap_edits": {
+        "original_region0": {
+          "substitutions": 0,
+          "inserted_bases": 0,
+          "deleted_bases": 0
+        },
+        "original_region1": {
+          "substitutions": 0,
+          "inserted_bases": 0,
+          "deleted_bases": 0
+        }
+      }
+    },
+    {
+      "case": "hifi-mid-5k",
+      "job_id": "43009635",
+      "mode": "gap",
+      "read_type": "hifi",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 15.314,
+      "status": "closed",
+      "total_rounds": 1,
+      "total_extension_length": 16075,
+      "winner": {
+        "identity": 99.95,
+        "left_end": 76075,
+        "left_family": "L",
+        "left_start": 65000,
+        "left_version": 1,
+        "overhang": 0,
+        "overlap": 11080,
+        "right_end": 11080,
+        "right_family": "R",
+        "right_start": 0,
+        "right_version": 0
+      },
+      "gap_length": 4995,
+      "assembler": {
+        "invocations": 1,
+        "gfas": 3,
+        "nonempty_gfas": 3,
+        "explicit_errors": 0
+      },
+      "gap_assessments": [
+        {
+          "name": "gap",
+          "status": "assessed",
+          "expected_length": 5000,
+          "recovered_length": 5000,
+          "length_delta": 0,
+          "exact_match": false,
+          "gap_edit_counts": {
+            "substitutions": 1,
+            "inserted_bases": 0,
+            "deleted_bases": 0
+          },
+          "identity": 0.9998,
+          "query_coverage": 1.0,
+          "reference_coverage": 1.0,
+          "mapq": 60
+        }
+      ],
+      "non_gap_edits": {
+        "original_region0": {
+          "substitutions": 0,
+          "inserted_bases": 0,
+          "deleted_bases": 0
+        },
+        "original_region1": {
+          "substitutions": 1,
+          "inserted_bases": 0,
+          "deleted_bases": 5
+        }
+      }
+    },
+    {
+      "case": "hifi-mid-20k",
+      "job_id": "43009636",
+      "mode": "gap",
+      "read_type": "hifi",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 61.862,
+      "status": "closed",
+      "total_rounds": 4,
+      "total_extension_length": 62556,
+      "winner": {
+        "identity": 99.84,
+        "left_end": 60000,
+        "left_family": "L",
+        "left_start": 46803,
+        "left_version": 0,
+        "overhang": 0,
+        "overlap": 13180,
+        "right_end": 13180,
+        "right_family": "R",
+        "right_start": 0,
+        "right_version": 2
+      },
+      "gap_length": 19984,
+      "assembler": {
+        "invocations": 4,
+        "gfas": 12,
+        "nonempty_gfas": 10,
+        "explicit_errors": 0
+      },
+      "gap_assessments": [
+        {
+          "name": "gap",
+          "status": "assessed",
+          "expected_length": 20000,
+          "recovered_length": 19984,
+          "length_delta": -16,
+          "exact_match": false,
+          "gap_edit_counts": {
+            "substitutions": 1,
+            "inserted_bases": 1,
+            "deleted_bases": 17
+          },
+          "identity": 0.9990500474976252,
+          "query_coverage": 1.0,
+          "reference_coverage": 1.0,
+          "mapq": 60
+        }
+      ],
+      "non_gap_edits": {
+        "original_region0": {
+          "substitutions": 0,
+          "inserted_bases": 0,
+          "deleted_bases": 0
+        },
+        "original_region1": {
+          "substitutions": 0,
+          "inserted_bases": 0,
+          "deleted_bases": 0
+        }
+      }
+    },
+    {
+      "case": "hifi-mid-50k",
+      "job_id": "43009637",
+      "mode": "gap",
+      "read_type": "hifi",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 64.484,
+      "status": "closed",
+      "total_rounds": 4,
+      "total_extension_length": 61905,
+      "winner": {
+        "identity": 99.93,
+        "left_end": 89447,
+        "left_family": "L",
+        "left_start": 77534,
+        "left_version": 2,
+        "overhang": 0,
+        "overlap": 11910,
+        "right_end": 11910,
+        "right_family": "R",
+        "right_start": 0,
+        "right_version": 2
+      },
+      "gap_length": 49995,
+      "assembler": {
+        "invocations": 4,
+        "gfas": 12,
+        "nonempty_gfas": 10,
+        "explicit_errors": 0
+      },
+      "gap_assessments": [
+        {
+          "name": "gap",
+          "status": "assessed",
+          "expected_length": 50000,
+          "recovered_length": 49995,
+          "length_delta": -5,
+          "exact_match": false,
+          "gap_edit_counts": {
+            "substitutions": 0,
+            "inserted_bases": 3,
+            "deleted_bases": 8
+          },
+          "identity": 0.9997800131992081,
+          "query_coverage": 1.0,
+          "reference_coverage": 1.0,
+          "mapq": 60
+        }
+      ],
+      "non_gap_edits": {
+        "original_region0": {
+          "substitutions": 0,
+          "inserted_bases": 0,
+          "deleted_bases": 0
+        },
+        "original_region1": {
+          "substitutions": 0,
+          "inserted_bases": 0,
+          "deleted_bases": 0
+        }
+      }
+    },
+    {
+      "case": "hifi-q3-5k",
+      "job_id": "43009638",
+      "mode": "gap",
+      "read_type": "hifi",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 15.217,
+      "status": "closed",
+      "total_rounds": 1,
+      "total_extension_length": 15250,
+      "winner": {
+        "identity": 99.38,
+        "left_end": 75250,
+        "left_family": "L",
+        "left_start": 65000,
+        "left_version": 1,
+        "overhang": 0,
+        "overlap": 10285,
+        "right_end": 10285,
+        "right_family": "R",
+        "right_start": 0,
+        "right_version": 0
+      },
+      "gap_length": 4965,
+      "assembler": {
+        "invocations": 1,
+        "gfas": 3,
+        "nonempty_gfas": 2,
+        "explicit_errors": 0
+      },
+      "gap_assessments": [
+        {
+          "name": "gap",
+          "status": "assessed",
+          "expected_length": 5000,
+          "recovered_length": 5000,
+          "length_delta": 0,
+          "exact_match": false,
+          "gap_edit_counts": {
+            "substitutions": 8,
+            "inserted_bases": 0,
+            "deleted_bases": 0
+          },
+          "identity": 0.9984,
+          "query_coverage": 1.0,
+          "reference_coverage": 1.0,
+          "mapq": 60
+        }
+      ],
+      "non_gap_edits": {
+        "original_region0": {
+          "substitutions": 0,
+          "inserted_bases": 0,
+          "deleted_bases": 0
+        },
+        "original_region1": {
+          "substitutions": 10,
+          "inserted_bases": 10,
+          "deleted_bases": 45
+        }
+      }
+    },
+    {
+      "case": "hifi-q3-20k",
+      "job_id": "43009639",
+      "mode": "gap",
+      "read_type": "hifi",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 23.787,
+      "status": "closed",
+      "total_rounds": 2,
+      "total_extension_length": 31099,
+      "winner": {
+        "identity": 99.73,
+        "left_end": 76316,
+        "left_family": "L",
+        "left_start": 65178,
+        "left_version": 1,
+        "overhang": 0,
+        "overlap": 11141,
+        "right_end": 11141,
+        "right_family": "R",
+        "right_start": 0,
+        "right_version": 1
+      },
+      "gap_length": 19958,
+      "assembler": {
+        "invocations": 2,
+        "gfas": 6,
+        "nonempty_gfas": 6,
+        "explicit_errors": 0
+      },
+      "gap_assessments": [
+        {
+          "name": "gap",
+          "status": "assessed",
+          "expected_length": 20000,
+          "recovered_length": 19958,
+          "length_delta": -42,
+          "exact_match": false,
+          "gap_edit_counts": {
+            "substitutions": 6,
+            "inserted_bases": 2,
+            "deleted_bases": 44
+          },
+          "identity": 0.9974002599740026,
+          "query_coverage": 1.0,
+          "reference_coverage": 1.0,
+          "mapq": 60
+        }
+      ],
+      "non_gap_edits": {
+        "original_region0": {
+          "substitutions": 0,
+          "inserted_bases": 0,
+          "deleted_bases": 0
+        },
+        "original_region1": {
+          "substitutions": 0,
+          "inserted_bases": 0,
+          "deleted_bases": 0
+        }
+      }
+    },
+    {
+      "case": "hifi-q3-50k",
+      "job_id": "43009640",
+      "mode": "gap",
+      "read_type": "hifi",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 62.486,
+      "status": "closed",
+      "total_rounds": 5,
+      "total_extension_length": 73580,
+      "winner": {
+        "identity": 99.5,
+        "left_end": 109845,
+        "left_family": "L",
+        "left_start": 90846,
+        "left_version": 3,
+        "overhang": 0,
+        "overlap": 18982,
+        "right_end": 18982,
+        "right_family": "R",
+        "right_start": 0,
+        "right_version": 1
+      },
+      "gap_length": 49980,
+      "assembler": {
+        "invocations": 5,
+        "gfas": 15,
+        "nonempty_gfas": 13,
+        "explicit_errors": 0
+      },
+      "gap_assessments": [
+        {
+          "name": "gap",
+          "status": "assessed",
+          "expected_length": 50000,
+          "recovered_length": 49980,
+          "length_delta": -20,
+          "exact_match": false,
+          "gap_edit_counts": {
+            "substitutions": 23,
+            "inserted_bases": 3,
+            "deleted_bases": 23
+          },
+          "identity": 0.9990200587964723,
+          "query_coverage": 1.0,
+          "reference_coverage": 1.0,
+          "mapq": 60
+        }
+      ],
+      "non_gap_edits": {
+        "original_region0": {
+          "substitutions": 0,
+          "inserted_bases": 0,
+          "deleted_bases": 0
+        },
+        "original_region1": {
+          "substitutions": 0,
+          "inserted_bases": 0,
+          "deleted_bases": 0
+        }
+      }
+    },
+    {
+      "case": "hifi-mid-5k-kmer",
+      "job_id": "43009641",
+      "mode": "gap",
+      "read_type": "hifi",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 19.65,
+      "status": "closed",
+      "total_rounds": 1,
+      "total_extension_length": 16075,
+      "winner": {
+        "identity": 99.95,
+        "left_end": 76075,
+        "left_family": "L",
+        "left_start": 65000,
+        "left_version": 1,
+        "overhang": 0,
+        "overlap": 11080,
+        "right_end": 11080,
+        "right_family": "R",
+        "right_start": 0,
+        "right_version": 0
+      },
+      "gap_length": 4995,
+      "assembler": {
+        "invocations": 1,
+        "gfas": 3,
+        "nonempty_gfas": 3,
+        "explicit_errors": 0
+      },
+      "gap_assessments": [
+        {
+          "name": "gap",
+          "status": "assessed",
+          "expected_length": 5000,
+          "recovered_length": 5000,
+          "length_delta": 0,
+          "exact_match": false,
+          "gap_edit_counts": {
+            "substitutions": 1,
+            "inserted_bases": 0,
+            "deleted_bases": 0
+          },
+          "identity": 0.9998,
+          "query_coverage": 1.0,
+          "reference_coverage": 1.0,
+          "mapq": 60
+        }
+      ],
+      "non_gap_edits": {
+        "original_region0": {
+          "substitutions": 0,
+          "inserted_bases": 0,
+          "deleted_bases": 0
+        },
+        "original_region1": {
+          "substitutions": 1,
+          "inserted_bases": 0,
+          "deleted_bases": 5
+        }
+      }
+    },
+    {
+      "case": "hifi-mid-20k-kmer",
+      "job_id": "43009642",
+      "mode": "gap",
+      "read_type": "hifi",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 49.047,
+      "status": "closed",
+      "total_rounds": 4,
+      "total_extension_length": 62556,
+      "winner": {
+        "identity": 99.84,
+        "left_end": 60000,
+        "left_family": "L",
+        "left_start": 46803,
+        "left_version": 0,
+        "overhang": 0,
+        "overlap": 13180,
+        "right_end": 13180,
+        "right_family": "R",
+        "right_start": 0,
+        "right_version": 2
+      },
+      "gap_length": 19984,
+      "assembler": {
+        "invocations": 4,
+        "gfas": 12,
+        "nonempty_gfas": 10,
+        "explicit_errors": 0
+      },
+      "gap_assessments": [
+        {
+          "name": "gap",
+          "status": "assessed",
+          "expected_length": 20000,
+          "recovered_length": 19984,
+          "length_delta": -16,
+          "exact_match": false,
+          "gap_edit_counts": {
+            "substitutions": 1,
+            "inserted_bases": 1,
+            "deleted_bases": 17
+          },
+          "identity": 0.9990500474976252,
+          "query_coverage": 1.0,
+          "reference_coverage": 1.0,
+          "mapq": 60
+        }
+      ],
+      "non_gap_edits": {
+        "original_region0": {
+          "substitutions": 0,
+          "inserted_bases": 0,
+          "deleted_bases": 0
+        },
+        "original_region1": {
+          "substitutions": 0,
+          "inserted_bases": 0,
+          "deleted_bases": 0
+        }
+      }
+    },
+    {
+      "case": "hifi-mid-50k-kmer",
+      "job_id": "43009643",
+      "mode": "gap",
+      "read_type": "hifi",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 44.215,
+      "status": "closed",
+      "total_rounds": 4,
+      "total_extension_length": 61905,
+      "winner": {
+        "identity": 99.93,
+        "left_end": 89447,
+        "left_family": "L",
+        "left_start": 77534,
+        "left_version": 2,
+        "overhang": 0,
+        "overlap": 11910,
+        "right_end": 11910,
+        "right_family": "R",
+        "right_start": 0,
+        "right_version": 2
+      },
+      "gap_length": 49995,
+      "assembler": {
+        "invocations": 4,
+        "gfas": 12,
+        "nonempty_gfas": 10,
+        "explicit_errors": 0
+      },
+      "gap_assessments": [
+        {
+          "name": "gap",
+          "status": "assessed",
+          "expected_length": 50000,
+          "recovered_length": 49995,
+          "length_delta": -5,
+          "exact_match": false,
+          "gap_edit_counts": {
+            "substitutions": 0,
+            "inserted_bases": 3,
+            "deleted_bases": 8
+          },
+          "identity": 0.9997800131992081,
+          "query_coverage": 1.0,
+          "reference_coverage": 1.0,
+          "mapq": 60
+        }
+      ],
+      "non_gap_edits": {
+        "original_region0": {
+          "substitutions": 0,
+          "inserted_bases": 0,
+          "deleted_bases": 0
+        },
+        "original_region1": {
+          "substitutions": 0,
+          "inserted_bases": 0,
+          "deleted_bases": 0
+        }
+      }
+    },
+    {
+      "case": "hifi-limit-round0",
+      "job_id": "43009644",
+      "mode": "gap",
+      "read_type": "hifi",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 9.308,
+      "status": "round_limit",
+      "total_rounds": 0,
+      "total_extension_length": 0,
+      "winner": null,
+      "gap_length": null,
+      "assembler": {
+        "invocations": 0,
+        "gfas": 0,
+        "nonempty_gfas": 0,
+        "explicit_errors": 0
+      }
+    },
+    {
+      "case": "hifi-limit-round1",
+      "job_id": "43009645",
+      "mode": "gap",
+      "read_type": "hifi",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 19.763,
+      "status": "round_limit",
+      "total_rounds": 1,
+      "total_extension_length": 14448,
+      "winner": null,
+      "gap_length": null,
+      "assembler": {
+        "invocations": 1,
+        "gfas": 3,
+        "nonempty_gfas": 2,
+        "explicit_errors": 0
+      }
+    },
+    {
+      "case": "hifi-limit-length1",
+      "job_id": "43009646",
+      "mode": "gap",
+      "read_type": "hifi",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 20.29,
+      "status": "length_limit",
+      "total_rounds": 1,
+      "total_extension_length": 14448,
+      "winner": null,
+      "gap_length": null,
+      "assembler": {
+        "invocations": 1,
+        "gfas": 3,
+        "nonempty_gfas": 2,
+        "explicit_errors": 0
+      }
+    },
+    {
+      "case": "hifi-auto",
+      "job_id": "43009647",
+      "mode": "auto",
+      "read_type": "hifi",
+      "mechanical_validation": "passed",
+      "checks": {
+        "integrated_genome_reconstructed": true,
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 141.296,
+      "status": null,
+      "total_rounds": null,
+      "total_extension_length": null,
+      "winner": null,
+      "gap_length": null,
+      "assembler": {
+        "invocations": 10,
+        "gfas": 30,
+        "nonempty_gfas": 25,
+        "explicit_errors": 0
+      },
+      "summary": {
+        "total_gaps": 3,
+        "filled_gaps": 3,
+        "unfilled_gaps": 0,
+        "fill_rate": "100.00%",
+        "extension_filled": 3,
+        "direct_connection_filled": 0
+      },
+      "gap_assessments": [
+        {
+          "name": "gap1",
+          "status": "assessed",
+          "expected_length": 5000,
+          "recovered_length": 5000,
+          "length_delta": 0,
+          "exact_match": true,
+          "gap_edit_counts": {
+            "substitutions": 0,
+            "inserted_bases": 0,
+            "deleted_bases": 0
+          },
+          "identity": 1.0,
+          "query_coverage": 1.0,
+          "reference_coverage": 1.0,
+          "mapq": 60
+        },
+        {
+          "name": "gap2",
+          "status": "assessed",
+          "expected_length": 20000,
+          "recovered_length": 19984,
+          "length_delta": -16,
+          "exact_match": false,
+          "gap_edit_counts": {
+            "substitutions": 1,
+            "inserted_bases": 1,
+            "deleted_bases": 17
+          },
+          "identity": 0.9990500474976252,
+          "query_coverage": 1.0,
+          "reference_coverage": 1.0,
+          "mapq": 60
+        },
+        {
+          "name": "gap3",
+          "status": "assessed",
+          "expected_length": 50000,
+          "recovered_length": 49980,
+          "length_delta": -20,
+          "exact_match": false,
+          "gap_edit_counts": {
+            "substitutions": 23,
+            "inserted_bases": 3,
+            "deleted_bases": 23
+          },
+          "identity": 0.9990200587964723,
+          "query_coverage": 1.0,
+          "reference_coverage": 1.0,
+          "mapq": 60
+        }
+      ],
+      "non_gap_edits": {
+        "original_region0": {
+          "substitutions": 0,
+          "inserted_bases": 0,
+          "deleted_bases": 0
+        },
+        "original_region1": {
+          "substitutions": 6,
+          "inserted_bases": 19,
+          "deleted_bases": 19
+        },
+        "original_region2": {
+          "substitutions": 0,
+          "inserted_bases": 0,
+          "deleted_bases": 0
+        },
+        "original_region3": {
+          "substitutions": 0,
+          "inserted_bases": 0,
+          "deleted_bases": 0
+        }
+      }
+    },
+    {
+      "case": "hifi-ctg-rc",
+      "job_id": "43009648",
+      "mode": "ctg",
+      "read_type": "hifi",
+      "mechanical_validation": "passed",
+      "checks": {
+        "original_membership_and_agp": true,
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 247.658,
+      "status": "complete",
+      "total_rounds": 17,
+      "total_extension_length": 218007,
+      "winner": null,
+      "gap_length": null,
+      "assembler": {
+        "invocations": 17,
+        "gfas": 51,
+        "nonempty_gfas": 40,
+        "explicit_errors": 0
+      },
+      "scaffolds": [
+        {
+          "length": 339991,
+          "members": [
+            {
+              "id": "Contig-0",
+              "strand": "+"
+            },
+            {
+              "id": "Contig-1",
+              "strand": "-"
+            },
+            {
+              "id": "Contig-2",
+              "strand": "+"
+            }
+          ]
+        }
+      ],
+      "endpoint_outcomes": [
+        {
+          "status": "round_limit",
+          "attempts": 12
+        },
+        {
+          "status": "closed",
+          "attempts": 3
+        },
+        {
+          "status": "closed",
+          "attempts": 2
+        }
+      ],
+      "gap_assessments": [
+        {
+          "name": "gap1",
+          "status": "assessed",
+          "expected_length": 20000,
+          "recovered_length": 19996,
+          "length_delta": -4,
+          "exact_match": false,
+          "gap_edit_counts": {
+            "substitutions": 63,
+            "inserted_bases": 8,
+            "deleted_bases": 12
+          },
+          "identity": 0.9958516593362655,
+          "query_coverage": 1.0,
+          "reference_coverage": 1.0,
+          "mapq": 60
+        },
+        {
+          "name": "gap2",
+          "status": "assessed",
+          "expected_length": 20000,
+          "recovered_length": 19999,
+          "length_delta": -1,
+          "exact_match": false,
+          "gap_edit_counts": {
+            "substitutions": 0,
+            "inserted_bases": 2,
+            "deleted_bases": 3
+          },
+          "identity": 0.9997500249975002,
+          "query_coverage": 1.0,
+          "reference_coverage": 1.0,
+          "mapq": 60
+        }
+      ],
+      "non_gap_edits": {
+        "original_region0": {
+          "substitutions": 0,
+          "inserted_bases": 0,
+          "deleted_bases": 0
+        },
+        "original_region1": {
+          "substitutions": 10,
+          "inserted_bases": 1,
+          "deleted_bases": 5
+        },
+        "original_region2": {
+          "substitutions": 0,
+          "inserted_bases": 0,
+          "deleted_bases": 0
+        }
+      }
+    },
+    {
+      "case": "ont-q1-1k",
+      "job_id": "43009777",
+      "mode": "gap",
+      "read_type": "ont",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 32.632,
+      "status": "exhausted",
+      "total_rounds": 3,
+      "total_extension_length": 1168,
+      "winner": null,
+      "gap_length": null,
+      "assembler": {
+        "invocations": 1,
+        "gfas": 3,
+        "nonempty_gfas": 0,
+        "explicit_errors": 0,
+        "genuine_quality_verified_reads": 1
+      }
+    },
+    {
+      "case": "ont-q1-5k",
+      "job_id": "43009778",
+      "mode": "gap",
+      "read_type": "ont",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 19.362,
+      "status": "exhausted",
+      "total_rounds": 3,
+      "total_extension_length": 1488,
+      "winner": null,
+      "gap_length": null,
+      "assembler": {
+        "invocations": 1,
+        "gfas": 3,
+        "nonempty_gfas": 0,
+        "explicit_errors": 0,
+        "genuine_quality_verified_reads": 1
+      }
+    },
+    {
+      "case": "ont-q1-20k",
+      "job_id": "43009779",
+      "mode": "gap",
+      "read_type": "ont",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 32.679,
+      "status": "exhausted",
+      "total_rounds": 4,
+      "total_extension_length": 4218,
+      "winner": null,
+      "gap_length": null,
+      "assembler": {
+        "invocations": 3,
+        "gfas": 9,
+        "nonempty_gfas": 0,
+        "explicit_errors": 0,
+        "genuine_quality_verified_reads": 4
+      }
+    },
+    {
+      "case": "ont-mid-1k",
+      "job_id": "43009780",
+      "mode": "gap",
+      "read_type": "ont",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 26.757,
+      "status": "exhausted",
+      "total_rounds": 3,
+      "total_extension_length": 2086,
+      "winner": null,
+      "gap_length": null,
+      "assembler": {
+        "invocations": 1,
+        "gfas": 3,
+        "nonempty_gfas": 0,
+        "explicit_errors": 0,
+        "genuine_quality_verified_reads": 1
+      }
+    },
+    {
+      "case": "ont-mid-5k",
+      "job_id": "43009781",
+      "mode": "gap",
+      "read_type": "ont",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 39.802,
+      "status": "exhausted",
+      "total_rounds": 4,
+      "total_extension_length": 5923,
+      "winner": null,
+      "gap_length": null,
+      "assembler": {
+        "invocations": 3,
+        "gfas": 9,
+        "nonempty_gfas": 0,
+        "explicit_errors": 0,
+        "genuine_quality_verified_reads": 5
+      }
+    },
+    {
+      "case": "ont-mid-20k",
+      "job_id": "43009782",
+      "mode": "gap",
+      "read_type": "ont",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 30.849,
+      "status": "exhausted",
+      "total_rounds": 3,
+      "total_extension_length": 800,
+      "winner": null,
+      "gap_length": null,
+      "assembler": {
+        "invocations": 2,
+        "gfas": 6,
+        "nonempty_gfas": 0,
+        "explicit_errors": 0,
+        "genuine_quality_verified_reads": 3
+      }
+    },
+    {
+      "case": "ont-q3-1k",
+      "job_id": "43009783",
+      "mode": "gap",
+      "read_type": "ont",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 21.895,
+      "status": "exhausted",
+      "total_rounds": 3,
+      "total_extension_length": 1079,
+      "winner": null,
+      "gap_length": null,
+      "assembler": {
+        "invocations": 1,
+        "gfas": 3,
+        "nonempty_gfas": 0,
+        "explicit_errors": 0,
+        "genuine_quality_verified_reads": 1
+      }
+    },
+    {
+      "case": "ont-q3-5k",
+      "job_id": "43009784",
+      "mode": "gap",
+      "read_type": "ont",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 25.781,
+      "status": "exhausted",
+      "total_rounds": 4,
+      "total_extension_length": 3403,
+      "winner": null,
+      "gap_length": null,
+      "assembler": {
+        "invocations": 2,
+        "gfas": 6,
+        "nonempty_gfas": 0,
+        "explicit_errors": 0,
+        "genuine_quality_verified_reads": 2
+      }
+    },
+    {
+      "case": "ont-q3-20k",
+      "job_id": "43009785",
+      "mode": "gap",
+      "read_type": "ont",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 19.158,
+      "status": "exhausted",
+      "total_rounds": 3,
+      "total_extension_length": 709,
+      "winner": null,
+      "gap_length": null,
+      "assembler": {
+        "invocations": 1,
+        "gfas": 3,
+        "nonempty_gfas": 0,
+        "explicit_errors": 0,
+        "genuine_quality_verified_reads": 1
+      }
+    },
+    {
+      "case": "ont-auto",
+      "job_id": "43009786",
+      "mode": "auto",
+      "read_type": "ont",
+      "mechanical_validation": "passed",
+      "checks": {
+        "integrated_genome_reconstructed": true,
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 73.409,
+      "status": null,
+      "total_rounds": null,
+      "total_extension_length": null,
+      "winner": null,
+      "gap_length": null,
+      "assembler": {
+        "invocations": 5,
+        "gfas": 15,
+        "nonempty_gfas": 0,
+        "explicit_errors": 0,
+        "genuine_quality_verified_reads": 7
+      },
+      "summary": {
+        "total_gaps": 3,
+        "filled_gaps": 0,
+        "unfilled_gaps": 3,
+        "fill_rate": "0.00%",
+        "extension_filled": 0,
+        "direct_connection_filled": 0
+      }
+    },
+    {
+      "case": "hifi-frozen-left",
+      "job_id": "43009791",
+      "mode": "gap",
+      "read_type": "hifi",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 24.119,
+      "status": "exhausted",
+      "total_rounds": 5,
+      "total_extension_length": 24942,
+      "winner": null,
+      "gap_length": null,
+      "assembler": {
+        "invocations": 3,
+        "gfas": 9,
+        "nonempty_gfas": 7,
+        "explicit_errors": 0
+      }
+    },
+    {
+      "case": "hifi-frozen-right",
+      "job_id": "43009792",
+      "mode": "gap",
+      "read_type": "hifi",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 17.111,
+      "status": "exhausted",
+      "total_rounds": 4,
+      "total_extension_length": 24723,
+      "winner": null,
+      "gap_length": null,
+      "assembler": {
+        "invocations": 2,
+        "gfas": 6,
+        "nonempty_gfas": 4,
+        "explicit_errors": 0
+      }
+    },
+    {
+      "case": "klebs-q1-5k",
+      "job_id": "43010125",
+      "mode": "gap",
+      "read_type": "ont",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 292.932,
+      "status": "closed",
+      "total_rounds": 2,
+      "total_extension_length": 21176,
+      "winner": {
+        "identity": 99.81,
+        "left_end": 60000,
+        "left_family": "L",
+        "left_start": 43821,
+        "left_version": 0,
+        "overhang": 0,
+        "overlap": 16176,
+        "right_end": 16176,
+        "right_family": "R",
+        "right_start": 0,
+        "right_version": 1
+      },
+      "gap_length": 5000,
+      "assembler": {
+        "invocations": 2,
+        "gfas": 6,
+        "nonempty_gfas": 3,
+        "explicit_errors": 0,
+        "genuine_quality_verified_reads": 39
+      },
+      "gap_assessments": [
+        {
+          "name": "gap",
+          "status": "assessed",
+          "expected_length": 5000,
+          "recovered_length": 5000,
+          "length_delta": 0,
+          "exact_match": true,
+          "gap_edit_counts": {
+            "substitutions": 0,
+            "inserted_bases": 0,
+            "deleted_bases": 0
+          },
+          "identity": 1.0,
+          "query_coverage": 1.0,
+          "reference_coverage": 1.0,
+          "mapq": 60
+        }
+      ],
+      "non_gap_edits": {
+        "original_region0": {
+          "substitutions": 0,
+          "inserted_bases": 0,
+          "deleted_bases": 0
+        },
+        "original_region1": {
+          "substitutions": 0,
+          "inserted_bases": 0,
+          "deleted_bases": 0
+        }
+      }
+    },
+    {
+      "case": "klebs-q1-20k",
+      "job_id": "43010126",
+      "mode": "gap",
+      "read_type": "ont",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 525.532,
+      "status": "exhausted",
+      "total_rounds": 5,
+      "total_extension_length": 102276,
+      "winner": null,
+      "gap_length": null,
+      "assembler": {
+        "invocations": 5,
+        "gfas": 15,
+        "nonempty_gfas": 4,
+        "explicit_errors": 0,
+        "genuine_quality_verified_reads": 85
+      }
+    },
+    {
+      "case": "klebs-q1-50k",
+      "job_id": "43010127",
+      "mode": "gap",
+      "read_type": "ont",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 539.397,
+      "status": "exhausted",
+      "total_rounds": 6,
+      "total_extension_length": 115342,
+      "winner": null,
+      "gap_length": null,
+      "assembler": {
+        "invocations": 6,
+        "gfas": 18,
+        "nonempty_gfas": 8,
+        "explicit_errors": 0,
+        "genuine_quality_verified_reads": 125
+      }
+    },
+    {
+      "case": "klebs-mid-5k",
+      "job_id": "43010128",
+      "mode": "gap",
+      "read_type": "ont",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 351.503,
+      "status": "exhausted",
+      "total_rounds": 3,
+      "total_extension_length": 23839,
+      "winner": null,
+      "gap_length": null,
+      "assembler": {
+        "invocations": 3,
+        "gfas": 9,
+        "nonempty_gfas": 4,
+        "explicit_errors": 0,
+        "genuine_quality_verified_reads": 55
+      }
+    },
+    {
+      "case": "klebs-mid-20k",
+      "job_id": "43010129",
+      "mode": "gap",
+      "read_type": "ont",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 352.778,
+      "status": "exhausted",
+      "total_rounds": 3,
+      "total_extension_length": 20481,
+      "winner": null,
+      "gap_length": null,
+      "assembler": {
+        "invocations": 3,
+        "gfas": 9,
+        "nonempty_gfas": 2,
+        "explicit_errors": 0,
+        "genuine_quality_verified_reads": 37
+      }
+    },
+    {
+      "case": "klebs-mid-50k",
+      "job_id": "43010130",
+      "mode": "gap",
+      "read_type": "ont",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 526.905,
+      "status": "exhausted",
+      "total_rounds": 6,
+      "total_extension_length": 159200,
+      "winner": null,
+      "gap_length": null,
+      "assembler": {
+        "invocations": 6,
+        "gfas": 18,
+        "nonempty_gfas": 8,
+        "explicit_errors": 0,
+        "genuine_quality_verified_reads": 112
+      }
+    },
+    {
+      "case": "klebs-q3-5k",
+      "job_id": "43010131",
+      "mode": "gap",
+      "read_type": "ont",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 652.899,
+      "status": "exhausted",
+      "total_rounds": 8,
+      "total_extension_length": 216325,
+      "winner": null,
+      "gap_length": null,
+      "assembler": {
+        "invocations": 8,
+        "gfas": 24,
+        "nonempty_gfas": 13,
+        "explicit_errors": 0,
+        "genuine_quality_verified_reads": 185
+      }
+    },
+    {
+      "case": "klebs-q3-20k",
+      "job_id": "43010132",
+      "mode": "gap",
+      "read_type": "ont",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 495.596,
+      "status": "exhausted",
+      "total_rounds": 8,
+      "total_extension_length": 223818,
+      "winner": null,
+      "gap_length": null,
+      "assembler": {
+        "invocations": 8,
+        "gfas": 24,
+        "nonempty_gfas": 13,
+        "explicit_errors": 0,
+        "genuine_quality_verified_reads": 182
+      }
+    },
+    {
+      "case": "klebs-q3-50k",
+      "job_id": "43010133",
+      "mode": "gap",
+      "read_type": "ont",
+      "mechanical_validation": "passed",
+      "checks": {
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 242.151,
+      "status": "exhausted",
+      "total_rounds": 2,
+      "total_extension_length": 0,
+      "winner": null,
+      "gap_length": null,
+      "assembler": {
+        "invocations": 2,
+        "gfas": 6,
+        "nonempty_gfas": 0,
+        "explicit_errors": 0,
+        "genuine_quality_verified_reads": 36
+      }
+    },
+    {
+      "case": "klebs-auto",
+      "job_id": "43010134",
+      "mode": "auto",
+      "read_type": "ont",
+      "mechanical_validation": "passed",
+      "checks": {
+        "integrated_genome_reconstructed": true,
+        "input_and_source_hashes": true,
+        "family_manifest_histories_budget_pairing_agp": true,
+        "resume_no_recomputation": true
+      },
+      "command_seconds": 757.826,
+      "status": null,
+      "total_rounds": null,
+      "total_extension_length": null,
+      "winner": null,
+      "gap_length": null,
+      "assembler": {
+        "invocations": 7,
+        "gfas": 21,
+        "nonempty_gfas": 5,
+        "explicit_errors": 0,
+        "genuine_quality_verified_reads": 112
+      },
+      "summary": {
+        "total_gaps": 3,
+        "filled_gaps": 1,
+        "unfilled_gaps": 2,
+        "fill_rate": "33.33%",
+        "extension_filled": 1,
+        "direct_connection_filled": 0
+      },
+      "gap_assessments": [
+        {
+          "name": "gap1",
+          "status": "assessed",
+          "expected_length": 5000,
+          "recovered_length": 5000,
+          "length_delta": 0,
+          "exact_match": true,
+          "gap_edit_counts": {
+            "substitutions": 0,
+            "inserted_bases": 0,
+            "deleted_bases": 0
+          },
+          "identity": 1.0,
+          "query_coverage": 1.0,
+          "reference_coverage": 1.0,
+          "mapq": 60
+        },
+        {
+          "name": "gap2",
+          "status": "unfilled_not_assessed",
+          "expected_length": 20000
+        },
+        {
+          "name": "gap3",
+          "status": "unfilled_not_assessed",
+          "expected_length": 50000
+        }
+      ],
+      "non_gap_edits": null
+    }
+  ],
+  "scope": "Fixed masked reference/baseline gaps; not a representative natural-gap benchmark, independent truth guarantee, or old/new version performance comparison"
+}
