@@ -1,6 +1,6 @@
 # 双向历史家族延伸
 
-状态：双向家族已实现并通过受控测试。2026-11-21 SSH 180 真实 ONT 测试发现局部组装输入格式及零退出码错误漏检，ONT 工具链验收未通过，详见 `docs/validation/2026-11-21-ssh180-real-ont.md`。普通 gap 与 CtgLinker 使用历史家族机制，TelSeeker 保持单端目标并复用底层。
+状态：双向家族已实现并通过受控测试。2026-11-21 发现的 ONT 输入格式及零退出码错误漏检已修复，179 项回归和 SSH 180 同版本工具复测通过；真实样例仍未闭合。详见 `docs/validation/2026-11-21-ont-quality-repair.md`。普通 gap 与 CtgLinker 使用历史家族机制，TelSeeker 保持单端目标并复用底层。
 
 确认日期：2026-11-21。实施分支：`feat/bidirectional-gap-extension`。
 
