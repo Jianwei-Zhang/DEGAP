@@ -97,6 +97,7 @@ See [docs/design/bidirectional-extension.md](docs/design/bidirectional-extension
 
 - A failed terminal-window comparison falls back to a full-sequence check; small collinear alignment blocks can form one validated connection. Minimum effective overlap is not silently reduced.
 - Original flank cores are protected; bounded terminal repair is **not** unconditional polishing. At most 2 kb near each gap-facing end may be revised, and only when supported by original spanning reads (including read-consensus candidates for errors inherited by the seed), both strands, and unique original-boundary placement. Unconfirmed differences are recorded but not applied.
+- If a short erroneous end is clipped by the aligner, a same-length replacement is tested against spanning reads before accepting the join. This does not infer insertions or deletions in an unmapped end.
 - Gap-only length, flank length delta, and true-overlap trimming are reported as separate metrics.
 - Initial-end anchor backoff is one additional scheduled attempt and consumes the shared round budget.
 
@@ -114,6 +115,7 @@ Treat **tool ran (exit 0)**, **gap closed / endpoint connected**, and **sequence
 ### Resume, Compatibility, `--flag`, and `--remove`
 
 - **Resuming**: Rerun the exact same command and unchanged inputs (or add `--resume_auto`) to resume from content-verified family checkpoints (`families.json`, `ctg-families.json`, and stage receipts). Interrupted uncommitted stages are archived into `.incomplete.*` directories rather than trusted.
+- Prepared FASTA is checked against the ordered original HiFi/ONT files. Existing caches without an input manifest cannot be verified; start in a new output directory. AutoGapfiller rechecks the current job contract before integrating an existing result, without rerunning completed extension rounds.
 - **Unsupported legacy resume**: `--resume ROUND` is rejected for all four `DEGAP.py` modes (no arbitrary round rewind).
 - **Legacy and old-contract directories**: Legacy single-sided outputs and directories produced under changed algorithm contracts are not silently migrated or overwritten. Preserve old evidence intact and run in a **new output directory**.
 - **`--flag`**: Deprecated compatibility option in `gapfiller` mode. Passing it prints a notice and is ignored; omit it from new commands.

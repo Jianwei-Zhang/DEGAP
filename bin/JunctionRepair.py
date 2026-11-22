@@ -15,7 +15,8 @@ from ExtensionFamilies import Version, atomic_json, fingerprint, read_json
 
 POLICY = {"repair_window": 2000, "min_support": 5, "min_fraction": 0.8,
           "min_mapq": 20, "anchor": 500, "read_margin": 200,
-          "min_boundary_identity": 95.0, "version": "bounded-read-backed-v2"}
+          "min_boundary_identity": 95.0, "projection_padding": 32,
+          "version": "bounded-read-backed-v3"}
 CS = re.compile(r"(:[0-9]+|=[A-Za-z]+|\*[A-Za-z]{2}|\+[A-Za-z]+|-[A-Za-z]+)")
 
 
@@ -73,7 +74,7 @@ def paf_records(path):
             if sum(x[1] for x in ops) != te-ts or sum(x[2] for x in ops) != qe-qs:
                 raise ValueError("Junction cs does not reconstruct PAF spans")
             yield {"name": row[0], "qlen": qlen, "qs": qs, "qe": qe,
-                   "strand": row[4], "target": row[5], "ts": ts, "te": te,
+                   "strand": row[4], "target": row[5], "tlen": tlen, "ts": ts, "te": te,
                    "mapq": mapq, "identity": matches / block if block else 0,
                    "primary": tags.get("tp", "P") == "P", "ops": ops}
 
@@ -135,6 +136,37 @@ def read_edits(record, ref):
     return out
 
 
+def projected_allele(record, ref, start, end):
+    """Read allele over a padded target interval, independent of indel placement."""
+    t = record["ts"]
+    parts = []
+    for op, tn, _, _, query in record["ops"]:
+        if op == "I" and start <= t <= end:
+            parts.append(query)
+        elif op in ("=", "X") and t < end and t+tn > start:
+            lo, hi = max(start, t), min(end, t+tn)
+            parts.append(query[lo-t:hi-t] if query else ref[lo:hi].upper())
+        t += tn
+    return "".join(parts)
+
+
+def clip_at_boundary(record, side):
+    return record["qlen"]-record["qe"] if side == "L" else record["qs"]
+
+
+def has_interior_anchor(record, side, length, policy):
+    # Check aligned query coverage *inside* the protected core, not just the
+    # total alignment span (which could mostly be within the repair window).
+    start, end = (0, length-policy["repair_window"]) if side == "L" else (policy["repair_window"], length)
+    q = record["qs"]
+    matched = 0
+    for op, _, qn, _, _ in record["ops"]:
+        if op == "=":
+            matched += max(0, min(end, q+qn)-max(start, q))
+        q += qn
+    return matched >= policy["anchor"]
+
+
 def read_support(ref, edits, records, *, side, left_length, gap_length, policy=POLICY):
     """One vote per distinct primary read, including non-proposed alleles."""
     unique = {}
@@ -152,6 +184,7 @@ def read_support(ref, edits, records, *, side, left_length, gap_length, policy=P
     results = []
     offset = 0 if side == "L" else left_length + gap_length
     for edit in edits:
+        projected = edit.get("candidate_source") == "terminal_projection"
         key = normalize_edit(ref, edit["start0"]+offset, edit["end0"]+offset,
                              edit["original"], edit["proposed"])
         start, end = key[:2]
@@ -165,6 +198,19 @@ def read_support(ref, edits, records, *, side, left_length, gap_length, policy=P
                 continue
             if side == "R" and record["te"] < left_length+gap_length+policy["repair_window"]+policy["anchor"]:
                 continue
+            if projected:
+                # Test the whole projected tail as one allele, with context on
+                # both sides so a split CIGAR event cannot count as support.
+                pad = min(policy["projection_padding"], policy["read_margin"])
+                lo, hi = start-pad, end+pad
+                allele = projected_allele(record, ref, lo, hi)
+                if allele == (ref[lo:start] + edit["proposed"] + ref[end:hi]).upper():
+                    alt.add(rid); strands.add(record["strand"])
+                elif allele == ref[lo:hi].upper():
+                    original.add(rid)
+                else:
+                    other.add(rid)
+                continue
             changes = parsed[rid]
             if key in changes:
                 alt.add(rid); strands.add(record["strand"])
@@ -177,14 +223,20 @@ def read_support(ref, edits, records, *, side, left_length, gap_length, policy=P
         accepted = (len(alt) >= policy["min_support"] and fraction >= policy["min_fraction"]
                     and strands == {"+", "-"})
         results.append(dict(edit, side=side, status="accepted" if accepted else "retained",
-                            reason="independent_spanning_reads" if accepted else "insufficient_or_conflicting_read_support",
+                            reason=("read_confirmed_terminal_projection" if projected else "independent_spanning_reads")
+                            if accepted else "insufficient_or_conflicting_read_support",
                             alt_reads=len(alt), ref_reads=len(original), other_reads=len(other),
                             spanning_reads=total, alt_fraction=fraction, strands=sorted(strands),
                             _alt_ids=alt))
     selected = [item for item in results if item["status"] == "accepted"]
-    if selected and len(set.intersection(*(item["_alt_ids"] for item in selected))) < policy["min_support"]:
-        for item in selected:
-            item.update(status="retained", reason="inconsistent_read_support_across_end_edits")
+    if selected:
+        shared = set.intersection(*(item["_alt_ids"] for item in selected))
+        shared_strands = {unique[rid]["strand"] for rid in shared}
+        if (len(shared) < policy["min_support"] or
+                (any(item.get("candidate_source") == "terminal_projection" for item in selected)
+                 and shared_strands != {"+", "-"})):
+            for item in selected:
+                item.update(status="retained", reason="inconsistent_read_support_across_end_edits")
     for item in results:
         item.pop("_alt_ids", None)
     return results
@@ -308,19 +360,41 @@ class BoundaryVerifier:
         mapped = list(paf_records(self._align(root, "boundaries", target, queries, "asm20")))
         anchors = {}
         for side in ("L", "R"):
+            length = len(original[side])
+            window = min(self.policy["repair_window"], max(0, length-1000))
             hits = [r for r in mapped if r["name"] == side and r["primary"] and r["strand"] == "+"
+                    and r["qlen"] == length and r["tlen"] == len(draft)
                     and r["mapq"] >= self.policy["min_mapq"]
                     and r["identity"]*100 >= self.policy["min_boundary_identity"]
-                    and r["qe"]-r["qs"] >= min(1000, len(original[side]))
-                    and (r["qe"] == len(original[side]) if side == "L" else r["qs"] == 0)]
+                    and r["qe"]-r["qs"] >= min(1000, length)
+                    and (clip_at_boundary(r, side) == 0 or
+                         (clip_at_boundary(r, side) <= window and has_interior_anchor(r, side, length, self.policy)))]
             if len(hits) != 1:
                 return None, "ambiguous_or_unmapped_original_"+side+"_boundary"
             anchors[side] = hits[0]
-        left_cut = query_boundary(anchors["L"], len(original["L"]), after=True)
-        right_cut = query_boundary(anchors["R"], 0)
+        left_clip, right_clip = (clip_at_boundary(anchors[side], side) for side in ("L", "R"))
+        left_cut = query_boundary(anchors["L"], len(original["L"]), after=True) if not left_clip else anchors["L"]["te"]+left_clip
+        right_cut = query_boundary(anchors["R"], 0) if not right_clip else anchors["R"]["ts"]-right_clip
+        projected = {}
+        if left_clip or right_clip:
+            if not 0 <= left_cut <= right_cut <= len(draft):
+                return None, "unresolved_clipped_original_boundaries"
+            # Only a length-preserving projection is attempted. Reads must
+            # validate this exact terminal allele before it can define a cut.
+            for side, clip, start, end, proposed in (
+                    ("L", left_clip, len(original["L"])-left_clip, len(original["L"]), draft[left_cut-left_clip:left_cut]),
+                    ("R", right_clip, 0, right_clip, draft[right_cut:right_cut+right_clip])):
+                if clip:
+                    old = original[side][start:end].upper()
+                    if old == proposed.upper() or not re.fullmatch(r"[ACGT]+", proposed, re.IGNORECASE):
+                        return None, "unresolved_clipped_original_"+side+"_boundary"
+                    projected[side] = {"start0": start, "end0": end, "original": old,
+                                       "proposed": proposed.upper(), "candidate_source": "terminal_projection"}
         summary = {"mode": "gap", "gap_length": max(0, right_cut-left_cut),
                    "flank_length_delta": 0, "overlap_trim": 0,
                    "policy": self.policy, "flanks": {}, "repairs": [], "warnings": []}
+        if projected:
+            summary["warnings"].append("Soft-clipped original tail projected at unchanged length; accepted only with independent spanning reads")
         pieces = []
         def origin_piece(side, start, end):
             if end > start:
@@ -369,6 +443,7 @@ class BoundaryVerifier:
                                       "map-hifi" if platform == "hifi" else "map-ont", checksum)
                     support_records.extend((platform, r) for r in paf_records(paf))
             for side in ("L", "R"):
+                projection = projected.get(side)
                 discovered = consensus_proposals(protected, support_records, side=side,
                                                  left_length=len(original["L"]), gap_length=len(gap), policy=self.policy)
                 merged = {(e["start0"],e["end0"],e["original"],e["proposed"]):e for e in proposals[side]}
@@ -378,6 +453,15 @@ class BoundaryVerifier:
                         merged[key]["candidate_source"] = "assembly_and_reads"
                     else:
                         merged[key] = edit
+                if projection:
+                    # Protect the exact context used to vote on the projected
+                    # haplotype. A normalized equivalent indel can land just
+                    # outside the clipped interval; applying both duplicates it.
+                    start, end = projection["start0"], projection["end0"]
+                    pad = min(self.policy["projection_padding"], self.policy["read_margin"])
+                    merged = {key: edit for key, edit in merged.items()
+                              if edit["end0"] < start-pad or edit["start0"] > end+pad}
+                    merged[(start,end,projection["original"],projection["proposed"])] = projection
                 proposals[side] = sorted(merged.values(), key=lambda e:(e["start0"],e["end0"],e["proposed"]))
                 summary["repairs"].extend(read_support(protected, proposals[side], support_records, side=side,
                                                        left_length=len(original["L"]), gap_length=len(gap), policy=self.policy))
@@ -388,6 +472,8 @@ class BoundaryVerifier:
                     for item in accepted:
                         item.update(status="retained", reason="overlapping_proposed_edits")
                     accepted = []
+                if projection and not any(e["candidate_source"] == "terminal_projection" for e in accepted):
+                    return None, "insufficient_read_support_for_clipped_original_"+side+"_boundary"
                 cursor = 0
                 for edit in accepted:
                     if original[side][edit["start0"]:edit["end0"]].upper() != edit["original"]:

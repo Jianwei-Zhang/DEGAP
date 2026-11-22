@@ -136,7 +136,7 @@ class FamilyResultTests(unittest.TestCase):
         executor.job_config = {"jobs": manager.job_dirs}
         executor.job_list = []
         executor.workers = 1
-        with patch.object(executor, "_is_job_completed", return_value=False):
+        with patch.object(executor, "_is_job_completed", side_effect=AssertionError("must revalidate family job")):
             self.assertEqual(executor._collect_jobs(), 1)
         self.assertEqual(executor.job_list[0]["job"]["direction"], "bidirectional")
         self.assertFalse(executor.job_list[0]["has_right"])

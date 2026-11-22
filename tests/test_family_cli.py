@@ -75,6 +75,18 @@ class RealFamilyCLITests(unittest.TestCase):
         self.assertEqual((out / "families.json").read_bytes(), checkpoint)
         self.assertEqual({str(p): p.stat().st_mtime_ns for p in out.rglob("stage.json")}, stages)
 
+        # Changing raw input must not return the previous, still-valid publication.
+        publication = (out / "family-result.json").read_bytes()
+        working = out / "processed_reads" / "hifi_reads.fa"
+        working_bytes = working.read_bytes()
+        (self.root / "hifi.fa").write_text(">new_unrelated_read\n" + "AGCT" * 5000 + "\n")
+        failed = subprocess.run([sys.executable, str(BIN/"DEGAP.py"), *args],
+                                capture_output=True, text=True, timeout=300)
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertIn("Original read inputs", failed.stderr)
+        self.assertEqual((out / "family-result.json").read_bytes(), publication)
+        self.assertEqual(working.read_bytes(), working_bytes)
+
     def test_gap_cli_ont(self):
         out, args = self.gap(["ont"])
         gfas = list(out.glob("attempts/*/*/assembler/hifiasm/*.p_ctg.gfa"))
@@ -93,7 +105,7 @@ class RealFamilyCLITests(unittest.TestCase):
         source.write_text(source.read_text().replace("I"*20000,"H"*20000))
         failed=subprocess.run([sys.executable,str(BIN/"DEGAP.py")]+list(map(str,args)),capture_output=True,text=True)
         self.assertNotEqual(failed.returncode,0)
-        self.assertIn("checkpoint inputs",failed.stderr)
+        self.assertIn("Original read inputs",failed.stderr)
 
 
     def test_ont_fasta_cannot_be_published_as_biological_exhaustion(self):
@@ -166,6 +178,17 @@ class RealFamilyCLITests(unittest.TestCase):
                                          "--MaximumExtensionRound", "6", "--remove", "3"], log="resume.log")
         self.assertEqual(str(SeqIO.read(final[0], "fasta").seq), self.truth)
         self.assertEqual({str(p): p.stat().st_mtime_ns for p in out.rglob("stage.json")}, stages)
+
+        if platform == "hifi":
+            before = final[0].stat().st_mtime_ns
+            failed = subprocess.run([sys.executable, str(BIN/"AutoGapfiller.py"), "--genome", str(genome),
+                                     "--hifi", str(self.root/"hifi.fa"), "--output", str(out), "-w", "1", "-t", "2",
+                                     "--MaximumExtensionRound", "0", "--remove", "3"],
+                                    capture_output=True, text=True, timeout=300)
+            self.assertNotEqual(failed.returncode, 0, failed.stdout[-3500:])
+            self.assertIn("Family checkpoint inputs, parameters or schema changed", failed.stdout+failed.stderr)
+            self.assertEqual(final[0].stat().st_mtime_ns, before)
+            self.assertEqual({str(p): p.stat().st_mtime_ns for p in out.rglob("stage.json")}, stages)
 
         if platform=="ont":
             self.assertTrue(list(out.rglob("ont.extension.fastq")))

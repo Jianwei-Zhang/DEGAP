@@ -154,7 +154,7 @@ class JobManager:
         # 遍历 01.reads_preprocessor/ 下的所有文件和目录
         for item in self.preprocessing_dir.iterdir():
             # 跳过 preprocessing_config.json
-            if item.name == 'preprocessing_config.json':
+            if item.name in {"preprocessing_config.json", "preprocessing-inputs.json"}:
                 continue
             
             # 目标软链接路径
@@ -693,9 +693,11 @@ class JobExecutor:
 
             if 'bidirectional' in gap_jobs:
                 job = gap_jobs['bidirectional']
-                if not self._is_job_completed(job):
-                    self.job_list.append({'job': job, 'gap_key': gap_key,
-                                          'has_right': False, 'right_job': None})
+                # Artifact integrity alone does not prove compatibility with
+                # this invocation. Let DEGAP validate the live family contract;
+                # a matching completed checkpoint will not run another round.
+                self.job_list.append({'job': job, 'gap_key': gap_key,
+                                      'has_right': False, 'right_job': None})
                 continue
 
             # Legacy job configurations remain readable/executable.
@@ -818,23 +820,27 @@ class JobExecutor:
             with open(stderr_log, 'w') as f:
                 f.write(result.stderr if result.stderr else "")
 
-            # 检查退出码
+            bidirectional = job['direction'] == 'bidirectional'
             if result.returncode != 0:
                 error_msg = f"Exit code: {result.returncode}"
-                if result.stderr:
-                    error_msg += f"\nStderr: {result.stderr[:500]}"  # 只显示前500字符
+                if result.stderr and result.stderr.strip():
+                    error_msg += f"\nStderr: {result.stderr.strip().splitlines()[-1]}"
 
                 return {
                     'job_name': job_name,
-                    'status': 'failed',
+                    'status': 'error' if bidirectional else 'failed',
                     'elapsed_time': elapsed_time,
                     'job_dir': str(job_dir),
                     'error': error_msg,
                     'exit_code': result.returncode
                 }
 
-            # 检查是否成功（通过 process.log 判断）
-            success = self._check_job_success(job_dir)
+            if bidirectional:
+                from FamilyResult import load_result
+                family_result = load_result(job_dir)
+                success = family_result['status'] == 'closed'
+            else:
+                success = self._check_job_success(job_dir)
 
             if success:
                 return {
@@ -849,7 +855,8 @@ class JobExecutor:
                     'status': 'failed',
                     'elapsed_time': elapsed_time,
                     'job_dir': str(job_dir),
-                    'error': 'Job execution completed but did not produce expected results'
+                    'error': (f"Family search ended: {family_result['status']}" if bidirectional
+                              else 'Job execution completed but did not produce expected results')
                 }
 
         except subprocess.TimeoutExpired:
@@ -1123,6 +1130,17 @@ class JobExecutor:
         print(f"  Completed: {len(self.completed_jobs)}")
         print(f"  Failed: {len(self.failed_jobs)}")
         print(f"  Skipped: {len(self.skipped_jobs)} (LEFT succeeded)")
+
+        # Never let the analyzer integrate a previous valid publication after
+        # the current invocation rejected its contract. Biological exhaustion
+        # (exit zero with a verified non-closed result) is not a tool error.
+        family_jobs = {entry['job']['job_name'] for entry in self.job_list
+                       if entry['job']['direction'] == 'bidirectional'}
+        errors = [result for result in self.failed_jobs
+                  if result['job_name'] in family_jobs and result['status'] != 'failed']
+        if errors:
+            detail = "; ".join(f"{r['job_name']}: {r.get('error', r['status'])}" for r in errors)
+            raise RuntimeError(f"AutoGapfiller could not verify or finish family jobs: {detail}")
 
         # 生成 gap filling 统计信息
         analyzer = GapFillingAnalyzer(self.main_output_dir)

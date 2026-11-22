@@ -160,6 +160,65 @@ class JunctionToolTests(unittest.TestCase):
         hit,=compare(a,b)
         self.assertEqual(joined_sequence(hit,a,b),self.truth[40000:140000])
         self.assertEqual(load_plan(hit.evidence)["summary"]["gap_length"],20000)
+    def clipped_candidate(self, side, *, alt_count=10, ref_count=0, both_strands=True, clip=20):
+        from Bio.Seq import Seq
+        truth = self.truth[:80000]
+        mutate = str.maketrans("ACGT", "CGTA")
+        if side == "L":
+            original_l = truth[:30000-clip]+truth[30000-clip:30000].translate(mutate)
+            original_r = truth[50000:]
+            extended_l, extended_r = truth[:65000], original_r
+            replaced = original_l+truth[30000:]
+            start = 20000
+        else:
+            original_l = truth[:30000]
+            original_r = truth[50000:50000+clip].translate(mutate)+truth[50000+clip:]
+            extended_l, extended_r = original_l, truth[15000:]
+            replaced = truth[:50000]+original_r
+            start = 40000
+        label = f"{side}-{alt_count}-{ref_count}-{both_strands}-{clip}"
+        left = self.write(label+"-L", original_l)
+        right = self.write(label+"-R", original_r)
+        a = Version.capture("L", int(side == "L"), self.write(label+"-extendedL", extended_l) if side == "L" else left)
+        b = Version.capture("R", int(side == "R"), self.write(label+"-extendedR", extended_r) if side == "R" else right)
+        reads = self.root/(label+"-reads.fa")
+        with reads.open("w") as stream:
+            for i in range(alt_count+ref_count):
+                src = truth if i < alt_count else replaced
+                seq = src[start+i*10:start+i*10+20000]
+                if both_strands and i % 2:
+                    seq = str(Seq(seq).reverse_complement())
+                stream.write(f">read{i}\n{seq}\n")
+        compare = MummerOverlap(self.root/("overlaps-"+label), 500)
+        compare.configure_boundaries(SimpleNamespace(thread=1, reads_info={"working_hifi": str(reads)}),
+                                     [("L", "rightward", left), ("R", "leftward", right)])
+        return compare, a, b, truth
+
+    def test_soft_clipped_ends_are_repaired_with_spanning_reads_on_either_side(self):
+        for side in ("L", "R"):
+            with self.subTest(side=side):
+                compare,a,b,truth = self.clipped_candidate(side)
+                hit, = compare(a,b)
+                self.assertEqual(joined_sequence(hit,a,b), truth)
+                summary = load_plan(hit.evidence)["summary"]
+                edit, = [e for e in summary["repairs"] if e.get("candidate_source") == "terminal_projection"]
+                self.assertEqual((edit["status"], edit["side"], edit["strands"]), ("accepted", side, ["+", "-"]))
+                self.assertEqual((summary["gap_length"], summary["flank_length_delta"]), (20000, 0))
+                self.assertGreater(summary["left_replace_bases" if side == "L" else "right_replace_bases"], 0)
+
+    def test_clipped_boundaries_are_not_guessed_when_support_is_weak(self):
+        for kwargs in ({"alt_count": 4}, {"both_strands": False}, {"ref_count": 3}):
+            with self.subTest(**kwargs):
+                compare,a,b,_ = self.clipped_candidate("L", **kwargs)
+                self.assertEqual(compare(a,b), [])
+                self.assertEqual(compare.diagnostic(a,b)["reason"],
+                                 "insufficient_read_support_for_clipped_original_L_boundary")
+
+    def test_clipping_past_protected_window_is_not_repaired(self):
+        compare,a,b,_ = self.clipped_candidate("R", clip=2010)
+        self.assertEqual(compare(a,b), [])
+        self.assertEqual(compare.diagnostic(a,b)["reason"], "ambiguous_or_unmapped_original_R_boundary")
+
     def test_collinear_blocks_combine_without_counting_unaligned_gaps(self):
         a=Version("L",1,"unused","unused",50000);b=Version("R",1,"unused","unused",40000)
         path=self.root/"coords"

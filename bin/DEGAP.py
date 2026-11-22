@@ -59,105 +59,32 @@ def generate_stats_with_seqkit(input_file, output_file):
 
 
 def preprocess_reads_files(hifi_reads, ont_reads, out, data_type):
-    """
-    预处理reads文件（STEP 1）：
-    1. 检测文件格式（FASTQ或FASTA）
-    2. 统一转换为FASTA格式供workflow使用
-       - 支持单文件和多文件输入（FASTA/FASTQ/.gz）
-       - 使用 seqkit fq2fa 合并/转换，始终输出 FASTA
+    """Prepare or verify the FASTA used by the workflow while retaining source formats."""
+    from pathlib import Path
+    from PreparedReads import contract, prepare
 
-    Returns: (hifi_fa, hifi_orig, hifi_fmt, ont_fa, ont_orig, ont_fmt)
-    """
-    processed_dir = os.path.join(out, "processed_reads")
-    os.makedirs(processed_dir, exist_ok=True)
+    def describe(value):
+        if not value:
+            return [], None, None
+        files = [str(p) for p in value] if isinstance(value, (list, tuple)) else [str(value)]
+        formats = set()
+        for path in files:
+            lower = path.lower()
+            if lower.endswith(('.fastq', '.fastq.gz', '.fq', '.fq.gz')):
+                formats.add('fastq')
+            elif lower.endswith(('.fasta', '.fasta.gz', '.fa', '.fa.gz', '.fna', '.fna.gz')):
+                formats.add('fasta')
+            else:
+                raise ValueError(f"Unsupported file format: {path}")
+        return files, files if len(files) > 1 else files[0], formats.pop() if len(formats) == 1 else 'mixed'
 
-    def normalize_file_list(file_input):
-        if file_input is None:
-            return []
-        if isinstance(file_input, (list, tuple)):
-            return [str(f) for f in file_input if f]
-        return [str(file_input)]
-
-    def detect_file_format(file_path):
-        lower = file_path.lower()
-        if lower.endswith(('.fastq', '.fastq.gz', '.fq', '.fq.gz')):
-            return 'fastq'
-        if lower.endswith(('.fasta', '.fasta.gz', '.fa', '.fa.gz', '.fna', '.fna.gz')):
-            return 'fasta'
-        raise ValueError(f"Unsupported file format: {file_path}")
-
-    def process_single_file(file_input, file_type="HiFi"):
-        """
-        处理单个或多个reads文件，输出统一的FASTA文件
-        """
-        file_list = normalize_file_list(file_input)
-        if not file_list:
-            return None, None, None
-
-        prefix = "ont_reads" if file_type == "ONT" else "hifi_reads"
-        working_fa = os.path.join(processed_dir, f"{prefix}.fa")
-
-        input_formats = []
-        for file_path in file_list:
-            if not os.path.exists(file_path):
-                print(f"Error: {file_type} reads file does not exist: {file_path}")
-                sys.exit(1)
-            try:
-                input_formats.append(detect_file_format(file_path))
-            except ValueError as e:
-                print(f"Error: {e}")
-                sys.exit(1)
-
-        if 'fastq' in input_formats and 'fasta' in input_formats:
-            original_format = 'mixed'
-        elif 'fastq' in input_formats:
-            original_format = 'fastq'
-        else:
-            original_format = 'fasta'
-
-        if not os.path.exists(working_fa):
-            try:
-                if len(file_list) == 1:
-                    print(f"Converting {file_type} reads to FASTA...")
-                    print(f"    Input:  {file_list[0]}")
-                else:
-                    print(f"Merging and converting {len(file_list)} {file_type} files to FASTA...")
-                    for idx, f in enumerate(file_list, 1):
-                        print(f"    [{idx}] {f}")
-                print(f"    Output: {working_fa}")
-
-                # seqkit fq2fa handles FASTA/FASTQ and .gz, always outputs FASTA
-                cmd = ['seqkit', 'fq2fa', '-o', working_fa] + file_list
-                subprocess.run(cmd, check=True, capture_output=True, text=True)
-                print(f"  ✓ {file_type} FASTA ready: {working_fa}")
-            except subprocess.CalledProcessError as e:
-                print(f"  ✗ Error preparing {file_type} FASTA:")
-                print(f"    {e.stderr}")
-                sys.exit(1)
-            except FileNotFoundError:
-                print(f"  ✗ Error: seqkit not found. Please install seqkit:")
-                print(f"    conda install -c bioconda seqkit")
-                sys.exit(1)
-        else:
-            print(f"  ✓ Using existing {file_type} FASTA: {working_fa}")
-
-        original_input = file_list if len(file_list) > 1 else file_list[0]
-        return working_fa, original_input, original_format
-
-    # 根据data_type处理文件
-    if data_type == 'mixed':
-        hifi_fa, hifi_orig, hifi_fmt = process_single_file(hifi_reads, "HiFi")
-        ont_fa, ont_orig, ont_fmt = process_single_file(ont_reads, "ONT")
-    elif data_type == 'ont':
-        # 单ONT模式：hifi_reads参数实际传入的是ONT文件（现在可能是列表）
-        ont_fa, ont_orig, ont_fmt = process_single_file(hifi_reads, "ONT")
-        hifi_fa, hifi_orig, hifi_fmt = None, None, None
-    else:
-        # 单HiFi模式
-        hifi_fa, hifi_orig, hifi_fmt = process_single_file(hifi_reads, "HiFi")
-        ont_fa, ont_orig, ont_fmt = None, None, None
-
-    return (hifi_fa, hifi_orig, hifi_fmt, ont_fa, ont_orig, ont_fmt)
+    if data_type == 'ont':
+        hifi_reads, ont_reads = None, hifi_reads
+    hifi_files, hifi_original, hifi_format = describe(hifi_reads)
+    ont_files, ont_original, ont_format = describe(ont_reads)
+    outputs = prepare(Path(out) / 'processed_reads', contract(hifi_files, ont_files))
+    return (str(outputs['hifi']) if 'hifi' in outputs else None, hifi_original, hifi_format,
+            str(outputs['ont']) if 'ont' in outputs else None, ont_original, ont_format)
 
 def convert_extension_fasta_to_fastq(extension_fasta, original_fastq, output_fastq):
     """Compatibility helper with genuine source qualities and sequence checks."""

@@ -25,12 +25,17 @@ def prepare_context(base, overlap_contract):
     finder.roundInput = SimpleNamespace(elongation=SimpleNamespace(base=base, roundDir=base.out))
     platforms = ["hifi", "ont"] if base.data_type == "mixed" else [base.data_type]
     files = {}
-    reads_info = dict(getattr(base, "reads_info", {}) or {})
+    reads_info = dict(getattr(base, "original_reads_info", None) or {})
+    reads_info.update(getattr(base, "reads_info", None) or {})
     for platform in platforms:
         path = Path(finder._get_reads_path(platform)).resolve()
         files[str(path)] = content_hash(path)
         reads_info["working_" + platform] = str(path)
     base.reads_info = reads_info
+    from PreparedReads import sources
+    if "hifi" in platforms:
+        for source in sources(reads_info.get("original_hifi") or getattr(base, "original_hifi_reads", None)):
+            files[source["path"]] = source["sha256"]
     # Quality changes must invalidate assembly/checkpoint reuse even when the
     # normalized FASTA is unchanged. Build the shared quality index lazily.
     if "ont" in platforms:
@@ -61,7 +66,8 @@ def prepare_context(base, overlap_contract):
         # checked execution reports a missing tool rather than a biological stop.
         tools[name] = {"path": path, "sha256": content_hash(path) if path else None}
     code_files = ["FamilyGap.py", "ExtensionFamilies.py", "FamilyOverlap.py", "FamilyRound.py", "FamilyTools.py",
-                  "FindExtensionReads.py", "FindExtensionContigs.py", "GapFillerClass.py", "ONTAssemblyReads.py", "JunctionRepair.py"]
+                  "FindExtensionReads.py", "FindExtensionContigs.py", "GapFillerClass.py", "ONTAssemblyReads.py", "JunctionRepair.py",
+                  "PreparedReads.py", "FamilyResult.py", "ReportStyle.py"]
     return {
         "driver": "family-gap-v1", "files": files, "tools": tools, "overlap": overlap_contract,
         "code": {name: content_hash(Path(__file__).parent / name) for name in code_files},

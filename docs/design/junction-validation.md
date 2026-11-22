@@ -14,9 +14,11 @@ Raw alignment stages, full fallback and pair decisions are cached separately. Th
 
 ## Original boundaries and gap sequence
 
-`L0` and `R0` are the original flanks, while later versions include cumulative extension. Align both originals to the provisional join using minimap2 `asm20` with a long `cs` path. A unique primary forward alignment must have MAPQ >= 20 and identity >= 95%; it must cover the gap-facing original boundary. At least 1 kb of alignment is required, or the complete original if shorter.
+`L0` and `R0` are the original flanks, while later versions include cumulative extension. Align both originals to the provisional join using minimap2 `asm20` with a long `cs` path. A unique primary forward alignment must have MAPQ >= 20 and identity >= 95%; it normally covers the gap-facing original boundary. At least 1 kb of alignment is required, or the complete original if shorter.
 
-Project boundaries through substitutions and indels, rather than subtracting original lengths from the provisional output. The sequence between the projected original boundaries is the recovered gap. Unmapped or ambiguous boundaries remain ineligible; the program does not guess a cut through a badly clipped terminal sequence.
+Project boundaries through substitutions and indels, rather than subtracting original lengths from the provisional output. The sequence between the projected original boundaries is the recovered gap. Unmapped or ambiguous boundaries remain ineligible.
+
+A soft-clipped end can otherwise hide the very error the inward retry is meant to bypass. With a unique interior anchor and clipping wholly inside the protected-end repair policy's 2 kb window, test a **length-preserving** projection of the clipped tail into the draft. Require ordered, nonoverlapping projected boundaries and independent reads supporting the complete projected allele plus adjacent context. Edits inside the tested context are not also applied separately. Without sufficient support, reject the candidate rather than guessing the cut or using the mismatched original end. This does not infer a net length change for a clipped segment.
 
 ## Bounded end edits
 
@@ -34,7 +36,7 @@ For proposed changes inside that window:
 
 The support-anchor check remains conservative for short inputs: flanks shorter than 2.5 kb cannot supply its current 2 kb + 500 bp interior support interval and are not automatically revised. They can still participate in filling if their connection evidence qualifies.
 
-Insufficient or conflicting support retains the original allele and records the proposed change as unapplied. A difference from an assembly comparator is not by itself proof that either allele is correct. Reads supporting extension from both directions are not treated as independent merely because they belong to two families.
+For an already located boundary, insufficient or conflicting support retains the original allele and records the proposed change as unapplied. A projected clipped boundary instead needs positive evidence before it can be used. A difference from an assembly comparator is not by itself proof that either allele is correct. Reads supporting extension from both directions are not treated as independent merely because they belong to two families.
 
 ## One scheduled anchor-backoff retry
 
