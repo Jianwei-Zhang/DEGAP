@@ -10,7 +10,7 @@
 
 相较于 DEGAP 1.0（[v1 历史指南（英文）](v1/README.md)），DEGAP 2.0 带来四项核心升级：
 
-1. **更高效的候选 reads 筛选** — DEGAP 1.0 已提供比对后的测序深度过滤；DEGAP 2.0 新增可选的 `--kmer_filter`（默认关闭），可在比对*之前*收窄候选 reads 范围，从而在大数据集上减少比对计算量。
+1. **更高效的候选 reads 筛选** — DEGAP 1.0 已提供比对后的测序深度过滤；DEGAP 2.0 新增 k-mer 过滤（GapFiller 默认开启），可在比对*之前*收窄候选 reads 范围，从而在大数据集上减少比对计算量。
 2. **双向缺口延伸** — 将单侧缺口填补升级为顺序进行的左右交替延伸：每次生成的新累计版本都会与对侧全部历史版本（包括原始两侧序列）比对检查闭合；若一侧正常停止，其历史版本会冻结并继续作为对侧的匹配目标。
 3. **TelSeeker 染色体末端延伸** — 新增针对指定染色体末端向端粒 reads 进行单端延伸的 `telseeker` 模式，以及面向单条 contig 末端的 `telseeker_ctg` 变体，作为内部缺口填补与 contig 连接的补充。
 4. **更清晰的离线交互式报告** — 生成自包含的离线交互式 HTML 报告（并非实时监控面板），用于说明任务结果、延伸历史、所选连接与证据以及停止原因；在本地浏览器中直接打开生成的 `.html` 文件即可查看（详见[报告阅读指南](HOWTO_zh.md#查看-html-报告)；`TelSeeker Ctg` 目前通过 `result/status.tsv` 输出结果而非 HTML 报告）。
@@ -50,6 +50,8 @@ micromamba env update -f environment.yml --prune
 运行 TelSeeker 前，可先使用 `python bin/TelSeekerCheck.py --genome <genome.fa> --motif <MOTIF> --out <dir>` 生成染色体末端人工核查图与 2 kb 末端 FASTA 文件。
 
 ## 快速开始
+
+在 `GapFiller` 和 `AutoGapfiller` 中，候选读段 k-mer 过滤现已默认启用，可通过 `--no-kmer-filter` 关闭。对于每个 gap，左右两侧延伸共享默认上限：总计最多 10 次延伸尝试（正常失败的尝试也计入次数），以及 500,000 bp 的累计延伸长度预算；最后一次完成的尝试可能会超出该长度预算，且该预算并非输入 gap 大小的截断阈值。可通过 `--MaximumExtensionRound` 和 `--MaximumExtensionLength` 自定义这两项限制，二者均支持传入 `unlimited` 以取消对应限制。
 
 填补已知左右两侧序列（flank）之间的单个缺口（`gapfiller`）：
 
