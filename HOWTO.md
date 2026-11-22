@@ -2,7 +2,7 @@
 
 # DEGAP 2.0 — Users' Guide
 
-Practical reference for installing, running, resuming, and inspecting **DEGAP 2.0** workflows.
+Canonical operational reference for running, resuming, inspecting, and troubleshooting **DEGAP 2.0** workflows.
 
 ## Table of Contents
 
@@ -16,44 +16,35 @@ Practical reference for installing, running, resuming, and inspecting **DEGAP 2.
   - [4. TelSeeker Ctg](#4-telseeker-ctg)
   - [5. AutoGapfiller](#5-autogapfiller)
 - [Parameters Reference](#parameters-reference)
+- [Reading the HTML Reports](#reading-the-html-reports)
 - [Output Layouts](#output-layouts)
 - [Troubleshooting](#troubleshooting)
+- [Related Documentation](#related-documentation)
 - [Citation & Contact](#citation--contact)
 
 ---
 
 ## Installation
 
-DEGAP 2.0 targets Linux. The supplied environment pins Python 3.10; Python packages and external tools are declared in [environment.yml](environment.yml):
-
-```bash
-micromamba env create -f environment.yml
-micromamba activate degap_env
-```
-
-Update after `environment.yml` changes:
-
-```bash
-micromamba env update -f environment.yml --prune
-```
+For the recommended Linux Micromamba installation and pinned versions declared in [environment.yml](environment.yml), see [README.md — Installation](README.md#installation).
 
 ### Manual Installation (without Micromamba)
 
-Python packages:
+Install the Python dependencies (Python 3.10 recommended):
 
 ```bash
 pip install biopython pysam numpy matplotlib scipy
 ```
 
-External tools required in `PATH` (versions pinned in `environment.yml` where noted):
+Ensure the required external tools are available in `PATH` (matching the versions pinned in [environment.yml](environment.yml)):
 
-- **Minimap2** (2.28): <https://github.com/lh3/minimap2>
-- **Hifiasm** (0.25.0): <https://github.com/chhylp123/hifiasm>
-- **SAMtools** (1.22.1): <http://www.htslib.org/>
-- **Seqkit** (2.8.0): <https://github.com/shenwei356/seqkit>
+- **Minimap2**: <https://github.com/lh3/minimap2>
+- **Hifiasm**: <https://github.com/chhylp123/hifiasm>
+- **SAMtools**: <http://www.htslib.org/>
+- **Seqkit**: <https://github.com/shenwei356/seqkit>
 - **MUMmer4**: <https://github.com/mummer4/mummer>
 - **GNU Parallel**: <https://www.gnu.org/software/parallel/>
-- **Ripgrep** (15.1.0): <https://github.com/BurntSushi/ripgrep>
+- **Ripgrep**: <https://github.com/BurntSushi/ripgrep>
 
 ---
 
@@ -69,7 +60,7 @@ Provide at least one of `--hifi` or `--ont`. Both flags accept one or more files
 
 How ONT quality recovery works (`bin/ONTAssemblyReads.py`):
 
-- Although preprocessing converts reads to working FASTA and the CLI parser accepts FASTA paths, ONT-only local assembly never fabricates synthetic quality scores.
+- Although preprocessing converts reads to working FASTA and the CLI parser accepts FASTA paths, ONT-only local assembly **never fabricates synthetic quality scores**.
 - Original ONT FASTQ/FASTQ.gz files (single or multiple) are indexed lazily into a compressed SQLite lookup (`ont-quality-cache/`) shared across families and rounds within a search.
 - Selected reads are restored to FASTQ in their selected orientation (reversing qualities for reverse-complement reads) with strict read-ID, sequence, and unique-trim validation. Missing IDs, duplicate IDs, mismatched sequences, ambiguous trims, or malformed FASTQ inputs fail explicitly.
 - Original ONT files — including their quality values — are part of the checkpoint contract; quality-only input edits invalidate checkpoint reuse.
@@ -78,49 +69,53 @@ How ONT quality recovery works (`bin/ONTAssemblyReads.py`):
 
 ## Extension Model, Budgets, Errors & Resume
 
-### Bidirectional Historical Families (GapFiller, AutoGapfiller, CtgLinker)
+### Family Search Models
 
-- **GapFiller / AutoGapfiller**: Left (`L0, L1, ...`) and right (`R0, R1, ...`) chains extend in alternating turns. Each version is a cumulative sequence. After round-0 direct closure is checked (`L0` vs `R0`), each new version is aligned against **all** historical versions of the opposite side (including `L0`/`R0`). If one side stops normally (e.g., no extension reads/contigs or no growth), its history stays frozen as an overlap target while the other continues.
-- **CtgLinker**: Each outer-end search builds a primary family for the active contig/scaffold plus candidate families for every remaining eligible contig/scaffold in both forward (`+`) and reverse-complement (`-`) orientations. Primary and candidates alternate within that endpoint search, sharing one round and length budget. An original input contig cannot be incorporated twice.
-- **TelSeeker / TelSeeker Ctg**: Uses the same persistent single-round engine, but remains **single-ended** with one real endpoint family and no fictitious opposite family. Connection requires matching a telomeric read, not overlapping the initial seed.
+- **GapFiller / AutoGapfiller (bidirectional, sequential turns)**: Left (`L0, L1, ...`) and right (`R0, R1, ...`) chains extend in alternating turns (not simultaneously/in parallel). Each version is a cumulative sequence. After round-0 direct closure is checked (`L0` vs `R0`), each new version is compared against **all** historical versions of the opposite side (including `L0`/`R0`). If one side stops normally (e.g., no extension reads/contigs or no growth), its history stays frozen as an overlap target while the other continues.
+- **CtgLinker (primary + forward/reverse candidates)**: Each outer-end search builds a primary family for the active contig/scaffold plus candidate families for every remaining eligible contig/scaffold in both forward (`+`) and reverse-complement (`-`) orientations. Primary and candidates alternate within that endpoint search under one shared round and length budget. An original input contig cannot be incorporated twice.
+- **TelSeeker / TelSeeker Ctg (single-ended)**: Reuses the persistent single-round engine, but remains **single-ended** with one chromosome-side family and no fictitious opposite family. Connection requires matching a static telomeric read from the shared target index (not overlapping the initial seed).
 - **Deterministic winner selection**: After checking the current comparison frontier, eligible connections are ranked by:
   1. Alignment identity (descending)
   2. Effective overlap length (descending)
   3. Endpoint overhang (ascending)
   4. Fixed family/version/coordinate order
 
-  Only one best eligible pair is selected and emitted. Note that highest alignment identity in a repetitive region does not by itself prove biological correctness; inspect the exported evidence and alignments.
+  Only one best eligible pair is selected and emitted. Highest alignment identity in a repetitive region does not by itself prove biological correctness; inspect the exported evidence and alignments.
+
+See [docs/design/bidirectional-extension.md](docs/design/bidirectional-extension.md) for the full scheduling and state-machine specification.
 
 ### Shared Budgets
 
-- `--MaximumExtensionRound` counts attempted extension rounds **summed across all families in one search** (both sides in GapFiller/AutoGapfiller; primary + all candidates in one CtgLinker endpoint search). Failed normal attempts still consume rounds.
+- `--MaximumExtensionRound` counts attempted extension rounds **summed across all families in one search** (both sides in GapFiller/AutoGapfiller; primary + all candidates in one CtgLinker endpoint search). Normal failed attempts still consume rounds.
 - `--MaximumExtensionLength` sums newly added bases across all families in that search. Original flanks and historical snapshots are excluded, and final overlap is not subtracted. Winning with an older historical version does not refund already spent rounds or added bases.
-- Length is checked **before** launching the next attempt, so the final complete attempt may exceed `--MaximumExtensionLength` and is still kept whole and checked for closure before stopping.
-- Setting `--MaximumExtensionRound 0` skips extension attempts while still allowing round-0 direct closure. Negative limits are rejected. Both limits default to `None` (unlimited).
+- Growth budget is checked **before** launching the next attempt, so the final complete attempt may exceed `--MaximumExtensionLength` and is still kept whole and checked for closure before stopping.
+- Setting `--MaximumExtensionRound 0` skips extension attempts while still allowing round-0 direct closure where supported. Negative limits are rejected. Both limits default to `None` (unlimited).
 
-### Connection and flank evidence
+### Connection Checks and Flank Protection
 
-A failed terminal-window comparison triggers a full-sequence check; small collinear alignment blocks can form one validated connection. The minimum effective overlap is not reduced just to close a short-overlap case.
+- A failed terminal-window comparison falls back to a full-sequence check; small collinear alignment blocks can form one validated connection. Minimum effective overlap is not silently reduced.
+- Original flank cores are protected; bounded terminal repair is **not** unconditional polishing. At most 2 kb near each gap-facing end may be revised, and only when supported by original spanning reads (including read-consensus candidates for errors inherited by the seed), both strands, and unique original-boundary placement. Unconfirmed differences are recorded but not applied.
+- Gap-only length, flank length delta, and true-overlap trimming are reported as separate metrics.
+- Initial-end anchor backoff is one additional scheduled attempt and consumes the shared round budget.
 
-Original flank cores are retained. Terminal candidates can come from original-read consensus even if a seed error survives in all extension versions. At most 2 kb near each gap-facing end may be revised, with distinct spanning-read support, both strands, and unique original-boundary placement. Unconfirmed differences are reported but not applied. Gap-only length, flank length delta and true-overlap trimming are separate metrics. Initial-end anchor backoff is one additional scheduled attempt and consumes the shared round budget.
-
-Read [junction validation and terminal repair](docs/design/junction-validation.md) for the exact default policy, ambiguity handling, minimal AutoGapfiller replacement payload, and evidence files. Changing these algorithm contracts requires a new output directory; do not delete the old workspace.
+See [docs/design/junction-validation.md](docs/design/junction-validation.md) for exact thresholds, ambiguity rules, minimal AutoGapfiller integration payloads, and evidence schemas.
 
 ### Outcome States & Tool Errors
 
-Treat **tool ran (exit 0)**, **gap closed / connected**, and **sequence biologically verified** as distinct states:
+Treat **tool ran (exit 0)**, **gap closed / endpoint connected**, and **sequence biologically verified** as distinct states:
 
 - Explicit `hifiasm` errors on stdout/stderr fail even if `hifiasm` exits with status `0`.
 - An absent primary-contig GFA (`.p_ctg.gfa`) is treated as a tool error, not biological exhaustion.
-- A genuinely completed `hifiasm` run that writes a valid empty GFA (0 sequence segments) and yields no usable extension contig is distinct from a tool error.
+- A genuinely completed `hifiasm` run that writes a valid empty GFA (0 sequence segments) and yields no usable extension contig is distinct from a tool error (`no_extension_contigs`).
 - Tool errors never write a completed assembler/assembly stage receipt and are never published as normal `exhausted` results. Completed earlier stages (such as `mapping/` and `reads/`) remain reusable after fixing the error.
 
-### Resume, Legacy Directories, `--flag`, and `--remove`
+### Resume, Compatibility, `--flag`, and `--remove`
 
-- **Resuming**: Rerun the exact same command (or add `--resume_auto`) to resume from content-verified family checkpoints (`families.json`, `ctg-families.json`, and stage receipts). Uncommitted interrupted stages are archived into `.incomplete.*` directories rather than trusted.
-- **Unsupported legacy resume**: `--resume ROUND` is rejected for all four `DEGAP.py` modes (no arbitrary round rewind). Legacy single-sided output directories (from pre-family runs) are not silently resumed or migrated; keep old directories intact and use a **new output directory**.
-- **`--flag`**: Deprecated compatibility option in `gapfiller` mode. Passing it prints a notice and ignores it; omit it from new commands.
-- **`--remove`**: Legacy cleanup flag (`1`, `2`, `3`; default `2`). In family workflows, prepared reads, split chunks, indices, historical sequences, and verified stages are **always retained** at `--remove 1` and `--remove 2` because recovery depends on them. Remove a finished workspace manually only when histories and resume are no longer needed.
+- **Resuming**: Rerun the exact same command and unchanged inputs (or add `--resume_auto`) to resume from content-verified family checkpoints (`families.json`, `ctg-families.json`, and stage receipts). Interrupted uncommitted stages are archived into `.incomplete.*` directories rather than trusted.
+- **Unsupported legacy resume**: `--resume ROUND` is rejected for all four `DEGAP.py` modes (no arbitrary round rewind).
+- **Legacy and old-contract directories**: Legacy single-sided outputs and directories produced under changed algorithm contracts are not silently migrated or overwritten. Preserve old evidence intact and run in a **new output directory**.
+- **`--flag`**: Deprecated compatibility option in `gapfiller` mode. Passing it prints a notice and is ignored; omit it from new commands.
+- **`--remove`**: Legacy cleanup level (`1`, `2`, `3`; default `2`). In family workflows, prepared reads, split chunks, indices, historical sequences, and verified stages are **always retained** at `--remove 1` and `--remove 2` because recovery depends on them. Remove finished workspaces manually only when histories and resume are no longer needed.
 
 ---
 
@@ -141,7 +136,7 @@ python bin/DEGAP.py --mode gapfiller \
     -t 20
 ```
 
-HiFi-only with optional depth filtering and k-mer filtering:
+HiFi-only with optional mapped-depth filtering (`--filterDepthHifi`) and pre-alignment k-mer prefiltering (`--kmer_filter`):
 
 ```bash
 python bin/DEGAP.py --mode gapfiller \
@@ -154,7 +149,7 @@ python bin/DEGAP.py --mode gapfiller \
     -t 20
 ```
 
-Check `family-result.json`: only `status: "closed"` means the gap was closed into one sequence. Otherwise `<name>.final.fa` contains separate unclosed family records.
+Check `family-result.json` or `family-report.html`: only `status: "closed"` means the gap was closed into one sequence. Otherwise `<name>.final.fa` contains separate unclosed family records.
 
 ### 2. CtgLinker
 
@@ -180,7 +175,7 @@ python bin/DEGAP.py --mode ctglinker \
     -t 20
 ```
 
-`DG.scaffold.agp` reconstructs `DG.scaffold.fa` from `DG.scaffold.components.fa` (which includes actual extended snapshots, not just unmodified input contigs).
+`DG.scaffold.agp` reconstructs `DG.scaffold.fa` from `DG.scaffold.components.fa` (which includes actual extended snapshots and repair/gap provenance components, not just unmodified input contigs).
 
 ### 3. TelSeeker & TelSeekerCheck
 
@@ -198,7 +193,7 @@ python bin/TelSeekerCheck.py \
 - `genome.telomere.check.left.2kb.fa` and `genome.telomere.check.right.2kb.fa` (default `--extract-length 2000`)
 - `all_chromosomes_combined.png` and `<chromosome>_telomere_motif.png` (1 kb plotting window by default, `--plot-window-size 1000`)
 
-It does **not** emit automatic classification lists (`genome.telomere.check.csv`, `need_extension_chr_end.txt`, or `uncertain_chr_end.txt`). Inspect the plots and end sequences, then list the ends you want to extend (one `<chromosome_id>.L` or `<chromosome_id>.R` per line; blank lines and `#` comments are allowed):
+It does **not** emit automatic classification lists (`genome.telomere.check.csv`, `need_extension_chr_end.txt`, or `uncertain_chr_end.txt`). Inspect the plots and end sequences, then list the ends to extend (one `<chromosome_id>.L` or `<chromosome_id>.R` per line; blank lines and `#` comments are allowed):
 
 ```text
 # Target ends selected after reviewing TelSeekerCheck plots
@@ -228,11 +223,9 @@ python bin/DEGAP.py --mode telseeker \
 
 Common uppercase A/C/G/T motifs: `TTAGGG` (vertebrates), `TTTAGGG` (plants), `TTAGG` (insects).
 
-**Terminal telomeric read discovery**: Step 1 scans `--tel-n * len(--motif)` bases at both physical ends of each read using motif rotations and reverse-complement rotations. A read end passes when `hits / --tel-n >= --tel-r`, allowing `--tel-mm` (`0` or `1`) mismatches per motif-length unit. With `TTAGGG`, `--tel-n 100` checks 600 bp and `--tel-r 0.6` requires at least 60 hits. If Step 1 finds too few telomeric reads, relax `--tel-r`, set `--tel-mm 1`, or lower `--tel-n`.
-
-**Large telomeric-read pools**: TelSeeker keeps one chromosome-side family, without globally grouping or extending telomeric reads. A shared sampled-anchor index retrieves candidates; all retrieved records are refined in bounded multi-query batches, followed by deterministic ranking and support from at least two distinct read IDs. The final join retains the current chromosome sequence. Support counts are lower bounds and cover the local junction, not the accuracy of the whole added tail. See [the target-search policy](docs/design/telomere-target-search.md) for thresholds, sampling limitations, caches and evidence files.
-
-A connected linker in TelSeeker means a linker sequence was generated and integrated into `part3.integration.results/final.genome.fa`; final telomere completeness must still be confirmed by manually reviewing `part3.integration.results/final.genome.telomere.check/`.
+- **Terminal telomeric read discovery**: Step 1 scans `--tel-n * len(--motif)` bases at both physical ends of each read using motif rotations and reverse-complement rotations. A read end passes when `hits / --tel-n >= --tel-r`, allowing `--tel-mm` (`0` or `1`) mismatches per motif-length unit. With `TTAGGG`, `--tel-n 100` checks 600 bp and `--tel-r 0.6` requires at least 60 hits. If Step 1 finds too few reads, relax `--tel-r`, set `--tel-mm 1`, or lower `--tel-n`.
+- **Single-ended shared target search**: TelSeeker maintains one chromosome-side family per endpoint against a shared static SQLite target index. All retrieved candidates are refined in bounded multi-query batches (not a top-N cap), deterministically ranked, and accepted only when corroborated by **at least two distinct read IDs** across the non-repeat anchor and up to **200 outward junction bases**. Support counts are lower bounds for the local junction — **not** whole-tail consensus or polishing. At the final join, the current chromosome-side sequence is retained and only the selected read's outside tail is added. See [docs/design/telomere-target-search.md](docs/design/telomere-target-search.md) for thresholds, caches, and sampling bounds.
+- **Manual verification**: A connected linker integrated into `part3.integration.results/final.genome.fa` does not guarantee complete biological telomere recovery; confirm final ends in `part3.integration.results/final.genome.telomere.check/`.
 
 ### 4. TelSeeker Ctg
 
@@ -260,11 +253,11 @@ Rules for `telseeker_ctg`:
 - Each `--ctg <fasta> <L|R>` file must contain **exactly one** FASTA record.
 - Reusing `--out` for additional `--ctg` endpoints is permitted only when `--hifi`, `--ont`, `--motif`, `--tel-n`, `--tel-r`, and `--tel-mm` match `telseeker_ctg.input/cache_manifest.json`; otherwise DEGAP stops with a mismatch error.
 - `--filterDepthHifi` and `--filterDepthOnt` are not supported in `telseeker_ctg`.
-- Aggregate results are written to `result/status.tsv`. Endpoints without matching telomeric reads fail explicitly with `no_tel_reads` or `no_tel_reads_for_target_end`.
+- Public CLI runs do **not** generate HTML reports; inspect `result/status.tsv` and per-task `telseeker_ctg.jobs/<safe_ctg_id>.<L|R>/result/`. Endpoints without matching telomeric reads fail explicitly with `no_tel_reads` or `no_tel_reads_for_target_end`.
 
 ### 5. AutoGapfiller
 
-Detect all N gaps in a draft genome (`>= 20 bp`, merging adjacent gaps `< 11,000 bp` apart), create **one bidirectional job per gap**, execute jobs in parallel, integrate closed gaps, and build an HTML report.
+Detect all N gaps in a draft genome (`>= 20 bp`, merging adjacent gaps `< 11,000 bp` apart), create **one bidirectional job per gap**, execute jobs in parallel, integrate closed gaps, and build an offline HTML report. Note that `AutoGapfiller.py` uses `--output` / `-o` (not `--out`).
 
 ```bash
 python bin/AutoGapfiller.py \
@@ -305,7 +298,7 @@ python bin/AutoGapfiller.py \
 | `--edge` | Edge tolerance in bp for boundary/misassembly checks | `500` | All |
 | `--MaximumExtensionRound` | Shared attempt cap per search (`0` allows round-0 closure only) | `None` | All |
 | `--MaximumExtensionLength` | Shared added-base cap per search in bp (checked before next attempt) | `None` | All |
-| `--kmer_filter` | Enable k-mer read pre-filtering before alignment | `False` | All |
+| `--kmer_filter` | Enable optional k-mer read prefiltering before alignment (`store_true`) | `False` | All |
 | `-ks, --kmer_size` | K-mer size when `--kmer_filter` is enabled | `41` | All |
 | `-kn, --kmer_num` | Number of k-mers when `--kmer_filter` is enabled | `20` | All |
 | `--filterDepthHifi` | HiFi mapped-depth filter ratio (e.g., `0.3`); implemented in `gapfiller`, skipped in `ctglinker`/`telseeker`, rejected in `telseeker_ctg` | `None` | `gapfiller` |
@@ -336,12 +329,12 @@ python bin/AutoGapfiller.py \
 | `-w, --work` | Parallel gap-filling workers | `1` |
 | `--setup_only` | Prepare preprocessing, gap detection, and job scripts without executing gap filling | `False` |
 | `-t, --thread` | Threads passed to each DEGAP job | `20` |
-| `--kmer_filter` | Enable k-mer pre-filtering | `False` |
+| `--kmer_filter` | Enable optional k-mer prefiltering before alignment (`store_true`) | `False` |
 | `-ks, --kmer_size` | K-mer size | `41` |
 | `-kn, --kmer_num` | Number of k-mers | `20` |
 | `--MaximumExtensionLength` | Shared added-base cap per gap in bp | `None` |
 | `--MaximumExtensionRound` | Shared attempt cap per gap | `None` |
-| `--filterDepthHifi`, `--filterDepthOnt` | Optional depth filtering thresholds in Step 1 preprocessing | `None` |
+| `--filterDepthHifi`, `--filterDepthOnt` | Optional mapped-depth filtering thresholds in Step 1 preprocessing | `None` |
 | `--edge` | Edge tolerance in bp | `500` |
 | `--remove` | Legacy cleanup level (`1`, `2`, `3`); family recovery files are retained | `2` |
 
@@ -356,7 +349,49 @@ python bin/AutoGapfiller.py \
 | `--plot-window-size` | Whole-genome motif plot window size (bp) | `1000` |
 | `--check-length` | End window length (bp) | `100000` |
 
-> **Depth filtering note**: When `--filterDepthHifi` or `--filterDepthOnt` is active in `DEGAP.py --mode gapfiller`, `selectRawReads.py` retains reads mapping outside `(threshold * mode_depth, (2 - threshold) * mode_depth)`, reads near sequence ends, unmapped reads, and reads with `< 99%` aligned query length, writing FASTA files (`Genome.inputCtg.usefullReads.fasta` and, in mixed mode, `Genome.inputCtg.usefullReads.ont.fasta`).
+> **Filtering note**: DEGAP 1.0 already provided post-alignment mapped-depth filtering (historically `--filterDepth` / `--filterDepthOnly` on `--reads`). In DEGAP 2.0, platform-specific `--filterDepthHifi` and `--filterDepthOnt` (in `DEGAP.py --mode gapfiller` and `AutoGapfiller.py` Step 1) filter reads after alignment via `selectRawReads.py`, retaining reads outside `(threshold * mode_depth, (2 - threshold) * mode_depth)`, reads near sequence ends, unmapped reads, and reads with `< 99%` aligned query length into `Genome.inputCtg.usefullReads.fasta` (and `Genome.inputCtg.usefullReads.ont.fasta` in mixed mode). By contrast, `--kmer_filter` (default `False`, tuned with `-ks`/`-kn`) is an optional pre-alignment k-mer filter that narrows candidate reads *before* mapping; runtime and sensitivity depend on the dataset.
+
+---
+
+## Reading the HTML Reports
+
+DEGAP 2.0 HTML reports are **offline, self-contained post-run summaries** (no internet access or live server required; **not** real-time monitoring dashboards). Open the entry `.html` file directly in a local web browser while keeping the output directory intact so relative artifact links resolve.
+
+HTML reports are generated only when a run reaches report publication; an early input, validation, or external-tool failure may stop before any HTML file is written. Likewise, a completed or closed HTML report documents computational evidence and does not by itself prove biological correctness.
+
+### Report Entry Paths by Mode
+
+| Mode | Primary Entry Path | Linked Detail Reports / Canonical Result Files |
+| --- | --- | --- |
+| **GapFiller** | `<out>/family-report.html` | Links directly to `family-result.json`, `families.json`, `<name>.final.fa`, `process.agp`, `connection-diagnostics.json`, and `junction-evidence.json` (when closed). |
+| **CtgLinker** | `<out>/ctglinker-family-report.html` | Links to each endpoint search's `project/endpoint-XXXXXX/family-report.html`, plus `DG.scaffold.fa`, `DG.scaffold.agp`, `DG.scaffold.components.fa`, and `ctglinker-result.json`. |
+| **AutoGapfiller** | `<output>/05.visualization/Global.report.html` | Links to copied per-gap `<output>/05.visualization/<chrom>.<gap_id>.bidirectional.html` reports (with artifact links rebased to `03.gap_filling/`). Not created by `--setup_only`. |
+| **TelSeeker** | `<out>/visual.report/Global.report.html` | Links to per-end `<out>/visual.report/<Chr>.<L\|R>.report.html` reports and target-search evidence files. |
+| **TelSeeker Ctg** | *No HTML report generated by public CLI* | Canonical entry is `<out>/result/status.tsv`, with per-task `telseeker_ctg.jobs/<safe_ctg_id>.<L\|R>/result/status.tsv`, `extended.ctg.fa` or `failed.reason.txt`, and `extension/telomere-result.json` where available. |
+
+### What to Check in a Report
+
+1. **Closure / connection vs. normal process completion**
+   - A zero exit code is not a closure or accuracy check; in batch modes, inspect each task's status as well.
+   - **GapFiller**: Look for the `Closed / 已闭合` badge (`status: "closed"` in `family-result.json`). Any `Unclosed` status means left and right families were exported as separate records rather than joined.
+   - **AutoGapfiller**: Check the **Filled** (`Filled / 是否填补`) status in the task table and overview metrics, not merely whether extension attempts occurred. Click a gap row to inspect its `.bidirectional.html` family report.
+   - **CtgLinker**: Check each row under **Endpoint searches** (`closed` vs. unclosed) and the **Scaffolds** member table. Unclosed endpoint histories remain linked for review but are never forced into scaffolds.
+   - **TelSeeker**: `connected` means a telomeric-read linker passed local corroboration and was integrated into `final.genome.fa`. Confirm final telomere completeness manually in `part3.integration.results/final.genome.telomere.check/`.
+2. **Growth vs. gap-only and linked-sequence lengths**
+   - **Added bases / Total extension** sums newly extended bases across attempts and families before overlap removal; do not read it as gap size.
+   - In closed **GapFiller / AutoGapfiller** joins, inspect the separate junction metrics: **Gap-only length** (bases recovered between projected original flank boundaries), **Flank length delta** (net change from approved `<= 2 kb` terminal edits, if any), and **Original overlap trim** (deduplicated prefix when original flanks truly overlapped). In AutoGapfiller's overview, **Net Length Change** reflects genome integration across filled gaps, and chromosome tracks plot original gap coordinates.
+   - In **CtgLinker**, **Scaffold length** is the full linked scaffold length, while per-endpoint `family-report.html` separates extension totals from junction metrics.
+   - In **TelSeeker**, **rounds** count chromosome-side extension attempts, **extension length** sums newly added bases from chromosome-side assembly (excluding the final telomeric-read tail), and **Linked Sequence Length** in the global report is the complete `linker.fa` length (the chromosome-side sequence plus the selected read's outside tail joined at the target end—prepended for `L`, appended for `R`).
+3. **Chosen connection and support scope**
+   - **GapFiller / CtgLinker**: Inspect **Eligible connections** to see which historical version pair won (e.g., `left/v3 + right/v2`), its identity, overlap, and overhang, plus expandable tables for fast/full connection diagnostics and applied vs. unapplied terminal flank edits.
+   - **TelSeeker**: Inspect the target-search summary for pool, retrieved, refined, and eligible counts, the winning read ID, and the read-support lower bound. Reported corroboration covers only the local junction (not whole-tail consensus or polishing); see [docs/design/telomere-target-search.md](docs/design/telomere-target-search.md) for the exact anchor and junction-span policy.
+4. **Stopped or unclosed tasks**
+   - In **GapFiller / CtgLinker**, check per-family **Stop reason** (such as `no_extension_reads`, `no_extension_contigs`, or shared round/length limits) and any budgeted **anchor-backoff retries**. A stopped side freezes its history as a valid target for the opposite side rather than aborting the search.
+   - In **TelSeeker**, labels such as `no_sampled_nonrepeat_anchor`, `no_eligible_alignment`, and `insufficient_read_support` are **per-check** rejection reasons (for `direct.check` or an individual round check), not necessarily terminal failure of the job. Chromosome-side extension can continue across subsequent rounds within budget after negative checks; a task's final stop reason may instead be biological exhaustion (e.g., `no_extension_reads`, `no_extension_contigs`) or round/length limits. A negative direct check or insufficient local support does not by itself mean no biological telomere exists.
+5. **Evidence and artifact links**
+   - Use the mode-specific artifact links and expandable evidence tables to inspect machine-readable records (`family-result.json`, `families.json`, `process.agp`, `connection-diagnostics.json`, `junction-evidence.json`, `ctglinker-result.json`, `telomere-result.json`, `connection-support.json`, `candidates.tsv`). Underlying alignments, local assemblies, and receipts live in mode-specific directories—such as `attempts/` for family extension steps, `family-overlaps/` or `ctg-overlaps/` for paired overlap checks, and `direct.check/` or `telomere-alignments/` in TelSeeker—detailed under [Output Layouts](#output-layouts).
+
+See [docs/design/report-presentation.md](docs/design/report-presentation.md) for presentation and bilingual-toggle details.
 
 ---
 
@@ -374,6 +409,9 @@ output_directory/
 ├── process.agp                     # AGP reconstructing <name>.final.fa from family-components.fa
 ├── process.log                     # Human-readable search outcome
 ├── process.summary                 # Per-family attempts, versions, added bases, stop reason
+├── connection-diagnostics.json     # Fast/full connection checks and pair rejection reasons
+├── junction-evidence.json          # Present on validated joins: original boundaries & terminal edit support
+├── junction-integration.fa         # Present on validated joins: minimal AutoGapfiller replacement payload
 ├── family-overlaps/                # Version-pair MUMmer alignments and receipts
 ├── ont-quality-cache/              # Shared SQLite quality index (created lazily for ONT-only assembly)
 ├── processed_reads/                # Normalized working FASTA reads
@@ -546,8 +584,7 @@ output_directory/
    - Verify `-m/--motif` uses uppercase `A/C/G/T` matching the organism (e.g., `TTAGGG`, `TTTAGGG`, `TTAGG`).
    - Verify `-e/--target_ends` chromosome IDs match the headers in `--genome` and use `<chr>.L` or `<chr>.R`.
    - If Step 1 produces empty `part1.telo.reads/Global.left.telo.reads.fa` / `Global.right.telo.reads.fa`, rerun in a new output directory with relaxed discovery parameters such as `--tel-r 0.5 --tel-mm 1` (or smaller `--tel-n`).
-
-   - `insufficient_read_support`: candidates were found but fewer than two distinct target read IDs corroborated the same connection. A pool of two reads is not enough if they support different ends/paths; duplicated IDs do not supply independent evidence. Inspect `connection-support.json` rather than interpreting the stop as “no telomere exists”.
+   - `insufficient_read_support`: candidates were found but fewer than two distinct target read IDs corroborated the same connection. A pool of two reads is not enough if they support different ends/paths; duplicated IDs do not supply independent evidence. Inspect `connection-support.json` rather than interpreting the stop as "no telomere exists".
 
 8. **TelSeeker Ctg fails with `no_tel_reads`, `no_tel_reads_for_target_end`, or cache mismatch**
    - Check `result/status.tsv` and `telseeker_ctg.jobs/<safe_ctg_id>.<L|R>/result/status.tsv`.
@@ -557,6 +594,15 @@ output_directory/
 
 9. **Disk usage**
    - Family recovery retains prepared reads, split parts, indices, historical versions, and verified stage receipts regardless of `--remove 1|2`. Plan storage accordingly and archive or delete finished workspaces manually once recovery is no longer needed.
+
+---
+
+## Related Documentation
+
+- **Overview & Quick Start**: [README.md](README.md)
+- **Design Notes**: [bidirectional-extension.md](docs/design/bidirectional-extension.md), [junction-validation.md](docs/design/junction-validation.md), [telomere-target-search.md](docs/design/telomere-target-search.md), [report-presentation.md](docs/design/report-presentation.md)
+- **Dated Validation Records**: [2026-11-22-ssh180-expanded-matrix.md](docs/validation/2026-11-22-ssh180-expanded-matrix.md), [2026-11-22-ssh180-new-dataset.md](docs/validation/2026-11-22-ssh180-new-dataset.md), [2026-11-22-junction-repair.md](docs/validation/2026-11-22-junction-repair.md), [2026-11-22-telomere-target-search.md](docs/validation/2026-11-22-telomere-target-search.md), [2026-11-21-ssh180-real-ont.md](docs/validation/2026-11-21-ssh180-real-ont.md), [2026-11-21-ont-quality-repair.md](docs/validation/2026-11-21-ont-quality-repair.md)
+- **Historical v1 Guide**: [v1/README.md](v1/README.md)
 
 ---
 
