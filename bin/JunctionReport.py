@@ -718,6 +718,8 @@ def _render_policy_details(policy) -> str:
         ("anchor", "Interior anchor / 内部锚定长度", "bp"),
         ("read_margin", "Read margin / 读长覆盖边距", "bp"),
         ("min_boundary_identity", "Min boundary identity / 边界最小一致性", "%"),
+        ("projection_padding", "Clipped-end context per side / 裁剪末端单侧定位长度", "bp"),
+        ("projection_max_context_edits", "Max differences per context / 单侧定位允许的最大差异", ""),
         ("version", "Policy version / 策略版本", ""),
     ]
     rendered_keys = set()
@@ -1115,6 +1117,9 @@ def _render_junction_details(junction: dict, *, heading_tag: str = "h3") -> str:
 
         detail_rows = []
         for rep in repairs:
+            other = _fmt_int(rep.get("other_reads"))
+            if _is_int(rep.get("unresolved_context_reads")):
+                other += f" ({rep['unresolved_context_reads']:,} unresolved / 未定位)"
             detail_rows.append(
                 "<tr>"
                 f'<td class="mono">{esc(rep.get("side") or "—")}</td>'
@@ -1124,7 +1129,7 @@ def _render_junction_details(junction: dict, *, heading_tag: str = "h3") -> str:
                 f'<td>{_format_allele(rep.get("proposed"), full=True)}</td>'
                 f'<td class="num">{esc(_fmt_int(rep.get("alt_reads")))}</td>'
                 f'<td class="num">{esc(_fmt_int(rep.get("ref_reads")))}</td>'
-                f'<td class="num">{esc(_fmt_int(rep.get("other_reads")))}</td>'
+                f'<td class="num">{esc(other)}</td>'
                 f'<td class="num">{esc(_fmt_int(rep.get("spanning_reads")))}</td>'
                 f'<td class="num">{esc(_fmt_fraction(rep.get("alt_fraction")))}</td>'
                 f'<td>{_format_strands(rep.get("strands"))}</td>'

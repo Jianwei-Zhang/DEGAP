@@ -180,7 +180,9 @@ def publish_search(search, name=None, *, unclosed_families=None):
         for side, details in junction["flanks"].items():
             log.append(f"Flank {side}: {details['status']} | proposed={details['proposed_variants']} accepted={details['accepted_variants']} protected={details['protected_variants']}")
         for repair in junction["repairs"]:
-            log.append(f"Flank edit {repair['side']} [{repair['start0']},{repair['end0']}): {repair['status']} | {repair['reason']} | alt={repair.get('alt_reads',0)} ref={repair.get('ref_reads',0)} other={repair.get('other_reads',0)}")
+            context = (f" (unresolved_context={repair['unresolved_context_reads']})"
+                       if "unresolved_context_reads" in repair else "")
+            log.append(f"Flank edit {repair['side']} [{repair['start0']},{repair['end0']}): {repair['status']} | {repair['reason']} | alt={repair.get('alt_reads',0)} ref={repair.get('ref_reads',0)} other={repair.get('other_reads',0)}{context}")
     log.append(f"Final EXtendFile: {directory / final_file}")
     outputs = {
         final_file: final_text, "family-components.fa": "".join(components),

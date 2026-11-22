@@ -97,7 +97,7 @@ See [docs/design/bidirectional-extension.md](docs/design/bidirectional-extension
 
 - A failed terminal-window comparison falls back to a full-sequence check; small collinear alignment blocks can form one validated connection. Minimum effective overlap is not silently reduced.
 - Original flank cores are protected; bounded terminal repair is **not** unconditional polishing. At most 2 kb near each gap-facing end may be revised, and only when supported by original spanning reads (including read-consensus candidates for errors inherited by the seed), both strands, and unique original-boundary placement. Unconfirmed differences are recorded but not applied.
-- If a short erroneous end is clipped by the aligner, a same-length replacement is tested against spanning reads before accepting the join. This does not infer insertions or deletions in an unmapped end.
+- If the aligner clips a short original end, DEGAP tests a same-length replacement. It locates the interval in each spanning read using both adjacent contexts, then requires an exact match across the replacement. Unresolved reads count against support. This check does not infer a length change.
 - Gap-only length, flank length delta, and true-overlap trimming are reported as separate metrics.
 - Initial-end anchor backoff is one additional scheduled attempt and consumes the shared round budget.
 

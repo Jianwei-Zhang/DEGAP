@@ -13,7 +13,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]/"bin"))
 from ExtensionFamilies import AttemptResult, Connection, Family, FamilySearch, Version
 from FamilyOverlap import MummerOverlap, joined_sequence, parse_coords, read_sequence as read_sequence_for_test
 from JunctionRepair import (BoundaryVerifier, POLICY, load_plan, normalize_edit, operations,
-                            original_edits, query_boundary, read_support, consensus_proposals)
+                            original_edits, query_boundary, read_support, consensus_proposals,
+                            unique_context_cut)
 
 
 class JunctionLogicTests(unittest.TestCase):
@@ -57,6 +58,53 @@ class JunctionLogicTests(unittest.TestCase):
     def test_non_proposed_alleles_count_against_support(self):
         result=self.support(self.records(other=3))
         self.assertEqual((result["status"],result["other_reads"]),("retained",3))
+
+    def test_context_alignment_distinguishes_unique_cuts_from_ties(self):
+        self.assertEqual(unique_context_cut("ACGTAC", "ACTGTACAA", 1), 7)
+        # Deleting a base inside a run can have equivalent paths to one cut.
+        self.assertEqual(unique_context_cut("ACCCGT", "ACCGTAA", 1), 5)
+        # Deleting or substituting the last context base yields different cuts.
+        self.assertIsNone(unique_context_cut("ACCCGT", "ACCGAA", 1))
+        self.assertIsNone(unique_context_cut("ACCCGT", "AGGCAAA", 1))
+
+    def test_context_differences_do_not_mask_exact_projection_votes(self):
+        start, end = 5900, 5905
+        ref = "".join(random.Random(7).choices("ACGT", k=10000))
+        mutate = str.maketrans("ACGT", "CGTA")
+        original = ref[start:end]
+        proposed = original.translate(mutate)
+        edit = {"start0": start, "end0": end, "original": original,
+                "proposed": proposed, "candidate_source": "terminal_projection"}
+
+        def record(i, allele, *, ambiguous=False):
+            changes = {k: b for k, b in zip(range(start, end), allele) if ref[k] != b}
+            for k in (start-12, end+12):
+                changes[k] = ref[k].translate(mutate)
+            if ambiguous:
+                changes[start-1] = ""
+                changes[start] = next(b for b in "ACGT" if b != ref[start-1] and b != ref[start])
+            tokens, last = [], 0
+            for k, alt in sorted(changes.items()):
+                if k != last:
+                    tokens.append(f":{k-last}")
+                tokens.append(f"*{ref[k]}{alt}" if alt else f"-{ref[k]}")
+                last = k+1
+            tokens.append(f":{len(ref)-last}")
+            return "hifi", {"name": str(i), "primary": True, "mapq": 60, "identity": .99,
+                             "ts": 0, "te": len(ref), "strand": "+" if i % 2 else "-",
+                             "ops": list(operations("".join(tokens)))}
+
+        records = [record(i, proposed) for i in range(8)]
+        records.extend((record(8, original), record(9, proposed[:-1]+original[-1])))
+        accepted, = read_support(ref, [edit], records, side="L", left_length=6000, gap_length=1000)
+        self.assertEqual((accepted["status"], accepted["alt_reads"], accepted["ref_reads"],
+                          accepted["other_reads"], accepted["unresolved_context_reads"]),
+                         ("accepted", 8, 1, 1, 0))
+        records.append(record(10, proposed, ambiguous=True))
+        rejected, = read_support(ref, [edit], records, side="L", left_length=6000, gap_length=1000)
+        self.assertEqual((rejected["status"], rejected["alt_reads"], rejected["ref_reads"],
+                          rejected["other_reads"], rejected["unresolved_context_reads"], rejected["spanning_reads"]),
+                         ("retained", 8, 1, 2, 1, 11))
 
     def test_repeat_mapping_and_missing_interior_anchor_not_support(self):
         records=self.records()
@@ -213,6 +261,12 @@ class JunctionToolTests(unittest.TestCase):
                 self.assertEqual(compare(a,b), [])
                 self.assertEqual(compare.diagnostic(a,b)["reason"],
                                  "insufficient_read_support_for_clipped_original_L_boundary")
+                receipts = list(compare.directory.glob("junctions/*/terminal-projection-rejected.json"))
+                self.assertTrue(receipts)
+                for receipt in receipts:
+                    [event] = json.loads(receipt.read_text())["repairs"]
+                    self.assertEqual((event["side"], event["status"]), ("L", "retained"))
+                    self.assertIn("unresolved_context_reads", event)
 
     def test_clipping_past_protected_window_is_not_repaired(self):
         compare,a,b,_ = self.clipped_candidate("R", clip=2010)

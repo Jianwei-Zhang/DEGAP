@@ -16,7 +16,8 @@ from ExtensionFamilies import Version, atomic_json, fingerprint, read_json
 POLICY = {"repair_window": 2000, "min_support": 5, "min_fraction": 0.8,
           "min_mapq": 20, "anchor": 500, "read_margin": 200,
           "min_boundary_identity": 95.0, "projection_padding": 32,
-          "version": "bounded-read-backed-v3"}
+          "projection_max_context_edits": 4,
+          "version": "bounded-read-backed-v4"}
 CS = re.compile(r"(:[0-9]+|=[A-Za-z]+|\*[A-Za-z]{2}|\+[A-Za-z]+|-[A-Za-z]+)")
 
 
@@ -137,7 +138,7 @@ def read_edits(record, ref):
 
 
 def projected_allele(record, ref, start, end):
-    """Read allele over a padded target interval, independent of indel placement."""
+    """Extract read sequence between outer target coordinates, in target orientation."""
     t = record["ts"]
     parts = []
     for op, tn, _, _, query in record["ops"]:
@@ -148,6 +149,48 @@ def projected_allele(record, ref, start, end):
             parts.append(query[lo-t:hi-t] if query else ref[lo:hi].upper())
         t += tn
     return "".join(parts)
+
+
+def unique_context_cut(context, read, max_edits):
+    """Align context to the start of a read slice and return its unique best cut.
+
+    Fix the outer start. Leave the inner end free, without scoring any proposed
+    allele. Track equally good end coordinates, not equivalent paths to one end.
+    """
+    size = len(context)
+    if not size:
+        return None
+    if read.startswith(context):  # The sole edit-distance-zero cut.
+        return size
+    # A prefix outside this length band costs more than max_edits by length alone.
+    prefix = read[:size+max_edits]
+    first = max(1, size-max_edits)
+    if len(prefix) < first:
+        return None
+    row = list(range(len(prefix)+1))
+    for i, base in enumerate(context, 1):
+        next_row = [i]
+        for j, other in enumerate(prefix, 1):
+            next_row.append(min(next_row[-1]+1, row[j]+1, row[j-1]+(base != other)))
+        row = next_row
+    best = min(row[first:])
+    if best > max_edits:
+        return None
+    cuts = [j for j in range(first, len(row)) if row[j] == best]
+    return cuts[0] if len(cuts) == 1 else None
+
+
+def terminal_projection_allele(record, ref, start, end, pad, max_edits):
+    """Locate both cuts with their own contexts before examining the edit itself."""
+    lo, hi = start-pad, end+pad
+    if not record["ts"] <= lo < start < end < hi <= record["te"]:
+        return None
+    read = projected_allele(record, ref, lo, hi)
+    left = unique_context_cut(ref[lo:start].upper(), read, max_edits)
+    right = unique_context_cut(ref[end:hi].upper()[::-1], read[::-1], max_edits)
+    if left is None or right is None or left+right > len(read):
+        return None
+    return read[left:len(read)-right]
 
 
 def clip_at_boundary(record, side):
@@ -180,7 +223,7 @@ def read_support(ref, edits, records, *, side, left_length, gap_length, policy=P
         unique[key] = record
     for key in duplicates:
         unique.pop(key, None)
-    parsed = {key: read_edits(record, ref) for key, record in unique.items()}
+    parsed = {}
     results = []
     offset = 0 if side == "L" else left_length + gap_length
     for edit in edits:
@@ -190,6 +233,8 @@ def read_support(ref, edits, records, *, side, left_length, gap_length, policy=P
         start, end = key[:2]
         alt, original, other = set(), set(), set()
         strands = set()
+        unresolved = 0
+        pad = min(policy["projection_padding"], policy["read_margin"]) if projected else 0
         for rid, record in unique.items():
             if record["ts"] > start-policy["read_margin"] or record["te"] < end+policy["read_margin"]:
                 continue
@@ -199,18 +244,20 @@ def read_support(ref, edits, records, *, side, left_length, gap_length, policy=P
             if side == "R" and record["te"] < left_length+gap_length+policy["repair_window"]+policy["anchor"]:
                 continue
             if projected:
-                # Test the whole projected tail as one allele, with context on
-                # both sides so a split CIGAR event cannot count as support.
-                pad = min(policy["projection_padding"], policy["read_margin"])
-                lo, hi = start-pad, end+pad
-                allele = projected_allele(record, ref, lo, hi)
-                if allele == (ref[lo:start] + edit["proposed"] + ref[end:hi]).upper():
+                allele = terminal_projection_allele(record, ref, start, end, pad,
+                                                    policy["projection_max_context_edits"])
+                if allele is None:
+                    unresolved += 1
+                    other.add(rid)
+                elif allele == key[3]:
                     alt.add(rid); strands.add(record["strand"])
-                elif allele == ref[lo:hi].upper():
+                elif allele == key[2]:
                     original.add(rid)
                 else:
                     other.add(rid)
                 continue
+            if rid not in parsed:
+                parsed[rid] = read_edits(record, ref)
             changes = parsed[rid]
             if key in changes:
                 alt.add(rid); strands.add(record["strand"])
@@ -228,6 +275,8 @@ def read_support(ref, edits, records, *, side, left_length, gap_length, policy=P
                             alt_reads=len(alt), ref_reads=len(original), other_reads=len(other),
                             spanning_reads=total, alt_fraction=fraction, strands=sorted(strands),
                             _alt_ids=alt))
+        if projected:
+            results[-1]["unresolved_context_reads"] = unresolved  # Subset of other_reads.
     selected = [item for item in results if item["status"] == "accepted"]
     if selected:
         shared = set.intersection(*(item["_alt_ids"] for item in selected))
@@ -472,7 +521,10 @@ class BoundaryVerifier:
                     for item in accepted:
                         item.update(status="retained", reason="overlapping_proposed_edits")
                     accepted = []
-                if projection and not any(e["candidate_source"] == "terminal_projection" for e in accepted):
+                if projection and not any(e.get("candidate_source") == "terminal_projection" for e in accepted):
+                    atomic_json(root/"terminal-projection-rejected.json", {
+                        "policy": self.policy, "repairs": [e for e in events
+                            if e.get("candidate_source") == "terminal_projection"]})
                     return None, "insufficient_read_support_for_clipped_original_"+side+"_boundary"
                 cursor = 0
                 for edit in accepted:

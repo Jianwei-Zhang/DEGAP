@@ -18,7 +18,9 @@ Raw alignment stages, full fallback and pair decisions are cached separately. Th
 
 Project boundaries through substitutions and indels, rather than subtracting original lengths from the provisional output. The sequence between the projected original boundaries is the recovered gap. Unmapped or ambiguous boundaries remain ineligible.
 
-A soft-clipped end can otherwise hide the very error the inward retry is meant to bypass. With a unique interior anchor and clipping wholly inside the protected-end repair policy's 2 kb window, test a **length-preserving** projection of the clipped tail into the draft. Require ordered, nonoverlapping projected boundaries and independent reads supporting the complete projected allele plus adjacent context. Edits inside the tested context are not also applied separately. Without sufficient support, reject the candidate rather than guessing the cut or using the mismatched original end. This does not infer a net length change for a clipped segment.
+A soft-clipped end can hide the error the inward retry is meant to bypass. With a unique interior anchor and clipping wholly inside the protected-end repair policy's 2 kb window, test a **length-preserving** projection of the clipped tail into the draft. Require ordered, nonoverlapping projected boundaries and independent read support.
+
+For each qualifying spanning read, realign the 32 bp of adjacent context on each side independently, allowing up to four edits per side. Each cut must be uniquely best without scoring the proposed replacement. The sequence between those cuts must then match the **whole** proposed replacement exactly to support it. Reads with different alleles or unresolved cuts remain in the support denominator; unresolved counts are a subset of `other_reads`. Separate edits touching the context are not applied on top of the projection. If support falls short, reject the candidate and record the votes in `terminal-projection-rejected.json` in the candidate evidence directory. This check does not infer a net length change for a clipped segment.
 
 ## Bounded end edits
 

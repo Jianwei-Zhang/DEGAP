@@ -223,6 +223,7 @@ class JunctionReportTests(unittest.TestCase):
                         "alt_reads": 2,
                         "ref_reads": 4,
                         "other_reads": 1,
+                        "unresolved_context_reads": 1,
                         "spanning_reads": 7,
                         "alt_fraction": 2 / 7,
                         "strands": ["+"],
@@ -238,6 +239,7 @@ class JunctionReportTests(unittest.TestCase):
         self.assertIn("420 bp", text)
         self.assertIn("-7 bp", text)
         self.assertNotIn("413 bp", text)
+        self.assertIn("1 (1 unresolved / 未定位)", text)
 
         # Scientific honesty: retained is NOT applied; conflict is warned; edits are not proven corrections.
         self.assertIn("Retained (not applied)", text)
