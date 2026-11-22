@@ -2,6 +2,8 @@
 
 # DEGAP 2.0 — Dynamic Elongation of a Genome Assembly Path
 
+**English** | [中文](README_zh.md)
+
 **DEGAP 2.0** resolves genome assembly gaps, links contigs, and extends chromosome ends using HiFi and/or Oxford Nanopore (ONT) long reads.
 
 ## What's New in DEGAP 2.0

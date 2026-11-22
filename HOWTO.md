@@ -2,6 +2,8 @@
 
 # DEGAP 2.0 — Users' Guide
 
+**English** | [中文](HOWTO_zh.md)
+
 Canonical operational reference for running, resuming, inspecting, and troubleshooting **DEGAP 2.0** workflows.
 
 ## Table of Contents
