@@ -63,11 +63,11 @@ def run_telomere(extender, *, extend=None):
         tools[name] = {"path": path, "sha256": content_hash(path) if path else None}
     context = prepare_context(base, {"objective": "telomere", "tools": tools})
     context.update({
-        "driver": "family-telomere-v1", "end_type": extender.end_type,
+        "driver": "family-telomere-v2", "end_type": extender.end_type,
         "telomeric_reads": {"path": str(Path(extender.telo_reads_file).resolve()),
                             "sha256": content_hash(extender.telo_reads_file)},
         "telomere_code": {name: content_hash(Path(__file__).parent / name)
-                          for name in ("FamilyTelomere.py", "TelSeekerPart2.py")},
+                          for name in ("FamilyTelomere.py", "TelSeekerPart2.py", "TelomereTargets.py")},
     })
     runner = SingleRound(base, context=context)
     extension = extend or runner
@@ -126,7 +126,13 @@ def run_telomere(extender, *, extend=None):
             artifacts.extend(p for p in (directory / "telomere").rglob("*") if p.is_file())
             record.update(extension_length=growth, extension_status="extended",
                           extended_seq_file=version["path"], connection_found=bool(found))
+            diagnostics_file = directory / "telomere" / "connection_check" / "connection-diagnostics.json"
+            if diagnostics_file.is_file():
+                record["target_search"] = read_json(diagnostics_file)
+                record["target_evidence"] = str(diagnostics_file)
             if found:
+                record.update(supporting_read_ids=found.get("supporting_read_ids", []),
+                              support_count_lower_bound=found.get("support_count_lower_bound", 0))
                 aln = found["alignment"]
                 record.update(connected_read=found["read_id"], identity=aln["identity"],
                               aln_length=aln["len1"], linker_file=found["linker_file"],
@@ -154,7 +160,7 @@ def run_telomere(extender, *, extend=None):
         f"Total rounds: {search.total_rounds}\nTotal extension length: {search.total_length} bp\n"
         f"Stop reason: {stop_reason}\nCheckpoint: families.json\n")
     artifacts += [root / "extension.log", root / "extension.summary"]
-    artifacts.extend(p for p in (root / "telomere-alignments").rglob("*") if p.is_file())
+    artifacts.extend(p for p in (Path(extender.work_path) / "telomere-alignments").rglob("*") if p.is_file())
     payload = {"schema": "telomere-family-result-v1", "result": result, "rounds": rounds,
                "config": {"max_rounds": extender.max_rounds,
                           "max_extension_length": extender.max_extension_length,

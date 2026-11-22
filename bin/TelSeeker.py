@@ -566,6 +566,10 @@ class TelSeeker:
                     # code/tool/parameter contract. Its receipts reuse completed
                     # work; summary/file existence must not bypass validation.
                     return False
+                # Direct targets also have code/input-bound receipts. Re-enter
+                # Part2 instead of accepting an old log or final-file existence.
+                if (chr_dir / 'direct.check').exists():
+                    return False
                 linker_complete = (chr_dir / 'linker.fa').exists() and (chr_dir / 'linker.info').exists()
                 extension_complete = (chr_dir / 'extension' / 'extension.summary').exists()
 

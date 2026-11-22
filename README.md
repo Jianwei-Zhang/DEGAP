@@ -34,6 +34,8 @@ micromamba env update -f environment.yml --prune
 | **TelSeeker Ctg** | `python bin/DEGAP.py --mode telseeker_ctg` | Single-ended extension of one or more single-record contig endpoints (`L` or `R`) with shared read/telomere caching | `--ctg <fasta> <L\|R>`, `-m/--motif`, `--hifi`/`--ont`, `-o/--out` |
 | **AutoGapfiller** | `python bin/AutoGapfiller.py` | Detect genome N gaps and run one bidirectional gap-filling job per gap | `--genome`, `--hifi`/`--ont`, `-o/--output` (optional `--setup_only`) |
 
+TelSeeker keeps a single chromosome-side extension family even for large telomeric-read pools. It uses a shared target index and batched candidate validation, selects the best corroborated connection rather than the first hit, and requires at least two distinct supporting read IDs. Local junction support does not establish the accuracy of the whole added tail or final telomere completeness; see [the search policy](docs/design/telomere-target-search.md).
+
 Standalone chromosome-end review plots and 2 kb end FASTAs can be generated beforehand with `python bin/TelSeekerCheck.py --genome <genome.fa> --motif <MOTIF> --out <dir>`.
 
 ## Quick Start

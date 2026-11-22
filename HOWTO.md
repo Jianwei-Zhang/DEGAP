@@ -230,6 +230,8 @@ Common uppercase A/C/G/T motifs: `TTAGGG` (vertebrates), `TTTAGGG` (plants), `TT
 
 **Terminal telomeric read discovery**: Step 1 scans `--tel-n * len(--motif)` bases at both physical ends of each read using motif rotations and reverse-complement rotations. A read end passes when `hits / --tel-n >= --tel-r`, allowing `--tel-mm` (`0` or `1`) mismatches per motif-length unit. With `TTAGGG`, `--tel-n 100` checks 600 bp and `--tel-r 0.6` requires at least 60 hits. If Step 1 finds too few telomeric reads, relax `--tel-r`, set `--tel-mm 1`, or lower `--tel-n`.
 
+**Large telomeric-read pools**: TelSeeker keeps one chromosome-side family, without globally grouping or extending telomeric reads. A shared sampled-anchor index retrieves candidates; all retrieved records are refined in bounded multi-query batches, followed by deterministic ranking and support from at least two distinct read IDs. The final join retains the current chromosome sequence. Support counts are lower bounds and cover the local junction, not the accuracy of the whole added tail. See [the target-search policy](docs/design/telomere-target-search.md) for thresholds, sampling limitations, caches and evidence files.
+
 A connected linker in TelSeeker means a linker sequence was generated and integrated into `part3.integration.results/final.genome.fa`; final telomere completeness must still be confirmed by manually reviewing `part3.integration.results/final.genome.telomere.check/`.
 
 ### 4. TelSeeker Ctg
@@ -426,16 +428,17 @@ output_directory/
 │   ├── right.telo.reads.fa
 │   └── part1.log
 ├── part2.chr.end.job/
+│   ├── .telomere-target-cache/             # Shared disk-backed target indexes
 │   └── <Chr>.<L|R>/                        # e.g., Chr01.L, Chr01.R
 │       ├── seed.fa
 │       ├── telo.reads.fa
 │       ├── direct.check/
 │       ├── linker.fa / linker.info         # Present when connected
+│       ├── telomere-alignments/             # Cached batch comparisons (also used by round zero)
 │       └── extension/
 │           ├── families.json               # Single real endpoint family checkpoint
 │           ├── attempts/0/<attempt>/       # Attempts with reads/assembly/telomere receipts
 │           ├── telomere-result.json        # Verified result manifest used by reports
-│           ├── telomere-alignments/        # Cached MUMmer alignments
 │           ├── extension.log
 │           └── extension.summary
 ├── part3.integration.results/
@@ -543,6 +546,8 @@ output_directory/
    - Verify `-m/--motif` uses uppercase `A/C/G/T` matching the organism (e.g., `TTAGGG`, `TTTAGGG`, `TTAGG`).
    - Verify `-e/--target_ends` chromosome IDs match the headers in `--genome` and use `<chr>.L` or `<chr>.R`.
    - If Step 1 produces empty `part1.telo.reads/Global.left.telo.reads.fa` / `Global.right.telo.reads.fa`, rerun in a new output directory with relaxed discovery parameters such as `--tel-r 0.5 --tel-mm 1` (or smaller `--tel-n`).
+
+   - `insufficient_read_support`: candidates were found but fewer than two distinct target read IDs corroborated the same connection. A pool of two reads is not enough if they support different ends/paths; duplicated IDs do not supply independent evidence. Inspect `connection-support.json` rather than interpreting the stop as “no telomere exists”.
 
 8. **TelSeeker Ctg fails with `no_tel_reads`, `no_tel_reads_for_target_end`, or cache mismatch**
    - Check `result/status.tsv` and `telseeker_ctg.jobs/<safe_ctg_id>.<L|R>/result/status.tsv`.

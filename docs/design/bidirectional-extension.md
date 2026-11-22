@@ -162,3 +162,8 @@ GapFiller 管理两个家族。AutoGapfiller 每个 gap 创建一个双向任务
 - 真实 reads 工具链验证使用受控合成数据，不是客户数据验收，也不代表已经证明错误率下降或填补率提升。
 - 保留第零代 identity >=80% 与后续旧 `linkgap` 没有额外 identity 下限的区别，均要求至少 10 kb 重叠。
 - 本次只在 DEGAP 功能分支提交/推送，不发布版本、不更新 CGAT 捆绑运行时，也不合入 DEGAP 主分支。
+
+
+### TelSeeker 大候选池检索更新
+
+TelSeeker 仍只延伸染色体侧，不全库分组，也不为端粒 reads 建立反向延伸家族。共享磁盘索引检索候选后，统一批量比对、排序，并用至少两个不同 read ID 的共同锚点和接头近端序列支持决定连接。其支持计数是下界，不表示整条新增端粒序列已做共识纠错。具体条件、采样边界、缓存与兼容性见 [telomere-target-search.md](telomere-target-search.md)。

@@ -31,6 +31,21 @@ except ImportError:
     from .ReportStyle import esc, report_css
 
 try:
+    from TelomereReport import (
+        load_check_evidence,
+        render_target_search_section,
+        summarize_chr_end_evidence,
+        telomere_report_css,
+    )
+except ImportError:
+    from .TelomereReport import (
+        load_check_evidence,
+        render_target_search_section,
+        summarize_chr_end_evidence,
+        telomere_report_css,
+    )
+
+try:
     from Bio import SeqIO
     HAS_BIOPYTHON = True
 except ImportError:
@@ -82,6 +97,7 @@ class TelSeekerPart2LogParser:
         
         return {
             'chr_end': self.chr_end_name,
+            'chr_end_dir': str(self.chr_end_dir),
             'initial_info': self.initial_info,
             'config': self.config,
             'direct_check': self.direct_check,
@@ -149,7 +165,32 @@ class TelSeekerPart2LogParser:
     
     def _parse_rounds(self):
         if getattr(self, 'family_result', None):
-            self.rounds_data = self.family_result['rounds']
+            enriched_rounds = []
+            for row in self.family_result['rounds']:
+                rdata = dict(row)
+                rnum = rdata.get('round')
+                check_dir = None
+                if rdata.get('target_evidence'):
+                    check_dir = Path(rdata['target_evidence']).parent
+                elif isinstance(rnum, int) and not isinstance(rnum, bool):
+                    check_dir = self.extension_dir / 'attempts' / '0' / str(rnum) / 'telomere' / 'connection_check'
+                evidence = load_check_evidence(
+                    check_dir,
+                    embedded_diagnostics=rdata.get('target_search') if isinstance(rdata.get('target_search'), dict) else None,
+                    diagnostics_path=rdata.get('target_evidence'),
+                )
+                if evidence['diagnostics'] is not None:
+                    rdata['target_search'] = evidence['diagnostics']
+                if evidence['evidence_files']:
+                    rdata['evidence_files'] = evidence['evidence_files']
+                    if 'target_evidence' not in rdata and 'diagnostics' in evidence['evidence_files']:
+                        rdata['target_evidence'] = evidence['evidence_files']['diagnostics']
+                if evidence['support'] is not None:
+                    rdata['support_evidence'] = evidence['support']
+                if evidence['candidates_summary'] is not None:
+                    rdata['candidates_summary'] = evidence['candidates_summary']
+                enriched_rounds.append(rdata)
+            self.rounds_data = enriched_rounds
             return
         if not self.extension_dir.exists():
             return
@@ -208,6 +249,17 @@ class TelSeekerPart2LogParser:
                         rdata['linker_file'] = str(lfa)
                 else:
                     rdata['connection_found'] = False
+                evidence = load_check_evidence(cdir)
+                if evidence['diagnostics'] is not None:
+                    rdata['target_search'] = evidence['diagnostics']
+                if evidence['evidence_files']:
+                    rdata['evidence_files'] = evidence['evidence_files']
+                    if 'diagnostics' in evidence['evidence_files']:
+                        rdata['target_evidence'] = evidence['evidence_files']['diagnostics']
+                if evidence['support'] is not None:
+                    rdata['support_evidence'] = evidence['support']
+                if evidence['candidates_summary'] is not None:
+                    rdata['candidates_summary'] = evidence['candidates_summary']
             else:
                 rdata['connection_found'] = False
             self.rounds_data.append(rdata)
@@ -271,33 +323,80 @@ class TelSeekerPart2LogParser:
         """解析 direct.check 结果"""
         dlog = self.direct_dir / 'direct.check.log'
         info: Dict = {}
-        if not dlog.exists():
-            self.direct_check = info
-            return
-        text = dlog.read_text(encoding='utf-8', errors='ignore')
-        info['checked'] = True
-        info['success'] = ('Status: SUCCESS' in text)
-        m = re.search(r'Connected Read:\s*(.+)', text)
-        if m: info['read_id'] = m.group(1).strip()
-        m = re.search(r'Alignment Length:\s*(\d+)\s*bp', text)
-        if m: info['aln_length'] = int(m.group(1))
-        m = re.search(r'Identity:\s*([0-9.]+)%', text)
-        if m: info['identity'] = float(m.group(1))
-        m = re.search(r'Reads Checked:\s*(\d+)', text)
-        if m: info['reads_checked'] = int(m.group(1))
-        m = re.search(r'Total Telomeric Reads:\s*(\d+)', text)
-        if m: info['total_reads'] = int(m.group(1))
-        m = re.search(r'Reference Positions:\s*(\d+)-(\d+)', text)
-        if m:
-            info['ref_start'] = int(m.group(1))
-            info['ref_end'] = int(m.group(2))
-        m = re.search(r'Query Positions:\s*(\d+)-(\d+)', text)
-        if m:
-            info['qry_start'] = int(m.group(1))
-            info['qry_end'] = int(m.group(2))
-        lfa = self.direct_dir / 'direct.linker.fa'
-        if lfa.exists():
-            info['linker_file'] = str(lfa)
+        if dlog.exists():
+            text = dlog.read_text(encoding='utf-8', errors='ignore')
+            info['checked'] = True
+            info['success'] = ('Status: SUCCESS' in text)
+            m = re.search(r'Connected Read:\s*(.+)', text)
+            if m: info['read_id'] = m.group(1).strip()
+            m = re.search(r'Alignment Length:\s*(\d+)\s*bp', text)
+            if m: info['aln_length'] = int(m.group(1))
+            m = re.search(r'Identity:\s*([0-9.]+)%', text)
+            if m: info['identity'] = float(m.group(1))
+            m = re.search(r'Reads Checked:\s*(\d+)', text)
+            if m: info['reads_checked'] = int(m.group(1))
+            m = re.search(r'Total Telomeric Reads:\s*(\d+)', text)
+            if m: info['total_reads'] = int(m.group(1))
+            m = re.search(r'Reference Positions:\s*(\d+)-(\d+)', text)
+            if m:
+                info['ref_start'] = int(m.group(1))
+                info['ref_end'] = int(m.group(2))
+            m = re.search(r'Query Positions:\s*(\d+)-(\d+)', text)
+            if m:
+                info['qry_start'] = int(m.group(1))
+                info['qry_end'] = int(m.group(2))
+            lfa = self.direct_dir / 'direct.linker.fa'
+            if lfa.exists():
+                info['linker_file'] = str(lfa)
+
+        evidence = load_check_evidence(self.direct_dir)
+        diag = evidence['diagnostics']
+        if diag is not None or evidence['evidence_files']:
+            info['checked'] = True
+            if diag is not None:
+                info['target_search'] = diag
+                if 'success' not in info:
+                    info['success'] = (diag.get('reason') == 'connected')
+                if 'supporting_read_ids' in diag and isinstance(diag['supporting_read_ids'], list):
+                    info['supporting_read_ids'] = diag['supporting_read_ids']
+                if ('support_count_lower_bound' in diag
+                        and isinstance(diag['support_count_lower_bound'], int)
+                        and not isinstance(diag['support_count_lower_bound'], bool)):
+                    info['support_count_lower_bound'] = diag['support_count_lower_bound']
+                if ('reads_checked' not in info
+                        and isinstance(diag.get('refined_records'), int)
+                        and not isinstance(diag.get('refined_records'), bool)):
+                    info['reads_checked'] = diag['refined_records']
+                if ('total_reads' not in info
+                        and isinstance(diag.get('pool_records'), int)
+                        and not isinstance(diag.get('pool_records'), bool)):
+                    info['total_reads'] = diag['pool_records']
+            if evidence['evidence_files']:
+                info['evidence_files'] = evidence['evidence_files']
+                if 'diagnostics' in evidence['evidence_files']:
+                    info['target_evidence'] = evidence['evidence_files']['diagnostics']
+            if evidence['support'] is not None:
+                info['support_evidence'] = evidence['support']
+            if evidence['candidates_summary'] is not None:
+                info['candidates_summary'] = evidence['candidates_summary']
+            conn = evidence['receipt_connection']
+            if isinstance(conn, dict):
+                if 'read_id' not in info and conn.get('read_id'):
+                    info['read_id'] = conn['read_id']
+                aln = conn.get('alignment') if isinstance(conn.get('alignment'), dict) else {}
+                if 'aln_length' not in info and isinstance(aln.get('len1'), int):
+                    info['aln_length'] = aln['len1']
+                if 'identity' not in info and isinstance(aln.get('identity'), (int, float)):
+                    info['identity'] = float(aln['identity'])
+                for src, dst in (('s1', 'ref_start'), ('e1', 'ref_end'), ('s2', 'qry_start'), ('e2', 'qry_end')):
+                    if dst not in info and isinstance(aln.get(src), int):
+                        info[dst] = aln[src]
+                if 'linker_file' not in info and conn.get('linker_file'):
+                    info['linker_file'] = conn['linker_file']
+            lfa = self.direct_dir / 'direct.linker.fa'
+            if 'linker_file' not in info and lfa.exists():
+                info['linker_file'] = str(lfa)
+
         self.direct_check = info
     
     @staticmethod
@@ -453,6 +552,8 @@ class Part2HTMLReportGenerator:
 
   {rounds_section}
 
+  {render_target_search_section(self.data, self.output_dir)}
+
   <div class=\"section\">
     <div class=\"section-title\" data-i18n-en=\"Connection Visualization\" data-i18n-zh=\"连接情况可视化\">Connection Visualization</div>
     {self._connection_visualization_html()}
@@ -483,13 +584,18 @@ class Part2HTMLReportGenerator:
 
         rid = r.get('connected_read', '-')
         reads_chk = '-'
-        if 'checked_reads' in r and 'total_reads' in r:
+        if r.get('checked_reads') is not None and r.get('total_reads') is not None:
             reads_chk = f"{r['checked_reads']}/{r['total_reads']}"
+        elif isinstance(r.get('target_search'), dict):
+            ts = r['target_search']
+            if (isinstance(ts.get('refined_records'), int) and not isinstance(ts.get('refined_records'), bool)
+                    and isinstance(ts.get('pool_records'), int) and not isinstance(ts.get('pool_records'), bool)):
+                reads_chk = f"{ts['refined_records']}/{ts['pool_records']}"
         idt = (f"{r.get('identity', 0):.2f}%" if 'identity' in r else '-')
         alnlen = (f"{r.get('aln_length', 0):,} bp" if 'aln_length' in r else '-')
         return (
             f"<tr>"
-            f"<td>{r.get('round', '')}</td>"
+            f"<td>{esc(r.get('round', ''))}</td>"
             f"<td>{r.get('extension_length', 0):,} bp</td>"
             f"<td>{r.get('cumulative_extension', 0):,} bp</td>"
             f"<td>{status_html}</td>"
@@ -533,7 +639,7 @@ class Part2HTMLReportGenerator:
   .section-title { margin: -14px -14px 14px; padding: 12px 14px; }
   .kv td:first-child { width: 42%; }
 }
-""")
+""" + telomere_report_css())
 
     def _js(self) -> str:
         return """
@@ -1016,7 +1122,7 @@ def count_fasta_records(fasta_path: Path) -> int:
         return 0
 
 
-def parse_part2_results(part2_dir: Path) -> List[Dict]:
+def parse_part2_results(part2_dir: Path, report_dir: Optional[Path] = None) -> List[Dict]:
     """
     Parse chromosome end extension results from part2.
     
@@ -1027,7 +1133,7 @@ def parse_part2_results(part2_dir: Path) -> List[Dict]:
         return []
     
     results = []
-    chr_end_dirs = sorted([d for d in part2_dir.iterdir() if d.is_dir()])
+    chr_end_dirs = sorted([d for d in part2_dir.iterdir() if d.is_dir() and not d.name.startswith(".")])
     
     print(f"    Found {len(chr_end_dirs)} chromosome end directories")
     
@@ -1094,7 +1200,9 @@ def parse_part2_results(part2_dir: Path) -> List[Dict]:
                             result['extended'] = True
         except Exception:
             pass
-        
+
+        result['target_evidence_summary'] = summarize_chr_end_evidence(chr_end_dir, report_dir=report_dir)
+
         results.append(result)
     
     return results
@@ -1355,7 +1463,7 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
     
     print("\n[4/6] Parsing chromosome end extension results...")
     part2_dir = out_dir / 'part2.chr.end.job'
-    extension_results = parse_part2_results(part2_dir)
+    extension_results = parse_part2_results(part2_dir, report_dir=output_path.parent)
     print(f"  ✓ Processed {len(extension_results)} chromosome ends")
     
     print("\n[5/6] Parsing final integration results...")
@@ -1406,11 +1514,19 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
             row['extension_status'] = 'not_targeted'
         row['manual_review'] = 'manual_review'
     
-    # Prepare data for JavaScript
-    js_need_extension_list = json.dumps(need_extension_list, indent=2)
-    js_extension_results = json.dumps(extension_results, indent=2)
-    js_initial_review_rows = json.dumps(initial_review_rows, indent=2)
-    js_final_review_rows = json.dumps(final_review_rows, indent=2)
+    # Prepare data for JavaScript (escape HTML-sensitive chars for inline script safety)
+    def _safe_json(value: Any) -> str:
+        return (
+            json.dumps(value, indent=2)
+            .replace('<', '\\u003c')
+            .replace('>', '\\u003e')
+            .replace('&', '\\u0026')
+        )
+
+    js_need_extension_list = _safe_json(need_extension_list)
+    js_extension_results = _safe_json(extension_results)
+    js_initial_review_rows = _safe_json(initial_review_rows)
+    js_final_review_rows = _safe_json(final_review_rows)
 
     # Reuse the plots generated by the final manual check. The visualizer must
     # not run a second, independent chromosome-end analysis.
@@ -1503,6 +1619,9 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
 .chr-selector:hover {{ border-color: var(--accent); }}
 .motif-plot-container {{ text-align: center; background: var(--surface); padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); }}
 .motif-plot-container img {{ max-width: 100%; height: auto; }}
+.global-ev-cell {{ font-size: 0.82rem; min-width: 200px; }}
+.global-ev-meta {{ margin-top: 4px; color: var(--ink-secondary); font-variant-numeric: tabular-nums; }}
+.global-ev-link {{ margin-left: 6px; font-size: 0.78rem; white-space: nowrap; }}
 @media (max-width: 768px) {{
   .task-track {{ grid-template-columns: minmax(0,1fr); gap: 6px; }}
   .card-header {{ flex-wrap: wrap; gap: 10px; }}
@@ -1593,6 +1712,11 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
         <div class="card">
             <div class="card-header" data-i18n-en="4. Chromosome End Extension" data-i18n-zh="4. 染色体端延伸">4. Chromosome End Extension</div>
             <div class="card-content">
+                <p class="section-note"
+                   data-i18n-en="Linked Sequence Length reports the full final linker FASTA length (linker.fa), not chromosome-side assembly growth alone. Target evidence summarizes per-end bounded-batch large-pool search counts (pool / retrieved / batches / eligible), decision reason, selected tel-read tail vs tested outward junction span, and lower-bound read support (&ge; N, not an exact total). Legacy runs without diagnostics show Unavailable."
+                   data-i18n-zh="拼接后序列长度显示最终 linker FASTA（linker.fa）的全长，而非仅染色体侧组装延伸长度。目标检索证据汇总各端有界批次大池检索计数（池 / 检索 / 批次 / 合格）、判定原因、入选端粒 read 尾长与实测向外接合区跨度，以及 read 佐证下界（&ge; N，并非精确总数）。缺少诊断文件的旧版运行显示为不可用。">
+                    Linked Sequence Length reports the full final linker FASTA length (linker.fa), not chromosome-side assembly growth alone. Target evidence summarizes per-end bounded-batch large-pool search counts (pool / retrieved / batches / eligible), decision reason, selected tel-read tail vs tested outward junction span, and lower-bound read support (&ge; N, not an exact total). Legacy runs without diagnostics show Unavailable.
+                </p>
                 <div class="table-container">
                     <table id="extension-table">
                         <thead>
@@ -1601,8 +1725,9 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
                                 <th>Extended</th>
                                 <th>Connection Type</th>
                                 <th>Rounds</th>
-                                <th>Extension Length</th>
+                                <th data-i18n-en="Linked Sequence Length" data-i18n-zh="拼接后序列长度" title="Full length of the final linked sequence (linker.fa), not chromosome-side assembly growth alone">Linked Sequence Length</th>
                                 <th>Connected Read</th>
+                                <th data-i18n-en="Target Evidence" data-i18n-zh="目标检索证据">Target Evidence</th>
                                 <th>Details</th>
                             </tr>
                         </thead>
@@ -1686,7 +1811,21 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
                 targeted: 'Targeted',
                 not_targeted: 'Not targeted',
                 manual_review: 'Manual review',
-                no_review_data: 'No chromosome-end review data available.'
+                no_review_data: 'No chromosome-end review data available.',
+                unavailable: 'Unavailable',
+                reason_connected: 'Connected',
+                reason_insufficient_read_support: 'Insufficient read support',
+                reason_no_eligible_alignment: 'No eligible alignment',
+                reason_no_sampled_nonrepeat_anchor: 'No sampled non-repeat anchor',
+                ev_pool: 'Pool',
+                ev_retrieved: 'Retrieved',
+                ev_batches: 'Batches',
+                ev_eligible: 'Eligible',
+                ev_support: 'Support',
+                ev_tail: 'Tel-read tail',
+                ev_junction: 'Junction tested',
+                lower_bound: 'lower bound',
+                diagnostics: 'JSON'
             }},
             zh: {{
                 no_extension_needed: '未提供需要延伸的目标染色体端。',
@@ -1699,7 +1838,21 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
                 targeted: '已选择',
                 not_targeted: '未选择',
                 manual_review: '人工检查',
-                no_review_data: '没有可用的染色体末端检查数据。'
+                no_review_data: '没有可用的染色体末端检查数据。',
+                unavailable: '不可用',
+                reason_connected: '已连接',
+                reason_insufficient_read_support: '支持 read 不足',
+                reason_no_eligible_alignment: '无合格比对',
+                reason_no_sampled_nonrepeat_anchor: '无采样非重复锚点命中',
+                ev_pool: '池',
+                ev_retrieved: '检索',
+                ev_batches: '批次',
+                ev_eligible: '合格',
+                ev_support: '佐证',
+                ev_tail: '端粒尾长',
+                ev_junction: '实测接合区',
+                lower_bound: '下界',
+                diagnostics: '诊断'
             }}
         }};
 
@@ -1997,13 +2150,55 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
             container.appendChild(list);
         }}
 
+        function formatOptionalCount(val) {{
+            return (typeof val === 'number' && Number.isFinite(val)) ? val.toLocaleString() : t('unavailable');
+        }}
+
+        function formatOptionalBp(val) {{
+            return (typeof val === 'number' && Number.isFinite(val)) ? `${{val.toLocaleString()}} bp` : t('unavailable');
+        }}
+
+        function renderTargetEvidenceCell(ev) {{
+            if (!ev || !ev.available) {{
+                return `<span class="muted">${{t('unavailable')}}</span>`;
+            }}
+            const reasonKey = ev.reason ? ('reason_' + ev.reason) : '';
+            const reasonLabel = (reasonKey && Object.prototype.hasOwnProperty.call(translations.en, reasonKey))
+                ? t(reasonKey)
+                : (ev.reason ? escapeHtml(ev.reason) : t('unavailable'));
+            const tone = ev.reason === 'connected' ? 'ok'
+                : (ev.reason === 'insufficient_read_support' || ev.reason === 'no_eligible_alignment') ? 'warn'
+                : ev.reason === 'no_sampled_nonrepeat_anchor' ? 'muted' : 'info';
+            const poolText = formatOptionalCount(ev.pool_records);
+            const retText = formatOptionalCount(ev.retrieved_records);
+            const batchText = formatOptionalCount(ev.alignment_batches);
+            const eligText = formatOptionalCount(ev.eligible_records);
+            const tailText = formatOptionalBp(ev.selected_tail_bases);
+            const juncText = formatOptionalBp(ev.junction_bases_tested);
+            let supportText = t('unavailable');
+            if (typeof ev.support_count_lower_bound === 'number' && Number.isFinite(ev.support_count_lower_bound)) {{
+                const lbPrefix = ev.support_count_lower_bound > 0 ? '&ge; ' : '';
+                supportText = `${{lbPrefix}}${{ev.support_count_lower_bound.toLocaleString()}} (${{t('lower_bound')}})`;
+            }}
+            const diagLink = ev.diagnostics_href
+                ? `<a class="global-ev-link" href="${{escapeHtml(ev.diagnostics_href)}}" target="_blank" rel="noopener">${{t('diagnostics')}}</a>`
+                : '';
+            return `
+                <div class="global-ev-cell">
+                    <span class="badge badge-${{tone}}">${{reasonLabel}}</span>${{diagLink}}
+                    <div class="global-ev-meta">${{t('ev_pool')}}: ${{poolText}} · ${{t('ev_retrieved')}}: ${{retText}} · ${{t('ev_batches')}}: ${{batchText}} · ${{t('ev_eligible')}}: ${{eligText}} · ${{t('ev_support')}}: ${{supportText}}</div>
+                    <div class="global-ev-meta">${{t('ev_tail')}}: ${{tailText}} · ${{t('ev_junction')}}: ${{juncText}}</div>
+                </div>
+            `;
+        }}
+
         // Populate extension table
         function populateExtensionTable() {{
             const tbody = document.getElementById('extension-tbody');
             tbody.innerHTML = '';
             
             if (extensionResults.length === 0) {{
-                tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No extension data available</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No extension data available</td></tr>';
                 return;
             }}
             
@@ -2022,6 +2217,7 @@ def generate_html_visualization(out_dir: Path, output_path: Path, motif: str = '
                     <td>${{escapeHtml(row.round_num)}}</td>
                     <td>${{row.extension_length > 0 ? row.extension_length.toLocaleString() + ' bp' : '-'}}</td>
                     <td style="font-size: 0.85em; color: #6c757d;">${{escapeHtml(row.connected_read)}}</td>
+                    <td>${{renderTargetEvidenceCell(row.target_evidence_summary)}}</td>
                     <td><a href="${{escapeHtml(reportFileName)}}" target="_blank" rel="noopener" title="View detailed report for ${{escapeHtml(row.chr_end)}}">View</a></td>
                 `;
                 tbody.appendChild(tr);
@@ -2058,7 +2254,7 @@ def generate_all_task_reports(out_dir: Path) -> Tuple[int, int]:
         print(f"  ⚠ Job directory not found: {job_dir}")
         return 0, 0
     
-    task_dirs = [d for d in job_dir.iterdir() if d.is_dir()]
+    task_dirs = [d for d in job_dir.iterdir() if d.is_dir() and not d.name.startswith(".")]
     if not task_dirs:
         print(f"  ⚠ No task directories found in {job_dir}")
         return 0, 0

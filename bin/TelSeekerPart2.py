@@ -510,74 +510,19 @@ def check_single_chr_end(chr_end: str, work_path: Path, edge: int = 500) -> Dict
         check_dir = work_path / 'direct.check'
         check_dir.mkdir(parents=True, exist_ok=True)
         
-        # Split telomeric reads into individual files for checking
-        reads_dir = check_dir / 'individual_reads'
-        reads_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Count total reads
-        total_reads = 0
-        for record in SeqIO.parse(telo_reads_file, 'fasta'):
-            total_reads += 1
-        
-        logger.info(f"  [{chr_end}] Checking {total_reads} telomeric reads...")
-        
-        # Create ConnectionChecker instance
-        connection_checker = ConnectionChecker(edge=edge, min_alignment_length=10000, min_identity=80.0)
-        
-        # Check each read against seed
-        checked_reads = 0
-        for record in SeqIO.parse(telo_reads_file, 'fasta'):
-            checked_reads += 1
-            
-            # Create safe filename (replace / with _ to avoid directory issues)
-            safe_read_id = record.id.replace('/', '_').replace('\\', '_')
-            
-            # Create temporary file for this read
-            read_file = reads_dir / f"{safe_read_id}.fa"
-            with open(read_file, 'w') as f:
-                SeqIO.write(record, f, 'fasta')
-            
-            # Check connection using ConnectionChecker
-            aln_dir = check_dir / 'alignments'
-            alignment = connection_checker.check_connection(
-                ref_file=seed_file,
-                qry_file=read_file,
-                output_dir=aln_dir,
-                end_type=end_type,
-                alignment_prefix=f"aln_{safe_read_id}"
-            )
-            
-            if alignment is not None:
-                # Connection found!
-                logger.info(f"  [{chr_end}] ✓ Connection found with read {record.id} "
-                          f"(checked {checked_reads}/{total_reads})")
-                
-                result['success'] = True
-                result['read_id'] = record.id  # Store original read ID
-                result['alignment'] = alignment
-                # Update alignment dict to use original read ID
-                alignment['qry_id'] = record.id
-                
-                # Create linked sequence using ConnectionChecker
-                linker_file = check_dir / 'direct.linker.fa'
-                connection_checker.create_linked_sequence(
-                    ref_file=seed_file,
-                    qry_file=read_file,
-                    alignment=alignment,
-                    end_type=end_type,
-                    output_file=linker_file
-                )
-                
-                # Stop checking further reads
-                break
-            
-            # Log progress every 100 reads
-            if checked_reads % 100 == 0:
-                logger.info(f"  [{chr_end}] Checked {checked_reads}/{total_reads} reads...")
-        
-        if not result['success']:
-            logger.info(f"  [{chr_end}] ✗ No direct connection found ({checked_reads} reads checked)")
-        
+        checker = TelomereExtensionChecker(
+            edge=edge, cache_directory=work_path / "telomere-alignments",
+            shared_directory=work_path.parent / ".telomere-target-cache")
+        try:
+            connection = checker.check_with_telo_reads(seed_file, telo_reads_file, check_dir, end_type, 0)
+            diagnostics = checker.last_diagnostics
+        finally:
+            checker.close()
+        total_reads = diagnostics["pool_records"]
+        checked_reads = diagnostics["refined_records"]
+        if connection:
+            result.update(connection)
+
         # Write check log
         log_file = check_dir / 'direct.check.log'
         with open(log_file, 'w') as f:
@@ -601,6 +546,10 @@ def check_single_chr_end(chr_end: str, work_path: Path, edge: int = 500) -> Dict
                 if result['error']:
                     f.write(f"Error: {result['error']}\n")
         
+        from TelomereTargets import check_log_lines
+        with log_file.open("a") as stream:
+            stream.write(check_log_lines(diagnostics))
+
         return result
         
     except Exception as e:
@@ -663,6 +612,11 @@ class DirectConnectionChecker:
         for result in results:
             self.results[result['chr_end']] = result
         
+        errors = [r for r in results if r.get("error")]
+        if errors:
+            raise RuntimeError("Telomere direct-check error: " + "; ".join(
+                f"{r['chr_end']}: {r['error']}" for r in errors))
+
         # Summary
         logger.info("")
         logger.info("=" * 80)
@@ -1058,7 +1012,8 @@ class TelomereExtender:
         # Initialize checker
         self.extension_checker = TelomereExtensionChecker(
             edge=edge, min_alignment_length=10000, min_identity=80.0,
-            cache_directory=self.extension_dir / "telomere-alignments")
+            cache_directory=self.work_path / "telomere-alignments",
+            shared_directory=self.work_path.parent / ".telomere-target-cache")
 
         # Prepare base object for GapFillerClass
         self.base = prepare_base_object(
@@ -1078,7 +1033,10 @@ class TelomereExtender:
     def run_extension(self) -> Dict:
         """Run one real endpoint through shared rounds, budgets and checkpoints."""
         from FamilyTelomere import run_telomere
-        return run_telomere(self)
+        try:
+            return run_telomere(self)
+        finally:
+            self.extension_checker.close()
 
     def _check_connection(self, round_dir: Path, extended_seq_file: Path) -> Optional[Dict]:
         """Check if extended sequence connects to telomeric reads."""
@@ -1234,8 +1192,7 @@ class TelomereExtender:
         
         # Clear extension checker
         if hasattr(self, 'extension_checker'):
-            if hasattr(self.extension_checker, 'connection_checker'):
-                self.extension_checker.connection_checker = None
+            self.extension_checker.close()
         
         # Force garbage collection
         gc.collect()
@@ -1246,126 +1203,43 @@ class TelomereExtensionChecker:
     """
     Checks if extended sequence can connect to any telomeric read.
     
-    Uses ConnectionChecker for 1 vs N checking (seed vs all telo_reads).
-    Stops as soon as a successful connection is found.
+    Uses one shared target index and one batched comparison per sequence.
+    Ranks all eligible records, then checks independent read corroboration.
     """
     
-    def __init__(self, edge: int = 500, min_alignment_length: int = 10000, min_identity: float = 80.0, *, cache_directory=None):
-        """
-        Initialize telomere extension checker.
-        
-        Args:
-            edge: Edge tolerance for boundary checking
-            min_alignment_length: Minimum alignment length (10000bp for telomere)
-            min_identity: Minimum alignment identity (%)
-        """
-        self.connection_checker = ConnectionChecker(
-            edge=edge,
-            min_alignment_length=min_alignment_length,
-            min_identity=min_identity, strict_tools=True, cache_directory=cache_directory
-        )
+    def __init__(self, edge=500, min_alignment_length=10000, min_identity=80.0,
+                 *, cache_directory=None, shared_directory=None):
         self.edge = edge
         self.min_alignment_length = min_alignment_length
         self.min_identity = min_identity
-    
-    def check_with_telo_reads(self, extended_seq_file: Path, telo_reads_file: Path,
-                             check_dir: Path, end_type: str, round_num: int) -> Optional[Dict]:
-        """
-        Check if extended sequence can connect to any telomeric read.
-        
-        Args:
-            extended_seq_file: Path to extended sequence file
-            telo_reads_file: Path to telomeric reads file
-            check_dir: Directory for check output
-            end_type: 'L' or 'R'
-            round_num: Current round number
-            
-        Returns:
-            Dictionary with connection info if successful, None otherwise
-        """
-        check_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Count total reads
-        total_reads = 0
-        for record in SeqIO.parse(telo_reads_file, 'fasta'):
-            total_reads += 1
-        
-        logger.info(f"    Checking connection with {total_reads} telomeric reads...")
-        
-        # Check each read
-        checked_reads = 0
-        for record in SeqIO.parse(telo_reads_file, 'fasta'):
-            checked_reads += 1
-            
-            # Create safe filename
-            safe_read_id = f"read_{checked_reads:09d}"
-            
-            # Create temporary file for this read
-            read_file = check_dir / f"temp_{safe_read_id}.fa"
-            with open(read_file, 'w') as f:
-                SeqIO.write(record, f, 'fasta')
-            
-            # Check connection
-            aln_dir = check_dir / 'alignments'
-            alignment = self.connection_checker.check_connection(
-                ref_file=extended_seq_file,
-                qry_file=read_file,
-                output_dir=aln_dir,
-                end_type=end_type,
-                alignment_prefix=f"round{round_num}_aln_{safe_read_id}"
-            )
-            
-            # Clean up temporary file
-            if read_file.exists():
-                read_file.unlink()
-            
-            if alignment is not None:
-                # Connection found!
-                logger.info(f"    ✓ Connection found with read {record.id} "
-                          f"(checked {checked_reads}/{total_reads}, "
-                          f"identity: {alignment['identity']:.2f}%)")
-                
-                # Update alignment with original read ID
-                alignment['qry_id'] = record.id
-                
-                # Create linked sequence
-                linker_file = check_dir / f'round{round_num}.linker.fa'
-                # Need to recreate read file for linking
-                with open(read_file, 'w') as f:
-                    SeqIO.write(record, f, 'fasta')
-                
-                created = self.connection_checker.create_linked_sequence(
-                    ref_file=extended_seq_file,
-                    qry_file=read_file,
-                    alignment=alignment,
-                    end_type=end_type,
-                    output_file=linker_file
-                )
-                
-                if not created or not linker_file.is_file():
-                    raise RuntimeError("Telomere overlap found but linked sequence creation failed")
+        self.cache_directory = Path(cache_directory) if cache_directory is not None else None
+        self.shared_directory = Path(shared_directory) if shared_directory is not None else None
+        self.targets = None
+        self.last_diagnostics = {}
 
-                # Clean up
-                if read_file.exists():
-                    read_file.unlink()
-                
-                # Return successful result
-                return {
-                    'success': True,
-                    'read_id': record.id,
-                    'alignment': alignment,
-                    'linker_file': linker_file,
-                    'checked_reads': checked_reads,
-                    'total_reads': total_reads
-                }
-            
-            # Log progress every 50 reads
-            if checked_reads % 50 == 0:
-                logger.info(f"    Progress: {checked_reads}/{total_reads} reads checked...")
-        
-        logger.info(f"    ✗ No connection found (checked {checked_reads}/{total_reads} reads)")
-        return None
-    
+    def close(self):
+        if self.targets is not None:
+            self.targets.close()
+            self.targets = None
+
+    def check_with_telo_reads(self, extended_seq_file, telo_reads_file, check_dir, end_type, round_num):
+        from TelomereTargets import TelomereTargets, publish_check
+        from ExtensionFamilies import read_json
+        check_dir = Path(check_dir)
+        cache = self.cache_directory or check_dir.parent / "telomere-alignments"
+        shared = self.shared_directory or check_dir.parent / ".telomere-target-cache"
+        if self.targets is None:
+            self.targets = TelomereTargets(telo_reads_file, shared, cache, edge=self.edge,
+                minimum_length=self.min_alignment_length, minimum_identity=self.min_identity)
+        if Path(telo_reads_file).resolve() != self.targets.index.pool:
+            raise ValueError("Telomere checker target pool changed; use a new checker")
+        result = publish_check(self.targets, extended_seq_file, end_type, check_dir, round_num)
+        self.last_diagnostics = read_json(check_dir / "connection-diagnostics.json")
+        logger.info("    Telomere targets: pool=%s, retrieved=%s, eligible=%s, decision=%s",
+                    self.last_diagnostics['pool_records'], self.last_diagnostics['retrieved_records'],
+                    self.last_diagnostics['eligible_records'], self.last_diagnostics['reason'])
+        return result
+
     def write_check_log(self, check_dir: Path, round_num: int, result: Optional[Dict],
                        extended_seq_file: Path, end_type: str):
         """
@@ -1400,6 +1274,9 @@ class TelomereExtensionChecker:
                 f.write(f"Status: FAILED - No connection found\n")
                 if result and 'checked_reads' in result:
                     f.write(f"Reads Checked: {result['checked_reads']}/{result['total_reads']}\n")
+        from TelomereTargets import check_log_lines
+        with log_file.open("a") as stream:
+            stream.write(check_log_lines(self.last_diagnostics))
 
 
 def prepare_base_object(chr_end: str, work_path: Path, out_dir: Path,
@@ -1748,44 +1625,34 @@ def extend_single_chr_end(chr_end: str, work_path: Path, out_dir: Path,
             result['error'] = error_msg
             return result
         
-        # Round0: if direct connection already links this target end to a
-        # telomeric read, use it immediately and skip GapFiller extension.
-        direct_check_log = work_path / 'direct.check' / 'direct.check.log'
-        if direct_check_log.exists():
+        end_type = chr_end.rsplit('.', 1)[-1]
+        if end_type not in ('L','R'):
+            raise ValueError(f"Invalid chromosome endpoint: {chr_end}")
+
+        # A completed direct check is identified by its receipt, never by
+        # mutable log text. Re-entry validates the current code, pool and seed.
+        direct_dir = work_path / 'direct.check'
+        marker = direct_dir / 'telomere-check.json'
+        if marker.is_file():
+            verifier = TelomereExtensionChecker(
+                edge=edge, cache_directory=work_path / "telomere-alignments",
+                shared_directory=work_path.parent / ".telomere-target-cache")
             try:
-                with open(direct_check_log, 'r') as f:
-                    content = f.read()
-                    if 'Status: SUCCESS' in content:
-                        direct_linker_file = work_path / 'direct.check' / 'direct.linker.fa'
-                        if direct_linker_file.exists():
-                            direct_read_id = None
-                            for line in content.splitlines():
-                                if line.startswith('Connected Read:'):
-                                    direct_read_id = line.split(':', 1)[1].strip()
-                                    break
+                connection = verifier.check_with_telo_reads(seed_file,telo_reads_file,direct_dir,end_type,0)
+            finally:
+                verifier.close()
+            if connection:
+                result.update({
+                    'success': True, 'skipped': True, 'skip_reason': 'direct_connection_found',
+                    'rounds': 0, 'total_extension_length': 0,
+                    'final_seq_file': connection['linker_file'],
+                    'connection_info': dict(connection,method='direct'),
+                    'stop_reason': 'direct_connection_found'
+                })
+                return result
+        elif (direct_dir / 'direct.check.log').exists():
+            raise ValueError("Legacy direct telomere result; use a new output directory")
 
-                            logger.info(f"  [{chr_end}] Direct connection found in Round0; skipping extension.")
-                            result.update({
-                                'success': True,
-                                'skipped': True,
-                                'skip_reason': 'direct_connection_found',
-                                'rounds': 0,
-                                'total_extension_length': 0,
-                                'final_seq_file': str(direct_linker_file),
-                                'connection_info': {
-                                    'method': 'direct',
-                                    'read_id': direct_read_id,
-                                    'linker_file': str(direct_linker_file),
-                                    'note': 'Round0 direct connection found; extension skipped'
-                                },
-                                'stop_reason': 'direct_connection_found'
-                            })
-                            return result
-
-                        logger.warning(f"  [{chr_end}] Direct check succeeded but linker file is missing: {direct_linker_file}")
-            except Exception as e:
-                logger.warning(f"  [{chr_end}] Error reading direct check log: {e}")
-        
         # Run extension
         try:
             extender = TelomereExtender(

@@ -1,0 +1,1211 @@
+{
+  "schema": "degap-telomere-target-search-validation-v1",
+  "date": "2026-11-22",
+  "branch": "feat/bidirectional-gap-extension",
+  "scope": "Shared static tel-read target search, one chromosome-side extension family; not global tel-read clustering or reverse target assembly",
+  "source": {
+    "matrix": {
+      "parent_commit": "4db11bbc7030ba214855bf633351f2c9a2474a76",
+      "files": 57,
+      "runtime_manifest_sha256": "56d584910f82c16b8e7a56daa8330bbb32973a2d909f4879e6b36d13ffa53b34",
+      "archive_sha256": "f5e8fef9dc36136dffe3819065066b1cd9f16ef0c1e626ea44dffdb59ccb4445",
+      "scope": "Final sequential-postings index build; same sampled-anchor retrieval and connection policy; legacy fixtures updated to distinct-read corroboration"
+    },
+    "delivery": {
+      "parent_commit": "4db11bbc7030ba214855bf633351f2c9a2474a76",
+      "files": 57,
+      "runtime_manifest_sha256": "80520ad5279be050a4756c4a8d8f02281f6cde457799456434f20a758b53c6a3",
+      "archive_sha256": "82495ced46e88839eee772f0ce935a17b82adcd7d6d65615414527aa0b484968",
+      "changed_since_scientific_matrix": [
+        "bin/TelSeekerVisualizer.py",
+        "tests/test_telomere_report.py"
+      ],
+      "scientific_runtime_byte_identical_to_matrix": true,
+      "scope": "Final AGY report-only hidden-cache task exclusion; existing science unchanged"
+    },
+    "files_sha256": {
+      "bin/AutoGapfiller.py": "8bf1f260c220ccffd39b375a8e58e55c1f42d479a16aff91aacb50c38a3748e9",
+      "bin/AutoGapfillerPart1.py": "891d4d72a72c3664dc16529bc42033f89f47f5cade437a0fab5115948c6d3152",
+      "bin/AutoGapfillerPart2.py": "4d888aaee3d013de21df7c4d52d4009c019217bf971ba2cb866c3ef07af8e53e",
+      "bin/AutoGapfillerPart3.py": "de5deb5d816b5a32054a453cc3b81a157ea0352f4e6e1fb0dd6c9b93865d9b6c",
+      "bin/AutoGapfillerPart4.py": "5cf9c3f72d80cf7e38b6faa2a4a83dccb73a5d80ed0fade759f1d096d75554d8",
+      "bin/AutoGapfillerVisualizer.py": "1554a44d6253e3254e07980450cdbc39beacb9be6e5b6b11894c25b3b266869a",
+      "bin/CtgLinker.py": "4fc1146d7116c5f324aece8c0230a1dcffb4370bb7e781d8a5ded9bfcf451fa6",
+      "bin/CtgLinkerCheck.py": "d23d03b917a34c8239e233ceffe6edcfb63329df334306b59208acd9397eccfa",
+      "bin/CtgLinkerVisualizer.py": "b2acee0739bbf830f3384f854824f62f9e3164f3d7ffad2ce3baba4291812477",
+      "bin/DEGAP.py": "0fbaf85f622dcf319d8d4266a1f267f7e28d118331480050650bf8c304cacaaa",
+      "bin/ExtensionFamilies.py": "06e27ddfbadd93895ec9936f7d99bfcf44c0e9444115dd1aa5fa1f5a6afda7b6",
+      "bin/FamilyCtgLinker.py": "7380d45234624b41ce0fb4bdda215a02e453d3c2a5e1388ec714e1b695502321",
+      "bin/FamilyGap.py": "5111f1d771d64be6bb8a24cff1b33152728a5f2b9e555a242d76fea5a442e6cb",
+      "bin/FamilyOverlap.py": "0647b13e72cde0ec0891b0f1bdcdb11f121754c81b92963751b40c02008251fd",
+      "bin/FamilyResult.py": "2550435baefda5f9fe1368f48fd3b6e235e72d9969ffffc018a3374cae03842f",
+      "bin/FamilyRound.py": "1f153672886fbb5565dbf9905a8c7e2d7e5054c0e2dce6b44d005fb865289ad9",
+      "bin/FamilyTelomere.py": "72e63bc6784ced997c31ca641357a0b2e41799ccc2c27b26619389a79dffabdb",
+      "bin/FamilyTools.py": "a7074549f28dcbc1222c4d92f8e66731361143c6a5f0bda20d7ef39590fa18ff",
+      "bin/FindExtensionContigs.py": "bb35069e3ee1e924306ce6f0d4b05873760ad5a8278d2d9d218abb4935b7823a",
+      "bin/FindExtensionReads.py": "87983a9607cdb13307f17528f5a3fd78701bd6c089f827451d30a09886639490",
+      "bin/GapFiller.py": "75b108bda7df682bee74af6bc539c275fbdab62c7f381f0d361d37f04af7229b",
+      "bin/GapFillerClass.py": "24a0dc3b6c9ad966b744ada31f14346ab3d1e2b948544bad89995af21587bbf6",
+      "bin/GapfillerVisualizer.py": "bcdc1912da6576825df9ae6d7193554536be58077deee3041644afb78aea5033",
+      "bin/JunctionRepair.py": "2d970b8c5c5920194e7c502554c7c3984257a1492cfcbdebb88edd19fd4d4e26",
+      "bin/JunctionReport.py": "6731e4006f1423ee245d6989f497bfe81d34467245067fb684b54eff1b520145",
+      "bin/N50Check.py": "5dae8de90340a47c9268e442d59e0493d803c302b3f0edf2174b7dd11f8c3207",
+      "bin/ONTAssemblyReads.py": "87b020c81b50cef80adf8b81c21e49773dd9099ca39f5be6bb86b9aa700cfb84",
+      "bin/ReportStyle.py": "bcf3d9159a84858ff07377f8f4183d9373dd5787790b5fda39a411e0c8cf7523",
+      "bin/TelSeeker.py": "2ba16a44d9bc94bef24167305e15626b12f35d84bf4ad994ef2269364e69ac3a",
+      "bin/TelSeekerCheck.py": "11bcc2fcfde6c983426e218e224326a1918982ad588ed5d11973fddf816e2f99",
+      "bin/TelSeekerCtg.py": "935ecd0c9a869152740f0ee55e66929ac741937e65d352f16bed77d688e49379",
+      "bin/TelSeekerMotifPlot.py": "7a48eea96bc850f218a400f3ba262a71ac8d9b11a4e0da720495b8978d4a27a5",
+      "bin/TelSeekerPart1.py": "cf10c4872915bcd79071c4b43d6d44406b82a07e8eade4c24ca3f3ca9b2b133b",
+      "bin/TelSeekerPart2.py": "50affacb46cc12c4c9139d02efc56b88c3ce106c1e4436e1d333f481a76f5a02",
+      "bin/TelSeekerTargets.py": "953c048ebc81f0de39744f20c4a0b067cb3bf6ceebd1131a3aff232b6dd54d21",
+      "bin/TelSeekerVisualizer.py": "561be0841dc73e77456d3ad6151c7c7c8a8fe1aa9077370a9fbf490d11a7485b",
+      "bin/TelomereReport.py": "59512eef8477bc2831c88a59c8eae836d49fbc5e194ba88ad6ba3b8bc61caef6",
+      "bin/TelomereTargets.py": "5d178b7ab9c64dbec194c854af9527c306d1068811549db04805fa6190a1ce46",
+      "bin/selectRawReads.py": "22a174b574d44772c20269798c6bdfc3641de13db482ffa81f371a8d3e0e59b4",
+      "tests/test_autogap_report_coordinates.py": "80cdab1327294a8cfdfe75362bd737908e74000998e0ae512f1789b5b48ad5b7",
+      "tests/test_extension_families.py": "1be19f7fc05cb8bb9cfc3b3bf5cc8c23265fc9f905752d0d27e55430fbe903d7",
+      "tests/test_family_cli.py": "a6562526a98369ca65be832310ab7fbd33bb9c05aa7afb280a3061af04c385f2",
+      "tests/test_family_ctglinker.py": "4f66ac7a58da346ea8480352ae8174a484dfc573e25b434611d372f436a47089",
+      "tests/test_family_overlap.py": "5edaf9d5efb9df30b5494dc597bab242047ca6cbe7626fa8bad147c8e46c5027",
+      "tests/test_family_results.py": "755c9c47ae9407ea4665726dd50ad999f52ef7d758f535f2764b4c8d7bcaf388",
+      "tests/test_family_round.py": "3b361bd7026158b4dde1f0d0ac86c9249280b602d72c17928f42721ec93ea126",
+      "tests/test_family_telomere.py": "85c352fa38f9fab1d7c6bdf7f22a46d2b6c292c8cce612ce4fbf837c1ddb51ca",
+      "tests/test_junction_repair.py": "47fbf65d4e2a4a398b7f8cf26899da3875c7a3b7edf893e9b7ac739c837a946d",
+      "tests/test_junction_report.py": "da70d0d154cba679845f962ea125f6656cae11bdc9e502a650d498d4121f0621",
+      "tests/test_ont_assembly_reads.py": "80c61b3d53badc6ef2acc1ba438880c175a92cce17d17129871792712d74bfec",
+      "tests/test_report_presentation.py": "3cd486e6b4ffa3a7111721fcdba9f331589e1d5139f734ab8a33b512359a4762",
+      "tests/test_telomere_report.py": "0dd147bdf8cbf4d185ac418ea4f506c7e8166c386da0cf305a8811c5ccffaac4",
+      "tests/test_telomere_targets.py": "2cf7e6cb6af2d2b373fc67d83cae06c8172ebb00807dcf40251cf50328c17b3a",
+      "tests/test_telseeker_check.py": "14b32c9c023fb0f2eb3489c3a06db68e62e9ca7030630ee72c513e425ad836b6",
+      "tests/test_telseeker_contracts.py": "8b895093807890ac4204f21981a6477132d29c34a39b2fbc79dc0c22ef96be9d",
+      "tests/test_telseeker_part1_terminal_ratio.py": "568a2388fe93217ea0bb3ad9d6c5d35e2da8895632bac7268fa9b585f6385ca5",
+      "tests/test_telseeker_targets.py": "8aa140dd781d371357487f9c36b46518d88e59b19d7016487f5f7be38df05cdb"
+    }
+  },
+  "automated_tests": {
+    "local_delivery": {
+      "run": 256,
+      "skipped": 0,
+      "seconds": 327.21,
+      "status": "passed"
+    },
+    "remote_delivery": {
+      "run": 256,
+      "skipped": 5,
+      "seconds": 152.069,
+      "status": "passed"
+    },
+    "remote_matrix": {
+      "run": 256,
+      "skipped": 5,
+      "seconds": 176.024,
+      "status": "passed"
+    },
+    "local_matrix": {
+      "run": 256,
+      "skipped": 13,
+      "seconds": 27.81,
+      "status": "passed"
+    },
+    "node_fixtures": {
+      "run": 6,
+      "skipped": 0,
+      "seconds": 0.168,
+      "status": "passed"
+    }
+  },
+  "tools": {
+    "remote": {
+      "python": "3.11.14",
+      "hifiasm": "0.25.0",
+      "minimap2": "2.28",
+      "samtools": "1.21",
+      "mummer": "4.0.0rc1",
+      "seqkit": "2.8.2"
+    },
+    "node": "24.20.0",
+    "local_delivery": {
+      "python": "Python 3.11.14",
+      "hifiasm": "0.25.0-r726",
+      "minimap2": "2.31-r1302",
+      "nucmer": "4.0.1",
+      "node": "v24.20.0"
+    }
+  },
+  "jobs": {
+    "matrix_unified": "43012024",
+    "scale": "43012025",
+    "hifi": "43012026",
+    "ont_small": "43012027",
+    "synthetic_public_cli": "43012028",
+    "ont_larger": "43012050",
+    "main_evidence_archive": "43012085",
+    "delivery_unified_and_reports": "43012102"
+  },
+  "historical_diagnostics": [
+    {
+      "job": "43011993",
+      "status": "failed",
+      "reason": "2-CPU ARM memory allowance was insufficient; rerun with 4 CPUs"
+    },
+    {
+      "job": "43012003",
+      "status": "failed",
+      "reason": "Old single-read positive CLI fixture incompatible with two-distinct-ID rule; corrected fixture without weakening policy"
+    },
+    {
+      "job": "43011995",
+      "status": "intentionally_terminated",
+      "reason": "Confirmed random-write shared-filesystem index bottleneck; incomplete builder not accepted or reused"
+    },
+    {
+      "job": "43011996",
+      "status": "succeeded",
+      "reason": "Completed original ONT controls preserved and concordant with final bulk-index build"
+    }
+  ],
+  "results": {
+    "hifi": {
+      "boundary0": 1108571,
+      "browser_used": false,
+      "endpoint_results": [
+        {
+          "comparator_alignments": [
+            {
+              "identity_percent": 99.99401752864108,
+              "mapq": 60,
+              "query_end0": 33429,
+              "query_length": 33429,
+              "query_start0": 0,
+              "strand": "+",
+              "target": "ptg000001l",
+              "target_end0": 1138571,
+              "target_start0": 1105140
+            }
+          ],
+          "connected": true,
+          "current_chromosome_retained": true,
+          "diagnostics": {
+            "alignment_batches": 15,
+            "alignment_blocks": 173,
+            "candidate_cap": null,
+            "chromosome_sequence_retained": true,
+            "distinct_read_ids": 3000,
+            "eligible_records": 10,
+            "end_type": "L",
+            "global_grouping": false,
+            "index_identity": "83c89854afa219311b7d5a1267ae34b09e2de119e9eced338abf6a6828c57681",
+            "indexed_records": 6000,
+            "junction_bases_tested": 200,
+            "policy": {
+              "anchor_grid": 50,
+              "anchor_seeds": 3,
+              "anchor_span": 500,
+              "batch_bases": 8388608,
+              "batch_records": 256,
+              "k": 21,
+              "min_support": 2,
+              "projection_limit": 1000,
+              "ranking": "identity-overlap-overhang-readid-sequence-v1",
+              "stride": 20,
+              "support_bases": 200,
+              "support_identity": 80.0,
+              "version": "telomere-targets-v1"
+            },
+            "pool_records": 6000,
+            "pool_sha256": "58fef7fb84e90a0d68d7c84c45de76384c7707a340a9179ea7b9164cd93242db",
+            "query_anchor_keys": 29306,
+            "query_bases": 30000,
+            "reason": "connected",
+            "refined_records": 3718,
+            "rejection_counts": {
+              "ambiguous_boundary_projection": 3,
+              "inverted_alignment": 58,
+              "nonterminal_alignment": 55,
+              "short_alignment": 47
+            },
+            "retrieved_records": 3718,
+            "schema": "telomere-target-search-v1",
+            "selected_tail_bases": 3429,
+            "selection_scope": "all_index_retrieved_records_with_qualifying_anchor_and_read_support",
+            "strategy": "shared-exact-seed-index-batched-mummer",
+            "support_candidate_read_id": "m64011_190830_220126/102433184/ccs",
+            "support_checks": 1,
+            "support_count_lower_bound": 2,
+            "support_covers": "common_nonrepeat_anchor_and_junction_proximal_sequence_not_full_telomere_length",
+            "supporting_read_ids": [
+              "m64011_190830_220126/102433184/ccs",
+              "m64012_190921_234837/78054918/ccs"
+            ],
+            "target_extension": false,
+            "winner_read_id": "m64011_190830_220126/102433184/ccs"
+          },
+          "end": "control.L",
+          "linked_length": 33429
+        },
+        {
+          "comparator_alignments": [
+            {
+              "identity_percent": 100.0,
+              "mapq": 60,
+              "query_end0": 34850,
+              "query_length": 34850,
+              "query_start0": 0,
+              "strand": "+",
+              "target": "ptg000001l",
+              "target_end0": 1113421,
+              "target_start0": 1078571
+            }
+          ],
+          "connected": true,
+          "current_chromosome_retained": true,
+          "diagnostics": {
+            "alignment_batches": 18,
+            "alignment_blocks": 194,
+            "candidate_cap": null,
+            "chromosome_sequence_retained": true,
+            "distinct_read_ids": 3000,
+            "eligible_records": 11,
+            "end_type": "R",
+            "global_grouping": false,
+            "index_identity": "83c89854afa219311b7d5a1267ae34b09e2de119e9eced338abf6a6828c57681",
+            "indexed_records": 6000,
+            "junction_bases_tested": 200,
+            "policy": {
+              "anchor_grid": 50,
+              "anchor_seeds": 3,
+              "anchor_span": 500,
+              "batch_bases": 8388608,
+              "batch_records": 256,
+              "k": 21,
+              "min_support": 2,
+              "projection_limit": 1000,
+              "ranking": "identity-overlap-overhang-readid-sequence-v1",
+              "stride": 20,
+              "support_bases": 200,
+              "support_identity": 80.0,
+              "version": "telomere-targets-v1"
+            },
+            "pool_records": 6000,
+            "pool_sha256": "58fef7fb84e90a0d68d7c84c45de76384c7707a340a9179ea7b9164cd93242db",
+            "query_anchor_keys": 29171,
+            "query_bases": 30000,
+            "reason": "connected",
+            "refined_records": 4558,
+            "rejection_counts": {
+              "ambiguous_boundary_projection": 1,
+              "inverted_alignment": 97,
+              "nonterminal_alignment": 46,
+              "short_alignment": 39
+            },
+            "retrieved_records": 4558,
+            "schema": "telomere-target-search-v1",
+            "selected_tail_bases": 4850,
+            "selection_scope": "all_index_retrieved_records_with_qualifying_anchor_and_read_support",
+            "strategy": "shared-exact-seed-index-batched-mummer",
+            "support_candidate_read_id": "m64012_190920_173625/145032576/ccs",
+            "support_checks": 1,
+            "support_count_lower_bound": 2,
+            "support_covers": "common_nonrepeat_anchor_and_junction_proximal_sequence_not_full_telomere_length",
+            "supporting_read_ids": [
+              "m64012_190920_173625/145032576/ccs",
+              "m64012_190921_234837/109970336/ccs"
+            ],
+            "target_extension": false,
+            "winner_read_id": "m64012_190920_173625/145032576/ccs"
+          },
+          "end": "control.R",
+          "linked_length": 34850
+        }
+      ],
+      "html_files": 2,
+      "index_and_alignments_unchanged_on_replay": true,
+      "index_files": {
+        "bases": 89385086,
+        "build_cache_mib": 64,
+        "builder": "sequential-postings-then-covering-index",
+        "distinct_read_ids": 3000,
+        "duplicate_records": 0,
+        "files": {
+          "targets.fa": "13e23cbf19b725e4661b1e6bb2226e40a41df8a2ca9fad2eda17e9f027d3449a",
+          "targets.sqlite": "251f3b7785e9b42d1bf9543764f2fd2f3383a4631f2c3328de9b2ed794b2289f"
+        },
+        "identity": "83c89854afa219311b7d5a1267ae34b09e2de119e9eced338abf6a6828c57681",
+        "indexed_records": 6000,
+        "payload_sha256": "78d292219b00859e10846c4201ada677ca4150bdee7f5c168a329a1c8209ae47",
+        "postings": 4393526,
+        "raw_records": 6000,
+        "schema": "telomere-target-index-v2",
+        "source_sha256": "58fef7fb84e90a0d68d7c84c45de76384c7707a340a9179ea7b9164cd93242db"
+      },
+      "input_selection": "first 3000 raw records, or all if fewer; each stored forward and reverse-complement under the SAME ID",
+      "local_links_verified": 10,
+      "phase_a_concordance": null,
+      "pool_index_count": 1,
+      "pool_records": 6000,
+      "pool_sha256": "58fef7fb84e90a0d68d7c84c45de76384c7707a340a9179ea7b9164cd93242db",
+      "prepared_pool_reused_from": "/share/home/xbzhang26/cgat-reads-debug/degap-tel-targets-20261122/inputs/hifi/targets.fa",
+      "raw_bases_selected": 44692543,
+      "raw_records_selected": 3000,
+      "reference": "/share/home/xbzhang26/cgat-reads-debug/degap-newdata-20261122/inputs/hifi-baseline/baseline.fa",
+      "reference_contig": "ptg000001l",
+      "reference_length": 2217142,
+      "reference_sha256": "b7e3e0904f7566e0c790702c754c5c45498ccc67bcb34a5be4ce0ece77268a63",
+      "scope": "genuine reads at fixed internal comparator coordinates; target-search/integration controls, NOT natural telomeric-read discovery or telomere-completion benchmarking",
+      "source_reads": "/share/home/xbzhang26/cgat-reads-debug/degap-newdata-20261122/raw/hifi-chr11-2M.fa.gz",
+      "source_reads_sha256": "c1ff1393a9abd2f245119e081e5c8f20d8141a0f38b70f070f0eacf470f6e0f2",
+      "status": "passed",
+      "timing_seconds": {
+        "cached_replay": 0.8408104898408055,
+        "first_search_with_index_build": 140.15357041638345,
+        "prepare": 1.7494192812591791
+      }
+    },
+    "ont": {
+      "boundary0": 2657560,
+      "browser_used": false,
+      "endpoint_results": [
+        {
+          "connected": false,
+          "diagnostics": {
+            "alignment_batches": 1,
+            "alignment_blocks": 39,
+            "candidate_cap": null,
+            "chromosome_sequence_retained": true,
+            "distinct_read_ids": 5000,
+            "eligible_records": 1,
+            "end_type": "L",
+            "global_grouping": false,
+            "index_identity": "0640bda87d1aad2466156f2817fbe1116533bfe6c975aa161c16da5a8349871f",
+            "indexed_records": 10000,
+            "junction_bases_tested": 0,
+            "policy": {
+              "anchor_grid": 50,
+              "anchor_seeds": 3,
+              "anchor_span": 500,
+              "batch_bases": 8388608,
+              "batch_records": 256,
+              "k": 21,
+              "min_support": 2,
+              "projection_limit": 1000,
+              "ranking": "identity-overlap-overhang-readid-sequence-v1",
+              "stride": 20,
+              "support_bases": 200,
+              "support_identity": 80.0,
+              "version": "telomere-targets-v1"
+            },
+            "pool_records": 10000,
+            "pool_sha256": "dbbfed8dc0407b3ac78a0d3bee1eef81ab311a4c5dbf3d0e5ee940c4dcb9e4d7",
+            "query_anchor_keys": 29768,
+            "query_bases": 30000,
+            "reason": "insufficient_read_support",
+            "refined_records": 39,
+            "rejection_counts": {
+              "inverted_alignment": 14,
+              "nonterminal_alignment": 1,
+              "short_alignment": 23
+            },
+            "retrieved_records": 39,
+            "schema": "telomere-target-search-v1",
+            "selected_tail_bases": 0,
+            "selection_scope": "all_index_retrieved_records_with_qualifying_anchor_and_read_support",
+            "strategy": "shared-exact-seed-index-batched-mummer",
+            "support_candidate_read_id": "ERR12342517.875",
+            "support_checks": 1,
+            "support_count_lower_bound": 1,
+            "support_covers": "common_nonrepeat_anchor_and_junction_proximal_sequence_not_full_telomere_length",
+            "supporting_read_ids": [
+              "ERR12342517.875"
+            ],
+            "target_extension": false,
+            "winner_read_id": null
+          },
+          "end": "control.L"
+        },
+        {
+          "connected": false,
+          "diagnostics": {
+            "alignment_batches": 1,
+            "alignment_blocks": 28,
+            "candidate_cap": null,
+            "chromosome_sequence_retained": true,
+            "distinct_read_ids": 5000,
+            "eligible_records": 1,
+            "end_type": "R",
+            "global_grouping": false,
+            "index_identity": "0640bda87d1aad2466156f2817fbe1116533bfe6c975aa161c16da5a8349871f",
+            "indexed_records": 10000,
+            "junction_bases_tested": 0,
+            "policy": {
+              "anchor_grid": 50,
+              "anchor_seeds": 3,
+              "anchor_span": 500,
+              "batch_bases": 8388608,
+              "batch_records": 256,
+              "k": 21,
+              "min_support": 2,
+              "projection_limit": 1000,
+              "ranking": "identity-overlap-overhang-readid-sequence-v1",
+              "stride": 20,
+              "support_bases": 200,
+              "support_identity": 80.0,
+              "version": "telomere-targets-v1"
+            },
+            "pool_records": 10000,
+            "pool_sha256": "dbbfed8dc0407b3ac78a0d3bee1eef81ab311a4c5dbf3d0e5ee940c4dcb9e4d7",
+            "query_anchor_keys": 29948,
+            "query_bases": 30000,
+            "reason": "insufficient_read_support",
+            "refined_records": 41,
+            "rejection_counts": {
+              "ambiguous_boundary_projection": 1,
+              "inverted_alignment": 1,
+              "nonterminal_alignment": 4,
+              "short_alignment": 21
+            },
+            "retrieved_records": 41,
+            "schema": "telomere-target-search-v1",
+            "selected_tail_bases": 0,
+            "selection_scope": "all_index_retrieved_records_with_qualifying_anchor_and_read_support",
+            "strategy": "shared-exact-seed-index-batched-mummer",
+            "support_candidate_read_id": "ERR12342517.1398",
+            "support_checks": 1,
+            "support_count_lower_bound": 1,
+            "support_covers": "common_nonrepeat_anchor_and_junction_proximal_sequence_not_full_telomere_length",
+            "supporting_read_ids": [
+              "ERR12342517.1398"
+            ],
+            "target_extension": false,
+            "winner_read_id": null
+          },
+          "end": "control.R"
+        }
+      ],
+      "html_files": 2,
+      "index_and_alignments_unchanged_on_replay": true,
+      "index_files": {
+        "bases": 61520110,
+        "build_cache_mib": 64,
+        "builder": "sequential-postings-then-covering-index",
+        "distinct_read_ids": 5000,
+        "duplicate_records": 0,
+        "files": {
+          "targets.fa": "d181ecfc5cfa9da01114c75deca45c7249e8444a63980c87cc2082b171c8c57b",
+          "targets.sqlite": "89021bd14a4821deeecd9487e0f2c3af25ef28c1f35cde3a31a5412665456ddf"
+        },
+        "identity": "0640bda87d1aad2466156f2817fbe1116533bfe6c975aa161c16da5a8349871f",
+        "indexed_records": 10000,
+        "payload_sha256": "910d9ef05bb4f892c5edc8e5efec8393bfb324c00e49e28ddef389baad7e876b",
+        "postings": 3060961,
+        "raw_records": 10000,
+        "schema": "telomere-target-index-v2",
+        "source_sha256": "dbbfed8dc0407b3ac78a0d3bee1eef81ab311a4c5dbf3d0e5ee940c4dcb9e4d7"
+      },
+      "input_selection": "first 5000 raw records, or all if fewer; each stored forward and reverse-complement under the SAME ID",
+      "local_links_verified": 8,
+      "phase_a_concordance": [
+        {
+          "candidate_and_selection_unchanged": true,
+          "end": "control.L"
+        },
+        {
+          "candidate_and_selection_unchanged": true,
+          "end": "control.R"
+        }
+      ],
+      "pool_index_count": 1,
+      "pool_records": 10000,
+      "pool_sha256": "dbbfed8dc0407b3ac78a0d3bee1eef81ab311a4c5dbf3d0e5ee940c4dcb9e4d7",
+      "prepared_pool_reused_from": "/share/home/xbzhang26/cgat-reads-debug/degap-tel-targets-20261122/inputs/ont/targets.fa",
+      "raw_bases_selected": 30760055,
+      "raw_records_selected": 5000,
+      "reference": "/share/home/xbzhang26/cgat-reads-debug/degap-expanded-20261122/inputs/klebs-reference.fa",
+      "reference_contig": "ENA|CP000647|CP000647.1",
+      "reference_length": 5315120,
+      "reference_sha256": "46e3434aeb1c561b086c12e18bb264be8a4cb437567fd01e8fbec75339d054de",
+      "scope": "genuine reads at fixed internal comparator coordinates; target-search/integration controls, NOT natural telomeric-read discovery or telomere-completion benchmarking",
+      "source_reads": "/share/home/xbzhang26/cgat-reads-debug/degap-expanded-20261122/raw/ERR12342517.fastq.gz",
+      "source_reads_sha256": "d4773c25a66799cc57a3334af17366128b0d9b714912dbbf99978f8c08612c19",
+      "status": "passed",
+      "timing_seconds": {
+        "cached_replay": 0.2948547899723053,
+        "first_search_with_index_build": 53.11504987627268,
+        "prepare": 2.7342160791158676
+      }
+    },
+    "ont-depth20k": {
+      "boundary0": 2657560,
+      "browser_used": false,
+      "endpoint_results": [
+        {
+          "comparator_alignments": [
+            {
+              "identity_percent": 99.84090711868329,
+              "mapq": 60,
+              "query_end0": 34690,
+              "query_length": 34690,
+              "query_start0": 133,
+              "strand": "+",
+              "target": "ENA|CP000647|CP000647.1",
+              "target_end0": 2687560,
+              "target_start0": 2653010
+            }
+          ],
+          "connected": true,
+          "current_chromosome_retained": true,
+          "diagnostics": {
+            "alignment_batches": 1,
+            "alignment_blocks": 127,
+            "candidate_cap": null,
+            "chromosome_sequence_retained": true,
+            "distinct_read_ids": 20000,
+            "eligible_records": 3,
+            "end_type": "L",
+            "global_grouping": false,
+            "index_identity": "4b69f0fba828e6a93119abaaeab937cb22b6bec6b5278eb74723d03683ec93e6",
+            "indexed_records": 40000,
+            "junction_bases_tested": 200,
+            "policy": {
+              "anchor_grid": 50,
+              "anchor_seeds": 3,
+              "anchor_span": 500,
+              "batch_bases": 8388608,
+              "batch_records": 256,
+              "k": 21,
+              "min_support": 2,
+              "projection_limit": 1000,
+              "ranking": "identity-overlap-overhang-readid-sequence-v1",
+              "stride": 20,
+              "support_bases": 200,
+              "support_identity": 80.0,
+              "version": "telomere-targets-v1"
+            },
+            "pool_records": 40000,
+            "pool_sha256": "edcdd04536a3164c36f1fde2c449fa6352e573149514040396ab43b6d5cca1a3",
+            "query_anchor_keys": 29768,
+            "query_bases": 30000,
+            "reason": "connected",
+            "refined_records": 129,
+            "rejection_counts": {
+              "ambiguous_boundary_projection": 1,
+              "inverted_alignment": 39,
+              "nonterminal_alignment": 13,
+              "short_alignment": 71
+            },
+            "retrieved_records": 129,
+            "schema": "telomere-target-search-v1",
+            "selected_tail_bases": 4690,
+            "selection_scope": "all_index_retrieved_records_with_qualifying_anchor_and_read_support",
+            "strategy": "shared-exact-seed-index-batched-mummer",
+            "support_candidate_read_id": "ERR12342517.875",
+            "support_checks": 1,
+            "support_count_lower_bound": 2,
+            "support_covers": "common_nonrepeat_anchor_and_junction_proximal_sequence_not_full_telomere_length",
+            "supporting_read_ids": [
+              "ERR12342517.8329",
+              "ERR12342517.875"
+            ],
+            "target_extension": false,
+            "winner_read_id": "ERR12342517.875"
+          },
+          "end": "control.L",
+          "linked_length": 34690
+        },
+        {
+          "connected": false,
+          "diagnostics": {
+            "alignment_batches": 1,
+            "alignment_blocks": 123,
+            "candidate_cap": null,
+            "chromosome_sequence_retained": true,
+            "distinct_read_ids": 20000,
+            "eligible_records": 1,
+            "end_type": "R",
+            "global_grouping": false,
+            "index_identity": "4b69f0fba828e6a93119abaaeab937cb22b6bec6b5278eb74723d03683ec93e6",
+            "indexed_records": 40000,
+            "junction_bases_tested": 0,
+            "policy": {
+              "anchor_grid": 50,
+              "anchor_seeds": 3,
+              "anchor_span": 500,
+              "batch_bases": 8388608,
+              "batch_records": 256,
+              "k": 21,
+              "min_support": 2,
+              "projection_limit": 1000,
+              "ranking": "identity-overlap-overhang-readid-sequence-v1",
+              "stride": 20,
+              "support_bases": 200,
+              "support_identity": 80.0,
+              "version": "telomere-targets-v1"
+            },
+            "pool_records": 40000,
+            "pool_sha256": "edcdd04536a3164c36f1fde2c449fa6352e573149514040396ab43b6d5cca1a3",
+            "query_anchor_keys": 29948,
+            "query_bases": 30000,
+            "reason": "insufficient_read_support",
+            "refined_records": 171,
+            "rejection_counts": {
+              "ambiguous_boundary_projection": 2,
+              "inverted_alignment": 11,
+              "nonterminal_alignment": 12,
+              "short_alignment": 97
+            },
+            "retrieved_records": 171,
+            "schema": "telomere-target-search-v1",
+            "selected_tail_bases": 0,
+            "selection_scope": "all_index_retrieved_records_with_qualifying_anchor_and_read_support",
+            "strategy": "shared-exact-seed-index-batched-mummer",
+            "support_candidate_read_id": "ERR12342517.1398",
+            "support_checks": 1,
+            "support_count_lower_bound": 1,
+            "support_covers": "common_nonrepeat_anchor_and_junction_proximal_sequence_not_full_telomere_length",
+            "supporting_read_ids": [
+              "ERR12342517.1398"
+            ],
+            "target_extension": false,
+            "winner_read_id": null
+          },
+          "end": "control.R"
+        }
+      ],
+      "html_files": 2,
+      "index_and_alignments_unchanged_on_replay": true,
+      "index_files": {
+        "bases": 229274442,
+        "build_cache_mib": 64,
+        "builder": "sequential-postings-then-covering-index",
+        "distinct_read_ids": 20000,
+        "duplicate_records": 0,
+        "files": {
+          "targets.fa": "f7e031a29c230299c850cc27535306173b99f03d384e10826ea2cf14eafd742e",
+          "targets.sqlite": "36621c305c5f645fbd0066b0bc68195eb028e3146d42dff4d11e9f88aafd7a84"
+        },
+        "identity": "4b69f0fba828e6a93119abaaeab937cb22b6bec6b5278eb74723d03683ec93e6",
+        "indexed_records": 40000,
+        "payload_sha256": "b7569c136e85ef0bb38a562025fb1dde743c8ac0fcad4283c3f60432d80d4a59",
+        "postings": 11407491,
+        "raw_records": 40000,
+        "schema": "telomere-target-index-v2",
+        "source_sha256": "edcdd04536a3164c36f1fde2c449fa6352e573149514040396ab43b6d5cca1a3"
+      },
+      "input_selection": "first 20000 raw records, or all if fewer; each stored forward and reverse-complement under the SAME ID",
+      "local_links_verified": 9,
+      "phase_a_concordance": null,
+      "pool_index_count": 1,
+      "pool_records": 40000,
+      "pool_sha256": "edcdd04536a3164c36f1fde2c449fa6352e573149514040396ab43b6d5cca1a3",
+      "prepared_pool_reused_from": null,
+      "raw_bases_selected": 114637221,
+      "raw_records_selected": 20000,
+      "reference": "/share/home/xbzhang26/cgat-reads-debug/degap-expanded-20261122/inputs/klebs-reference.fa",
+      "reference_contig": "ENA|CP000647|CP000647.1",
+      "reference_length": 5315120,
+      "reference_sha256": "46e3434aeb1c561b086c12e18bb264be8a4cb437567fd01e8fbec75339d054de",
+      "scope": "genuine reads at fixed internal comparator coordinates; target-search/integration controls, NOT natural telomeric-read discovery or telomere-completion benchmarking",
+      "source_reads": "/share/home/xbzhang26/cgat-reads-debug/degap-expanded-20261122/raw/ERR12342517.fastq.gz",
+      "source_reads_sha256": "d4773c25a66799cc57a3334af17366128b0d9b714912dbbf99978f8c08612c19",
+      "status": "passed",
+      "timing_seconds": {
+        "cached_replay": 0.04822617024183273,
+        "first_search_with_index_build": 161.95927952229977,
+        "prepare": 5.47836634516716
+      }
+    },
+    "scale": {
+      "decision": {
+        "alignment_batches": 1,
+        "alignment_blocks": 2,
+        "candidate_cap": null,
+        "chromosome_sequence_retained": true,
+        "distinct_read_ids": 20002,
+        "eligible_records": 2,
+        "end_type": "R",
+        "global_grouping": false,
+        "index_identity": "205ad55afe76a8bbb64851f2236a9dc28957f89e0a8a168724d8615098bfe242",
+        "indexed_records": 20002,
+        "junction_bases_tested": 200,
+        "policy": {
+          "anchor_grid": 50,
+          "anchor_seeds": 3,
+          "anchor_span": 500,
+          "batch_bases": 8388608,
+          "batch_records": 256,
+          "k": 21,
+          "min_support": 2,
+          "projection_limit": 1000,
+          "ranking": "identity-overlap-overhang-readid-sequence-v1",
+          "stride": 20,
+          "support_bases": 200,
+          "support_identity": 80.0,
+          "version": "telomere-targets-v1"
+        },
+        "pool_records": 20002,
+        "pool_sha256": "bda5ce57af296850ee74af4670467a97d677835ecbfd30d9d765db887c234402",
+        "query_anchor_keys": 29980,
+        "query_bases": 30000,
+        "reason": "connected",
+        "refined_records": 2,
+        "rejection_counts": {},
+        "retrieved_records": 2,
+        "schema": "telomere-target-search-v1",
+        "selected_tail_bases": 1000,
+        "selection_scope": "all_index_retrieved_records_with_qualifying_anchor_and_read_support",
+        "strategy": "shared-exact-seed-index-batched-mummer",
+        "support_candidate_read_id": "best",
+        "support_checks": 1,
+        "support_count_lower_bound": 2,
+        "support_covers": "common_nonrepeat_anchor_and_junction_proximal_sequence_not_full_telomere_length",
+        "supporting_read_ids": [
+          "best",
+          "support"
+        ],
+        "target_extension": false,
+        "winner_read_id": "best"
+      },
+      "decoy_bases_each": 960,
+      "index_files": {
+        "bases": 19228000,
+        "build_cache_mib": 64,
+        "builder": "sequential-postings-then-covering-index",
+        "distinct_read_ids": 20002,
+        "duplicate_records": 0,
+        "files": {
+          "targets.fa": "2fd39ca271551c8705cbc4d1bd22b3ce1cce58d2ee4ce6329258f44d9b18592a",
+          "targets.sqlite": "c69c7cd0c298eb155be811ae8c181c3c509a5db28efbff23355b422b9f82dc85"
+        },
+        "identity": "205ad55afe76a8bbb64851f2236a9dc28957f89e0a8a168724d8615098bfe242",
+        "indexed_records": 20002,
+        "payload_sha256": "70a52a3fc05166e988aaaefe8c8164214860608b12a7d14539ac971f8aefe9b8",
+        "postings": 601232,
+        "raw_records": 20002,
+        "schema": "telomere-target-index-v2",
+        "source_sha256": "bda5ce57af296850ee74af4670467a97d677835ecbfd30d9d765db887c234402"
+      },
+      "logical_postings_equal_phase_a": {
+        "postings": 601232,
+        "sha256": "6c4705295a30180e112b025451b12a856d97ee1ca3f3d85701be4ae762c0ac13"
+      },
+      "phase_a_seconds": {
+        "build": 26.344139856286347,
+        "cached_replay": 0.35500461142510176,
+        "search": 4.793514139018953
+      },
+      "pool_records": 20002,
+      "python_peak_rss_mib": 106.1015625,
+      "repeat_only_negative": {
+        "alignment_batches": 0,
+        "alignment_blocks": 0,
+        "candidate_cap": null,
+        "chromosome_sequence_retained": true,
+        "distinct_read_ids": 20002,
+        "eligible_records": 0,
+        "end_type": "R",
+        "global_grouping": false,
+        "index_identity": "205ad55afe76a8bbb64851f2236a9dc28957f89e0a8a168724d8615098bfe242",
+        "indexed_records": 20002,
+        "junction_bases_tested": 0,
+        "policy": {
+          "anchor_grid": 50,
+          "anchor_seeds": 3,
+          "anchor_span": 500,
+          "batch_bases": 8388608,
+          "batch_records": 256,
+          "k": 21,
+          "min_support": 2,
+          "projection_limit": 1000,
+          "ranking": "identity-overlap-overhang-readid-sequence-v1",
+          "stride": 20,
+          "support_bases": 200,
+          "support_identity": 80.0,
+          "version": "telomere-targets-v1"
+        },
+        "pool_records": 20002,
+        "pool_sha256": "bda5ce57af296850ee74af4670467a97d677835ecbfd30d9d765db887c234402",
+        "query_anchor_keys": 0,
+        "query_bases": 30000,
+        "reason": "no_sampled_nonrepeat_anchor",
+        "refined_records": 0,
+        "rejection_counts": {},
+        "retrieved_records": 0,
+        "schema": "telomere-target-search-v1",
+        "selected_tail_bases": 0,
+        "selection_scope": "all_index_retrieved_records_with_qualifying_anchor_and_read_support",
+        "strategy": "shared-exact-seed-index-batched-mummer",
+        "support_candidate_read_id": null,
+        "support_checks": 0,
+        "support_count_lower_bound": 0,
+        "support_covers": "common_nonrepeat_anchor_and_junction_proximal_sequence_not_full_telomere_length",
+        "supporting_read_ids": [],
+        "target_extension": false,
+        "winner_read_id": null
+      },
+      "replay_without_tool_recomputation": true,
+      "scope": "synthetic scaling and repeat-only negative control, NOT biological performance",
+      "seconds": {
+        "build": 10.211929886601865,
+        "cached_replay": 0.07387773878872395,
+        "search": 1.7389826169237494
+      },
+      "status": "passed"
+    },
+    "cli": {
+      "browser_used": false,
+      "command": [
+        "/share/home/xbzhang26/cgat-reads-debug/arm-install-20261016-b12fce9/mamba/envs/cgat-server/bin/python",
+        "/share/home/xbzhang26/cgat-reads-debug/degap-tel-targets-final-20261122/source/bin/DEGAP.py",
+        "--mode",
+        "telseeker",
+        "--genome",
+        "/share/home/xbzhang26/cgat-reads-debug/degap-tel-targets-final-20261122/inputs/cli/genome.fa",
+        "--hifi",
+        "/share/home/xbzhang26/cgat-reads-debug/degap-tel-targets-final-20261122/inputs/cli/reads.fa",
+        "-m",
+        "TTAGGG",
+        "-e",
+        "chr.L",
+        "chr.R",
+        "--out",
+        "/share/home/xbzhang26/cgat-reads-debug/degap-tel-targets-final-20261122/runs/cli",
+        "--MaximumExtensionRound",
+        "0",
+        "-t",
+        "2",
+        "--remove",
+        "2"
+      ],
+      "endpoint_diagnostics": [
+        {
+          "alignment_batches": 1,
+          "alignment_blocks": 2,
+          "candidate_cap": null,
+          "chromosome_sequence_retained": true,
+          "distinct_read_ids": 4,
+          "eligible_records": 2,
+          "end_type": "L",
+          "global_grouping": false,
+          "index_identity": "f2f04fc3cd5f1067f44f6b55a65b275b4a9aae285cf8b6359b414fef053216f5",
+          "indexed_records": 4,
+          "junction_bases_tested": 200,
+          "policy": {
+            "anchor_grid": 50,
+            "anchor_seeds": 3,
+            "anchor_span": 500,
+            "batch_bases": 8388608,
+            "batch_records": 256,
+            "k": 21,
+            "min_support": 2,
+            "projection_limit": 1000,
+            "ranking": "identity-overlap-overhang-readid-sequence-v1",
+            "stride": 20,
+            "support_bases": 200,
+            "support_identity": 80.0,
+            "version": "telomere-targets-v1"
+          },
+          "pool_records": 4,
+          "pool_sha256": "a4ad712739e60fd5d697eb4c6daba858c774047d64619f23ad8855d3495dfd67",
+          "query_anchor_keys": 31980,
+          "query_bases": 32000,
+          "reason": "connected",
+          "refined_records": 2,
+          "rejection_counts": {},
+          "retrieved_records": 2,
+          "schema": "telomere-target-search-v1",
+          "selected_tail_bases": 8000,
+          "selection_scope": "all_index_retrieved_records_with_qualifying_anchor_and_read_support",
+          "strategy": "shared-exact-seed-index-batched-mummer",
+          "support_candidate_read_id": "left-long",
+          "support_checks": 1,
+          "support_count_lower_bound": 2,
+          "support_covers": "common_nonrepeat_anchor_and_junction_proximal_sequence_not_full_telomere_length",
+          "supporting_read_ids": [
+            "left-long",
+            "read0"
+          ],
+          "target_extension": false,
+          "winner_read_id": "left-long"
+        },
+        {
+          "alignment_batches": 1,
+          "alignment_blocks": 2,
+          "candidate_cap": null,
+          "chromosome_sequence_retained": true,
+          "distinct_read_ids": 4,
+          "eligible_records": 2,
+          "end_type": "R",
+          "global_grouping": false,
+          "index_identity": "8abcb3ccfb4dd112e2aedc027bc3d60f88fdf1de2458d1c8f081c675cb71010d",
+          "indexed_records": 4,
+          "junction_bases_tested": 200,
+          "policy": {
+            "anchor_grid": 50,
+            "anchor_seeds": 3,
+            "anchor_span": 500,
+            "batch_bases": 8388608,
+            "batch_records": 256,
+            "k": 21,
+            "min_support": 2,
+            "projection_limit": 1000,
+            "ranking": "identity-overlap-overhang-readid-sequence-v1",
+            "stride": 20,
+            "support_bases": 200,
+            "support_identity": 80.0,
+            "version": "telomere-targets-v1"
+          },
+          "pool_records": 4,
+          "pool_sha256": "25c46ef3db15bec8d2092aaf156afa48c4eba9b9201f8ab134dc261316354c39",
+          "query_anchor_keys": 31978,
+          "query_bases": 32000,
+          "reason": "connected",
+          "refined_records": 2,
+          "rejection_counts": {},
+          "retrieved_records": 2,
+          "schema": "telomere-target-search-v1",
+          "selected_tail_bases": 8000,
+          "selection_scope": "all_index_retrieved_records_with_qualifying_anchor_and_read_support",
+          "strategy": "shared-exact-seed-index-batched-mummer",
+          "support_candidate_read_id": "right-long",
+          "support_checks": 1,
+          "support_count_lower_bound": 2,
+          "support_covers": "common_nonrepeat_anchor_and_junction_proximal_sequence_not_full_telomere_length",
+          "supporting_read_ids": [
+            "read100",
+            "right-long"
+          ],
+          "target_extension": false,
+          "winner_read_id": "right-long"
+        }
+      ],
+      "extension_attempts": 0,
+      "final_length": 120000,
+      "html_files": 4,
+      "input_length": 104000,
+      "round_limit": 0,
+      "scope": "synthetic public TelSeeker pipeline; not natural telomere benchmarking",
+      "seconds": 21.06875679641962,
+      "sequence_exact": true,
+      "status": "passed"
+    }
+  },
+  "reporting": {
+    "authoring": "AGY gemini-4-neon-high",
+    "browser_used": false,
+    "main_archive": {
+      "archive": "degap-telomere-targets-evidence-20261122.tar.gz",
+      "archive_bytes": 23793850,
+      "archive_sha256": "e98a953aea02c8c085c627275f8460544848c0e73a9201ec44aa844a8213046c",
+      "browser_used": false,
+      "completed_check_receipts_verified": 8,
+      "external_assets": 0,
+      "final_html_files": 10,
+      "html_files": 16,
+      "local_links_verified": 61,
+      "payload_files": 883,
+      "runtime_source_files": 57,
+      "status": "passed"
+    },
+    "main_local_audit": {
+      "status": "passed",
+      "archive_sha256": "e98a953aea02c8c085c627275f8460544848c0e73a9201ec44aa844a8213046c",
+      "payload_files_sha256_verified": 883,
+      "html_files": 16,
+      "relative_links_verified": 61,
+      "node": "v24.20.0",
+      "browser_used": false,
+      "reports": [
+        {
+          "html": "degap-tel-targets-20261122/runs/cli/visual.report/.telomere-target-cache.report.html",
+          "javascript_blocks": 1,
+          "syntax": "passed"
+        },
+        {
+          "html": "degap-tel-targets-20261122/runs/cli/visual.report/Global.report.html",
+          "javascript_blocks": 1,
+          "syntax": "passed"
+        },
+        {
+          "html": "degap-tel-targets-20261122/runs/cli/visual.report/chr.L.report.html",
+          "javascript_blocks": 1,
+          "syntax": "passed"
+        },
+        {
+          "html": "degap-tel-targets-20261122/runs/cli/visual.report/chr.R.report.html",
+          "javascript_blocks": 1,
+          "syntax": "passed"
+        },
+        {
+          "html": "degap-tel-targets-20261122/runs/ont/visual.report/control.L/telo_part2_report.html",
+          "javascript_blocks": 1,
+          "syntax": "passed"
+        },
+        {
+          "html": "degap-tel-targets-20261122/runs/ont/visual.report/control.R/telo_part2_report.html",
+          "javascript_blocks": 1,
+          "syntax": "passed"
+        },
+        {
+          "html": "degap-tel-targets-final-20261122/runs/cli/visual.report/.telomere-target-cache.report.html",
+          "javascript_blocks": 1,
+          "syntax": "passed"
+        },
+        {
+          "html": "degap-tel-targets-final-20261122/runs/cli/visual.report/Global.report.html",
+          "javascript_blocks": 1,
+          "syntax": "passed"
+        },
+        {
+          "html": "degap-tel-targets-final-20261122/runs/cli/visual.report/chr.L.report.html",
+          "javascript_blocks": 1,
+          "syntax": "passed"
+        },
+        {
+          "html": "degap-tel-targets-final-20261122/runs/cli/visual.report/chr.R.report.html",
+          "javascript_blocks": 1,
+          "syntax": "passed"
+        },
+        {
+          "html": "degap-tel-targets-final-20261122/runs/hifi/visual.report/control.L/telo_part2_report.html",
+          "javascript_blocks": 1,
+          "syntax": "passed"
+        },
+        {
+          "html": "degap-tel-targets-final-20261122/runs/hifi/visual.report/control.R/telo_part2_report.html",
+          "javascript_blocks": 1,
+          "syntax": "passed"
+        },
+        {
+          "html": "degap-tel-targets-final-20261122/runs/ont-depth20k/visual.report/control.L/telo_part2_report.html",
+          "javascript_blocks": 1,
+          "syntax": "passed"
+        },
+        {
+          "html": "degap-tel-targets-final-20261122/runs/ont-depth20k/visual.report/control.R/telo_part2_report.html",
+          "javascript_blocks": 1,
+          "syntax": "passed"
+        },
+        {
+          "html": "degap-tel-targets-final-20261122/runs/ont/visual.report/control.L/telo_part2_report.html",
+          "javascript_blocks": 1,
+          "syntax": "passed"
+        },
+        {
+          "html": "degap-tel-targets-final-20261122/runs/ont/visual.report/control.R/telo_part2_report.html",
+          "javascript_blocks": 1,
+          "syntax": "passed"
+        }
+      ]
+    },
+    "final_report_supplement": {
+      "status": "passed",
+      "scientific_runtime_byte_identical_to_matrix": true,
+      "changed_files": [
+        "bin/TelSeekerVisualizer.py",
+        "tests/test_telomere_report.py"
+      ],
+      "visualizer_changed_functions": [
+        "generate_all_task_reports",
+        "parse_part2_results"
+      ],
+      "runtime_source_files": 57,
+      "runtime_manifest_sha256": "80520ad5279be050a4756c4a8d8f02281f6cde457799456434f20a758b53c6a3",
+      "unified_tests": {
+        "run": 256,
+        "skipped": 5,
+        "seconds": 152.069,
+        "status": "passed"
+      },
+      "derivative_reports": 3,
+      "chromosome_tasks": 2,
+      "local_links_verified": 13,
+      "external_assets": 0,
+      "browser_used": false,
+      "derivative_scope": "Only rendering is refreshed from original complete public-CLI workspace; biological searches are not rerun or reclassified",
+      "archive": "degap-telomere-targets-report-supplement-20261122.tar.gz",
+      "archive_sha256": "262dae70fc0233d598102d1ed1ee8efee963f9e0d50fd7b18dcdeda8991c5498",
+      "archive_bytes": 1419717,
+      "payload_files": 153
+    },
+    "final_local_audit": {
+      "status": "passed",
+      "archive_sha256": "262dae70fc0233d598102d1ed1ee8efee963f9e0d50fd7b18dcdeda8991c5498",
+      "payload_files_sha256_verified": 153,
+      "html_files": 3,
+      "relative_links_verified": 13,
+      "node": "v24.20.0",
+      "browser_used": false,
+      "reports": [
+        {
+          "html": "degap-tel-targets-report-final-20261122/cli-report-derivative/visual.report/Global.report.html",
+          "javascript_blocks": 1,
+          "syntax": "passed"
+        },
+        {
+          "html": "degap-tel-targets-report-final-20261122/cli-report-derivative/visual.report/chr.L.report.html",
+          "javascript_blocks": 1,
+          "syntax": "passed"
+        },
+        {
+          "html": "degap-tel-targets-report-final-20261122/cli-report-derivative/visual.report/chr.R.report.html",
+          "javascript_blocks": 1,
+          "syntax": "passed"
+        }
+      ]
+    },
+    "source_scope_audit": {
+      "status": "passed",
+      "agy_model": "gemini-4-neon-high",
+      "visualizer_changed_methods": [
+        "Part2HTMLReportGenerator._build_html",
+        "Part2HTMLReportGenerator._css",
+        "Part2HTMLReportGenerator._row_html",
+        "TelSeekerPart2LogParser._parse_direct_check",
+        "TelSeekerPart2LogParser._parse_rounds",
+        "TelSeekerPart2LogParser.parse",
+        "generate_html_visualization",
+        "parse_part2_results"
+      ],
+      "report_followup_scope": "rendering and optional evidence parsing; no biological algorithm functions",
+      "final_phase_changes": [
+        "bin/TelomereTargets.py",
+        "tests/test_family_cli.py",
+        "tests/test_telomere_targets.py"
+      ],
+      "agy_report_source_byte_identical_between_phases": true,
+      "runtime_files_verified": 57,
+      "bulk_build_preserves_selection_policy_AST": {
+        "status": "passed",
+        "definitions": [
+          "POLICY",
+          "seed_code",
+          "query_seeds",
+          "prefix_projection",
+          "alignment_rank",
+          "_eligible",
+          "anchor_stats",
+          "_support",
+          "TelomereTargets._search",
+          "publish_check",
+          "check_log_lines"
+        ]
+      }
+    }
+  },
+  "evidence_roots": {
+    "matrix": "/share/home/xbzhang26/cgat-reads-debug/degap-tel-targets-final-20261122",
+    "delivery": "/share/home/xbzhang26/cgat-reads-debug/degap-tel-targets-report-final-20261122"
+  },
+  "limits": [
+    "Genuine-read tests use one fixed internal comparator coordinate per dataset in L/R directions; they do not measure natural telomere completion.",
+    "The larger ONT pool contains the smaller pool and is not an independent locus or replicate.",
+    "Reverse complements retain the same read ID and do not add independent support.",
+    "Support counts are lower bounds; up to 200 outward junction bases are checked, not the whole selected tail.",
+    "Query-unique anchors are not proven genome-wide unique; sampled exact keys can miss error-rich alignments.",
+    "HiFi repetitive-region retrieval still returns many candidates; no top-N truncation is used.",
+    "Comparator identities cover full joined sequences including 30 kb retained chromosome; they are not tail-only accuracy estimates.",
+    "The larger ONT L join has 133 outer query bases clipped/unmapped by the comparator; no claim is made that the complete added tail is correct.",
+    "Archive report derivatives are rerenders of preserved completed work, not fresh biological searches; archives are inspection evidence, not portable resumable workspaces.",
+    "No GPM bundled runtime refresh, browser acceptance, release, merge or tag is included."
+  ]
+}

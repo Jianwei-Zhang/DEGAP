@@ -329,7 +329,7 @@ class TelSeekerCtg:
                                 "thread", "kmer_num", "kmer_size", "kmer_filter")},
                 "code": {name: content_hash(Path(__file__).parent / name) for name in
                          ("TelSeekerCtg.py", "TelSeekerPart1.py", "TelSeekerPart2.py",
-                          "FamilyTelomere.py", "FamilyRound.py", "ExtensionFamilies.py")}}
+                          "FamilyTelomere.py", "FamilyRound.py", "ExtensionFamilies.py", "TelomereTargets.py")}}
 
     def _ensure_task_contract(self, task):
         from ExtensionFamilies import atomic_json, read_json

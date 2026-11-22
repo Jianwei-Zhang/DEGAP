@@ -177,7 +177,7 @@ class RealFamilyCLITests(unittest.TestCase):
         import csv
         reads = self.root / "telomeric.fa"
         expected = self.truth[:30000] + "TTAGGG" * 120
-        reads.write_text(">telo\n" + expected + "\n")
+        reads.write_text(">telo-A\n" + expected + "\n>telo-B\n" + expected[1000:] + "\n")
         out = self.root / "ctg-tel"
         args = ["--mode", "telseeker_ctg", "--out", str(out), "--ctg", str(self.left), "R",
                 "--hifi", str(reads), "--motif", "TTAGGG", "--MaximumExtensionRound", "0", "-t", "2"]
@@ -195,13 +195,34 @@ class RealFamilyCLITests(unittest.TestCase):
         self.command("DEGAP.py", args + ["--resume_auto"], log="resume.log")
         self.assertEqual({str(p): p.stat().st_mtime_ns for p in out.rglob("receipt.json")}, receipts)
 
+    @unittest.skipUnless(shutil.which("parallel"), "GNU parallel required for telomeric read preprocessing")
+    def test_telseeker_ctg_single_target_is_not_independent_corroboration(self):
+        import csv
+        reads = self.root / "single-telomeric.fa"
+        reads.write_text(">one\n" + self.truth[:30000] + "TTAGGG" * 120 + "\n")
+        out = self.root / "ctg-single-tel"
+        self.command("DEGAP.py", ["--mode", "telseeker_ctg", "--out", str(out),
+                     "--ctg", str(self.left), "R", "--hifi", str(reads), "--motif", "TTAGGG",
+                     "--MaximumExtensionRound", "0", "-t", "2"])
+        with (out / "result" / "status.tsv").open() as stream:
+            rows = list(csv.DictReader(stream, delimiter="\t"))
+        self.assertEqual(rows[0]["status"], "failed")
+        evidence = list(out.glob("telseeker_ctg.jobs/*/direct.check/connection-diagnostics.json"))
+        self.assertEqual(len(evidence), 1)
+        data = json.loads(evidence[0].read_text())
+        self.assertEqual(data["reason"], "insufficient_read_support")
+        self.assertEqual(data["distinct_read_ids"], 1)
+        self.assertEqual(data["support_count_lower_bound"], 1)
+
     def test_telomere_public_extension_uses_one_family(self):
         from TelSeekerPart2 import TelomereExtender
         from FamilyTelomere import load_telomere_result
         work = self.root / "tel"
         work.mkdir()
         shutil.copyfile(self.left, work / "seed.fa")
-        shutil.copyfile(self.right, work / "telo.reads.fa")
+        # Two distinct synthetic target reads corroborate the same connection.
+        (work / "telo.reads.fa").write_text(
+            ">right-A\n" + self.truth[40000:] + "\n>right-B\n" + self.truth[41000:] + "\n")
         processed = work / "processed_reads"
         processed.mkdir()
         reads = processed / "hifi_reads.fa"
@@ -218,6 +239,8 @@ class RealFamilyCLITests(unittest.TestCase):
         self.assertEqual(manifest["result"], result)
         checkpoint = json.loads((work / "extension" / "families.json").read_text())
         self.assertEqual(len(checkpoint["families"]), 1)
+        self.assertGreaterEqual(result["connection_info"]["support_count_lower_bound"], 2)
+        self.assertTrue(any(r.get("target_search") for r in manifest["rounds"]))
 
 
 if __name__ == "__main__":
