@@ -18,7 +18,7 @@ def atomic_text(path, text):
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=path.name + ".", dir=path.parent)
     try:
-        with os.fdopen(fd, "w") as stream:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
             stream.write(text)
             stream.flush()
             os.fsync(stream.fileno())
@@ -213,6 +213,13 @@ def publish_search(search, name=None, *, unclosed_families=None):
 
 def render_report(search, result):
     """Portable evidence tables for both chains; no single-direction attribution."""
+    if set(search.families) == {"L", "R"}:
+        data = dict(result, status=search.status, total_rounds=search.total_rounds)
+        if "families" not in data:
+            data["families"] = [dict(vars(f), versions=[vars(v) for v in f.versions])
+                                for f in search.families.values()]
+        return render_family_report_from_data(data, {"checked": search.checked})
+    # CtgLinker can publish one primary and many peers, not an L/R gap.
     is_closed = search.status == "closed"
     tone = "ok" if is_closed else status_tone(search.status)
     if tone == "info":
@@ -414,3 +421,36 @@ def render_report(search, result):
 </main>
 </body>
 </html>'''
+
+
+
+def render_family_report_from_data(result, families=None, junction_evidence=None, connection_diagnostics=None):
+    """Render a detached L/R report from decoded JSON; never open paths in the data.
+
+    `families` is the optional families.json checkpoint, used for all eligible
+    comparisons. With no checkpoint, only the winner is known individually.
+    This function never overwrites the digest-bound published report.
+    """
+    from FamilyReport import render
+    checkpoint = families or {}
+    if checkpoint.get("contract_id") and checkpoint["contract_id"] != result.get("search_contract"):
+        raise ValueError("Checkpoint belongs to a different family search")
+    if any(key in checkpoint and checkpoint[key] != result.get(key) for key in ("status", "winner")):
+        raise ValueError("Checkpoint does not match the published outcome")
+    if "families" in checkpoint:
+        def history(records):
+            return {f["key"]: (f["attempts"], [(v["number"], v["length"], v["sha256"]) for v in f["versions"]])
+                    for f in records}
+        if history(checkpoint["families"]) != history(result["families"]):
+            raise ValueError("Checkpoint does not match the published version history")
+    data = dict(result)
+    if junction_evidence is not None:
+        summary = junction_evidence["summary"]
+        if "junction" in data and data["junction"] != summary:
+            raise ValueError("Conflicting junction evidence")
+        data["junction"] = summary
+    if connection_diagnostics is not None:
+        if data.get("connection_diagnostics") is not None and data["connection_diagnostics"] != connection_diagnostics:
+            raise ValueError("Conflicting connection diagnostics")
+        data["connection_diagnostics"] = connection_diagnostics
+    return render(data, checkpoint.get("checked"))

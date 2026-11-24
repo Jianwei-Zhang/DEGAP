@@ -155,6 +155,16 @@ python bin/DEGAP.py --mode gapfiller \
 
 请检查 `family-result.json` 或 `family-report.html`：只有 `status: "closed"` 表示缺口已闭合为单条序列；否则 `<name>.final.fa` 中导出的是彼此独立的未闭合延伸家族序列。
 
+报告打开时显示最后一轮。点**播放过程**可从原始侧翼回放，也可直接选某一步，查看这一轮哪侧延伸、检查了哪些版本组合。绿色连接带表示胜出版本的**比对重叠**，不等于填入缺口的碱基数；实际净填补长度看下方的拼接组成图。未闭合时，斜纹区只表示两端尚未接上，宽度不表示剩余缺口长度。
+
+已完成的任务不必重跑 DEGAP，即可用新版布局查看：
+
+```bash
+python bin/render_family_report.py ./output_gapfiller_hifi
+```
+
+在任务目录中打开 `family-report.preview.html`。命令只读取 `family-result.json` 和目录中已有的断点、拼接证据与连接诊断 JSON，不覆盖原始报告或已有预览。
+
 ### 2. CtgLinker
 
 从 contig 边缘出发连接 contig 并填补缺口。

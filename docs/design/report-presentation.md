@@ -65,3 +65,24 @@ Unlike the earlier presentation-only changes above, this follow-up accompanies a
 ### Final AutoGapfiller coordinate alignment
 
 AGY `gemini-4-neon-high` corrected the inclusive-gap arithmetic, downstream flank-delta shifts, zero/negative gap handling and numeric genomic sorting in `_create_full_html`. Tracks are explicitly labeled as original coordinates and use original gap spans. A source/AST audit confirms that only this rendering method and its tests changed in the final follow-up. Six focused tests pass with Node; actual rendered report projections also match remaining N intervals from the final FASTA. No browser validation is claimed. Results, limitations and the portable evidence archive are recorded in [SSH 180 junction validation](../validation/2026-11-22-junction-repair.md).
+
+## Bidirectional GapFiller replay
+
+`family-report.html` opens on the final state. Replay uses the L/R scheduler order,
+version lengths and recorded backoffs; a charged attempt is not necessarily a new
+version. The upper diagram zooms in on the termini. For closed jobs the bridge
+and full-length alignment use the winning **versions** and their zero-based,
+end-exclusive intervals, even if the opposite family later grew further. For an
+unclosed result the space between tracks is schematic, not an estimate.
+
+The composition bar shows the net inserted sequence separately from accepted
+flank edits and original-overlap trimming. The round chart uses a shared attempt
+axis; the ledger compares each side's own attempts. The matrix distinguishes
+missing diagnostics from a recorded no-alignment result. Full evidence and
+artifact links remain in the collapsed sections; the player needs no network.
+
+For earlier jobs use `python bin/render_family_report.py JOB_DIRECTORY`. It checks
+the result JSON fingerprint and available sidecar evidence, not the contents of
+FASTA files. It writes a new sibling preview rather than modifying the published
+HTML or bypassing checkpoint validation. CtgLinker endpoint and TelSeeker reports
+continue to use their own layouts.

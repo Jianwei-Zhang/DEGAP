@@ -155,6 +155,16 @@ python bin/DEGAP.py --mode gapfiller \
 
 Check `family-result.json` or `family-report.html`: only `status: "closed"` means the gap was closed into one sequence. Otherwise `<name>.final.fa` contains separate unclosed family records.
 
+The report opens on the final round. Press **Play** to replay from the original flanks, or select a step to see which side grew and which version pairs were checked. The green ribbon marks the winning **alignment**, not the amount inserted into the gap. For a closed junction, read the net fill from the composition bar. For an unclosed gap, the hatched space has no measured length.
+
+To view an earlier completed job in this layout without rerunning DEGAP:
+
+```bash
+python bin/render_family_report.py ./output_gapfiller_hifi
+```
+
+Open `family-report.preview.html` in the job directory. The command uses `family-result.json` and any available checkpoint, junction and diagnostic JSON files. It never overwrites the published report or an existing preview.
+
 ### 2. CtgLinker
 
 Link contigs and close gaps from contig edges.
