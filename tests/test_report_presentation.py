@@ -167,5 +167,105 @@ class ReportPresentationTests(unittest.TestCase):
         self.assertIn('Max Rounds</td><td>0</td>', html)
         self.assertIn('Max Extension Length</td><td>0</td>', html)
 
+    def test_minimal_layout_folds_secondary_details_and_removes_boilerplate(self):
+        search, result = self.family()
+        fam_html = render_report(search, result)
+        self.assertIn('data-lang="en"', fam_html)
+        self.assertIn('class="summary-strip"', fam_html)
+        self.assertIn('<details class="fold">', fam_html)
+        self.assertNotIn("Only a closed result joins both families", fam_html)
+        self.assertNotIn("Read mappings, local assemblies and their receipts remain under", fam_html)
+
+        ctg_html = render_ctg_report({
+            "input_contigs": ["c1"],
+            "scaffolds": [{"scaffold_id": "Scaffold_1", "length": 1000, "members": [{"id": "c1", "strand": "+"}]}],
+            "events": [],
+            "total_rounds": 0,
+        })
+        self.assertIn('data-lang="en"', ctg_html)
+        self.assertIn('class="summary-strip"', ctg_html)
+        self.assertNotIn("Each endpoint search shares one budget", ctg_html)
+
+        visualizer = GapFillingVisualizer.__new__(GapFillingVisualizer)
+        visualizer.gap_filling_results = {"summary": {"total_gaps": 1, "filled_gaps": 1, "fill_rate": "100%"}, "gaps": []}
+        visualizer.gaps_by_chrom = {}
+        visualizer.preprocessing_config = None
+        visualizer.integration_config = None
+        auto_html = visualizer._create_full_html()
+        self.assertLess(auto_html.index('id="chromVisualization"'), auto_html.index('id="gapFillingTasksTable"'))
+        self.assertNotIn("No reads information available", auto_html)
+        self.assertIn('<details class="fold">', auto_html)
+
+        # TelSeeker detail omits empty Connection Visualization placeholder when no SVG exists
+        with tempfile.TemporaryDirectory() as tmp:
+            telo_html = Part2HTMLReportGenerator(
+                {"chr_end": "Chr1.L", "initial_info": {}, "config": {}, "final_info": {}, "rounds": [], "direct_check": {}},
+                Path(tmp),
+            )._build_html()
+        self.assertNotIn("No successful connection available for visualization", telo_html)
+        self.assertIn('<details class="fold">', telo_html)
+
+    def test_family_report_renders_interactive_extension_process_visual(self):
+        search, result = self.family()
+        result["winner"].update({
+            "left_start": 17655,
+            "left_end": 30000,
+            "right_start": 0,
+            "right_end": 12345,
+            "evidence": {"stage": "full"},
+        })
+        result["junction"] = {
+            "gap_length": 450,
+            "overlap_trim": 0,
+            "flank_length_delta": 0,
+            "repairs": [{"side": "L", "start0": 19980, "status": "accepted"}],
+        }
+        result["connection_diagnostics"] = [
+            {"left_family": "L", "left_version": 0, "right_family": "R", "right_version": 0, "status": "rejected", "reason": "no_alignment"},
+            {"left_family": "L", "left_version": 2, "right_family": "R", "right_version": 1, "status": "eligible", "reason": "winner"},
+        ]
+        html = render_report(search, result)
+        parsed = self.assert_portable(html)
+        self.assertIn("data-viz-player", html)
+        self.assertIn('class="viz-svg"', html)
+        self.assertIn('data-step="0"', html)
+        self.assertIn('data-viz-view="full"', html)
+        self.assertIn("is-hidden", html)
+        self.assertIn("lbl-pause", html)
+        self.assertIn("Winning pair synteny", html)
+        self.assertIn("Final junction composition", html)
+        self.assertIn("detail-grid", html)
+        self.assertIn("viz-matrix", html)
+        self.assertIn("hash-short", html)
+        # Visual section itself uses SVG + CSS Grid, never adding extra <table> rows.
+        viz_start = html.index("data-viz-player")
+        viz_end = html.index("</section>", viz_start)
+        self.assertNotIn("<tr", html[viz_start:viz_end])
+
+        # Closed job with preserved flanks (0 repairs, 0 overlap_trim) skips redundant junction composition bar.
+        plain_search, plain_result = self.family()
+        plain_result["junction"] = {"mode": "gap", "gap_length": 300, "flank_length_delta": 0, "overlap_trim": 0, "repairs": []}
+        plain_html = render_report(plain_search, plain_result)
+        self.assertNotIn("Final junction composition", plain_html)
+
+        u_search, u_result = self.family("exhausted")
+        u_search.checked = {}
+        u_search.families["L"].versions = [SimpleNamespace(number=0, length=50000, sha256="0" * 64)]
+        u_search.families["L"].attempts = 2
+        u_search.families["L"].added_bases = 0
+        u_search.families["R"].versions = [
+            SimpleNamespace(number=0, length=50000, sha256="0" * 64),
+            SimpleNamespace(number=1, length=50001, sha256="1" * 64),
+        ]
+        u_search.families["R"].attempts = 2
+        u_search.families["R"].added_bases = 1
+        u_html = render_report(u_search, u_result)
+        self.assert_portable(u_html)
+        self.assertIn("data-viz-player", u_html)
+        self.assertIn("Unclosed · span unknown", u_html)
+        self.assertIn("未闭合 · 间距未知", u_html)
+        self.assertNotIn("Winning pair synteny", u_html)
+        self.assertNotIn("Eligible Connections", u_html)
+
 if __name__ == "__main__":
     unittest.main()
